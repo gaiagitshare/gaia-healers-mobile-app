@@ -479,3 +479,21 @@ export const ecControls = (eventId) => api.get(`${ec(eventId)}/controls`);
 export const ecSetControls = (eventId, body) => api.post(`${ec(eventId)}/controls`, body);
 export const ecRefreshStatus = (eventId) => api.post(`${ec(eventId)}/refresh-status`);
 export const ecExport = (eventId, what) => api.get(`${ec(eventId)}/export.csv`, { params: { what }, responseType: 'blob' });
+// Fix workflow (docs/EMAIL_CENTER_API.md, "Fix workflow")
+export const ecProblems = (eventId, key) => api.get(`${ec(eventId)}/bookings/${encodeURIComponent(key)}/problems`);
+export const ecRevalidate = (eventId, key) => api.post(`${ec(eventId)}/bookings/${encodeURIComponent(key)}/revalidate`);
+export const ecIssueFix = (eventId, issueId, { action, body = {}, note }) =>
+    api.post(`${ec(eventId)}/issues/${issueId}/fix`, { action, body, note, confirm: true });
+export const ecIssuePropose = (eventId, issueId, { action, body = {}, reason, root_cause }) =>
+    api.post(`${ec(eventId)}/issues/${issueId}/propose`, { action, body, reason, root_cause });
+/** Dry run of a proposal: the server's exact summary/steps, nothing saved. */
+export const ecIssueProposePreview = (eventId, issueId, { action, body = {}, reason = '', root_cause }) =>
+    api.post(`${ec(eventId)}/issues/${issueId}/propose`, { action, body, reason, root_cause, dry_run: true });
+export const ecIssueAssign = (eventId, issueId, body) => api.post(`${ec(eventId)}/issues/${issueId}/assign`, body);
+export const ecIssueComment = (eventId, issueId, text) => api.post(`${ec(eventId)}/issues/${issueId}/comment`, { text });
+export const ecProposals = (eventId, state = 'proposed') => api.get(`${ec(eventId)}/proposals`, { params: { state } });
+export const ecProposalDecide = (eventId, pid, decision, note) => api.post(`${ec(eventId)}/proposals/${pid}/decide`, { decision, note });
+export const ecProposalWithdraw = (eventId, pid, note) => api.post(`${ec(eventId)}/proposals/${pid}/withdraw`, { note });
+export const ecQueue = (eventId, filter = '') => api.get(`${ec(eventId)}/queue`, { params: filter ? { filter } : {} });
+export const ecReviewers = (eventId) => api.get(`${ec(eventId)}/reviewers`);
+export const ecPassOptions = (eventId) => api.get(`${ec(eventId)}/pass-options`);

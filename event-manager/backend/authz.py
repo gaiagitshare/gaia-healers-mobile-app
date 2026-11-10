@@ -56,6 +56,7 @@ CAPABILITIES = {
         "reconcile.read", "reconcile.resolve",
         "volunteer.manage",
         "ticket_email.read", "ticket_email.review", "ticket_email.send", "ticket_email.export",
+        "ticket.correct_details",
     },
     CHECKIN_STAFF: {
         # Enough to work a door: find someone, admit them. Not enough to export
@@ -72,7 +73,11 @@ CAPABILITIES = {
         "event.read", "exhibitor.read", "exhibitor.write", "lead.read",
     },
     VOLUNTEER_COORDINATOR: {"event.read", "volunteer.manage"},
-    TICKET_EMAIL_MANAGER: {"event.read", "ticket_email.read", "ticket_email.review", "ticket_email.send", "ticket_email.export"},
+    # ticket.correct_details: holder name/phone and delivery address only --
+    # never a pass, a seat, a payment or the ticket's email (those are
+    # proposed and approved by a platform admin in the Email Center).
+    TICKET_EMAIL_MANAGER: {"event.read", "ticket_email.read", "ticket_email.review", "ticket_email.send", "ticket_email.export",
+                           "ticket.correct_details"},
     RECONCILER: {
         "event.read", "attendee.read", "attendee.write", "checkin.perform", "analytics.read",
         "reconcile.read", "reconcile.resolve",

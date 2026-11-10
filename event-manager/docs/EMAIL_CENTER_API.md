@@ -149,3 +149,97 @@ exhibitor row / Ticket Reconciliation (if `reconcile`).
 Show on Overview as a clear switch card: "Email Center sending: OFF — no email can be sent".
 `POST /refresh-status` → asks GHL now about recent emails (send permission).
 `GET /export.csv?what=orders` → bookings CSV.
+
+---
+
+# Fix workflow (added 10 Nov 2026, second phase)
+
+All corrections go through Ticket Reconciliation's own actions on the server. Two kinds:
+**direct** (the reviewer applies it now, low risk) and **propose** (goes to the approval queue;
+a platform admin who is NOT the proposer approves, then it is applied once and re-checked).
+
+## Problems on an order — `GET /bookings/{key}/problems`
+```
+{key, workflow_stage: "fix"|"approve"|"send", summary:[blocker text], warnings:[text],
+ problems:[{id (issue id), kind, kind_label, priority (critical|high|medium|low), status, detected (bool),
+   stage: flagged|investigating|correction_proposed|confirmed|corrected_still_flagged|reviewed|revalidated,
+   what_is_wrong, why_flagged, correct_result, recommended, advice,
+   assigned_to, assigned_name, updated_at,
+   actions:[{key, label, mode: "direct"|"propose", explain, max_count?, ticket_ids?}],
+   evidence:{payments:[{order_id, transaction, status, amount, refunded, products[], paid_at, ticket_id}],
+             tickets:[{id,name,email,pass,status,seat,needs_name_check}], paid_for, issued, missing, possible_double_charges, facts},
+   history:[{at, actor, kind, text, before, after}],
+   proposals:[proposal]}]}
+```
+Show this in the Review panel as a "Problems & fixes" section ABOVE the purchase/ticket comparison, one
+card per problem: the five answers in plain words (What is wrong · Why it was flagged · Correct result ·
+What you can do · Evidence), the stage as a small stepper (Flagged → Investigating → Correction proposed
+→ Confirmed → Corrected → Revalidated), and one button per action. `detected=false` means the checks no
+longer find it: show it collapsed and green ("Fixed — confirmed by re-check").
+Top of the panel: a 5-step workflow bar **Review → Fix → Verify → Approve → Send** highlighting
+`workflow_stage` ("fix" = Fix, "approve" = Approve; Verify = the Revalidate button).
+
+### Action forms (body fields per action key)
+| key | mode | fields to ask | body |
+|---|---|---|---|
+| correct_holder | direct | ticket (select from evidence.tickets), first name, last name, phone | `{ticket_id, first_name, last_name, phone}` |
+| set_delivery_email | direct | new delivery email | `{email}` |
+| rebuild_email | direct | — | `{}` |
+| hold | direct | tickets (multi, default all in evidence) | `{ticket_ids}` |
+| release_contact | direct | — (ticket_ids preset from action) | `{ticket_ids}` |
+| flag_duplicate | direct | — | `{}` |
+| acknowledge | direct | — | `{}` |
+| issue_seat | propose | first name (default "Guest of"), last name (default purchaser), email (optional), count (≤ max_count) | `{first_name, last_name, email, count}` |
+| decide_duplicate | propose | radio: "Real extra seat" / "Double charge (refund in GHL)" | `{real_seat: true|false}` |
+| change_category | propose | ticket, new pass (GET /pass-options) | `{ticket_id, ticket_type_id}` |
+| correct_ticket_email | propose | ticket, new email | `{ticket_id, email}` |
+| release | propose | — (ticket_ids preset) | `{ticket_ids}` |
+| request_admin | propose | — | `{}` |
+
+**Direct:** `POST /issues/{id}/fix` `{action, body, note (≥5 chars, "what you checked"), confirm: true}` →
+`{results, validation:{issues:{id:{still_found,status,title}}, booking:{paid_for,generated,qr_ok,blockers[],recipients[],can_approve,review_state}}}`.
+Before calling, show a confirmation dialog: current value → new value, which tickets, "Nothing is emailed".
+After: show the validation result plainly ("Re-check: problem fixed ✓" or "Re-check: still found — …").
+
+**Propose:** `POST /issues/{id}/propose` `{action, body, reason (≥10 chars), root_cause}` →
+`{proposal}`; 409 = the same correction is already waiting. root_cause select: one_off "Just this order",
+mapping "Wrong product-to-ticket mapping", ticket_generation "Ticket not created at purchase",
+guest_assignment "Guest seat assigned wrongly", payment_sync "Payment not synced", unknown "Not sure".
+The panel should show the proposal's `summary`, `current_value` → `proposed_value` and `steps` before sending
+("This will: …") — the server may add steps (e.g. for a missing ticket it also records 'real seat' on the
+duplicate-payment case and releases a hold that only waited for the missing seat).
+
+`proposal` = `{id, issue_id, booking, kind, steps:[{action, issue_id, body}], summary, current_value, proposed_value,
+evidence, reason, root_cause, state: proposed|applying|applied|applied_still_flagged|failed|rejected|withdrawn,
+proposed_by, proposed_by_id, proposed_at, decided_by, decided_at, decision_note, applied_at, results, validation}`
+
+## Approval queue (new tab "Approvals", visible to everyone with read; buttons only when `can_decide`)
+`GET /proposals?state=proposed` (or `all`, or comma list) → `{items:[proposal], can_decide}`.
+Each card: order (booking → open Review), summary, current → proposed, reason, evidence (payments table),
+proposed by/when, root cause, steps. Buttons (admins only, and hidden when `proposed_by_id == me.user_id`, the
+server refuses anyway): **Approve and apply** (confirm dialog: "This changes ticket records: …"; note required)
+and **Reject** (note required). `POST /proposals/{id}/decide` `{decision: approve|reject|retry, note}` →
+`{state, results, validation}`; show the validation result. `retry` only for state `failed`.
+Proposer can **Withdraw** a waiting one: `POST /proposals/{id}/withdraw` `{note}`.
+Show a count badge on the tab (`state=proposed` count). `/me` now also has `user_id` (see below).
+
+## Needs Attention = work queue `GET /queue?filter=`
+filters: open (default) · critical · high · medium · low · mine · awaiting_approval · ready_to_fix · resolved.
+→ `{items, count, open, by_category:{label:n}, awaiting_approval}`; item:
+`{key, issue_id?, booking?, exhibitor?, order_number, customer, problem, kind, kind_label, severity, recommended_action,
+ stage, status (open|in_review|reviewed|awaiting_approval|resolved), assigned_to, assigned_name, assigned_to_me,
+ last_update, awaiting_approval, proposals, ready_to_fix, blocks_email}`
+Table/cards: Order · Customer · Problem · Severity · Assigned · Status/stage · Recommended action · Last update.
+Category chips from `by_category` at the top. Row actions:
+- **Assign to me** `POST /issues/{issue_id}/assign {me:true}` (only for items with issue_id); assign to someone:
+  `{user_id}` from `GET /reviewers` → `{items:[{id,name,admin}], me}`.
+- **Start review / Propose fix / Fix** → open the order's Review panel (Attendee Tickets tab) scrolled to "Problems & fixes".
+- **Add note** `POST /issues/{issue_id}/comment {text}`.
+- Items without issue_id (exhibitor, delivery, approval-invalidated, flagged): keep the existing
+  `POST /attention/{key}` status/assign/note controls, and Open → booking or exhibitor.
+- There is NO "mark resolved" button for reconciliation problems: they resolve when the re-check no longer finds
+  them (say so in a help line). "Mark reviewed (keep as is)" is the `acknowledge` action where offered.
+Replace the old `/attention` usage in the Needs Attention tab with `/queue`. (`/attention` still works and
+returns the same items with `related`/`link`.)
+
+## Revalidate `POST /bookings/{key}/revalidate` → `{reconciliation, booking:{...}}` — "Re-check now" button in the Review panel.

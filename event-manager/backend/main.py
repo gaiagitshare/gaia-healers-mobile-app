@@ -1711,7 +1711,11 @@ def door_identity(event_id: int, attendee_id: int, body: schemas.DoorIdentity,
     the old value, and a name typed here clears the needs-a-check flag.
     """
     event = _get_event_or_404(event_id, db)
-    authz.require_cap(db, current_user, event_id, "checkin.perform")
+    # Door staff, or a ticket reviewer correcting holder details (Email
+    # Center, 10 Nov 2026). Changing the EMAIL stays an organiser's call below.
+    if not (authz.can(db, current_user, event_id, "checkin.perform")
+            or authz.can(db, current_user, event_id, "ticket.correct_details")):
+        raise HTTPException(status_code=403, detail="Not permitted for this event")
     _assert_event_writable(db, event, "correct an attendee at its door")
     att = db.query(models.Attendee).filter(models.Attendee.id == attendee_id,
                                            models.Attendee.event_id == event_id).first()
@@ -4289,6 +4293,8 @@ def generate_badge(
 def entitlement_review(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """Platform-wide product classification + payments needing entitlement review.
     Reads the proxy-owned registry/review files (same host). No buyer PII."""
+    # Product and order totals across every event: platform admins only (10 Nov 2026).
+    authz.require_admin(current_user)
     import json as _json
     def _load(pth):
         try:
@@ -13667,6 +13673,12 @@ def recon_status(event_id: int, issue_id: int, body: dict, db: Session = Depends
     Anything but 'open' and 'in_review' needs a note saying why."""
     authz.require_cap(db, current_user, event_id, "reconcile.resolve")
     i = _rc_issue_or_404(db, event_id, issue_id)
+    return _rc_set_status(db, event_id, i, body, current_user)
+
+
+def _rc_set_status(db, event_id, i, body, current_user):
+    """Record a decision on an issue and re-run the checks (shared by Ticket
+    Reconciliation and the Email Center; callers check permissions)."""
     st = (body.get("status") or "").strip()
     note = (body.get("note") or "").strip()
     if st not in RECON_STATUSES:
@@ -13715,6 +13727,17 @@ def recon_action(event_id: int, issue_id: int, body: dict, db: Session = Depends
     event = _get_event_or_404(event_id, db)
     authz.require_cap(db, current_user, event_id, "reconcile.resolve")
     i = _rc_issue_or_404(db, event_id, issue_id)
+    return _rc_execute(db, event_id, i, body, current_user)
+
+
+def _rc_execute(db, event_id, i, body, current_user):
+    """Carry out one reconciliation correction and re-run the checks.
+
+    The single implementation of every ticket correction: Ticket
+    Reconciliation calls it directly (reconcile.resolve), the Email Center
+    calls it for a reviewer's low-risk fix or for an administrator-approved
+    proposal. Callers check who may ask for what; the functions this calls
+    (seat issue, identity fix, pass change) still check their own rules."""
     action = (body.get("action") or "").strip()
     note = (body.get("note") or "").strip()
     actor = _rc_actor(current_user)
@@ -13897,4 +13920,5 @@ if __name__ == "__main__":
 # Email Center (10 Nov 2026): review, approve and send ticket and exhibitor
 # emails from the admin panel. Imported last: it reads helpers defined above.
 import email_center as _email_center  # noqa: E402
+import email_center_fix as _email_center_fix  # noqa: E402,F401  (adds the correction routes to the same router)
 app.include_router(_email_center.router)

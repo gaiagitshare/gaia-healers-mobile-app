@@ -175,7 +175,10 @@ st_, lst = call("GET", E + "/bookings?filter=blocked", headers=ORG)
 check(st_ == 200 and lst["count"] >= 45 and "B204" in [x["key"] for x in lst["items"]], "Blocked filter lists #204 and the held bookings", lst.get("count"))
 check(all("_qr" not in json.dumps(x) and "qr_code" not in x["tickets"][0] for x in lst["items"][:20]), "List carries no QR codes or badge tokens")
 st_, att = call("GET", E + "/attention", headers=ORG)
-check(any(i["key"] == "B204:missing" and i["severity"] == "critical" for i in att["items"]), "Needs Attention: #204 missing tickets, critical")
+check(any(i.get("booking") == "B204" and i["kind"] == "incomplete_booking" and i["severity"] == "critical" for i in att["items"]),
+      "Needs Attention: #204 missing tickets, critical (its reconciliation case, once)")
+check(sum(1 for i in att["items"] if i.get("booking") == "B204" and i["kind"] in ("incomplete_booking", "missing_tickets")) == 1,
+      "#204's missing ticket appears once, not once per screen")
 
 # ---------------------------------------------------------------------------
 print("\n== Sending switch")

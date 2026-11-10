@@ -1083,72 +1083,21 @@ def create_batch(s, event_id, kind, actor, plan, item_keys):
 # ---------------------------------------------------------------------------
 # Needs Attention
 # ---------------------------------------------------------------------------
-def attention(db, event_id):
-    built = bookings(db, event_id)
-    s = _store()
-    try:
-        ex_rows = exhibitor_rows(db, event_id, s)
-        marks = {r[0]: {"status": r[1], "assigned_to": r[2], "note": r[3], "updated_by": r[4], "updated_at": r[5]}
-                 for r in s.db.execute("select item_key,status,assigned_to,note,updated_by,updated_at from ec_attention where event_id=?", (event_id,))}
-    finally:
-        s.close()
-    items = []
+def attention(db, event_id, user=None):
+    """Needs Attention = the single work queue (email_center_fix.work_queue):
+    one item per real problem, reconciliation issues first."""
+    import email_center_fix as F
+    out = []
+    for it in F.work_queue(db, event_id, user or _NoUser()):
+        out.append(dict(it, related=" · ".join(x for x in [("Order %s" % it["order_number"]) if it.get("order_number") else None,
+                                                         it.get("customer")] if x),
+                        link={"booking": it.get("booking"), "reconcile_issue": it.get("issue_id"), "exhibitor": it.get("exhibitor")}))
+    return out
 
-    def add(key, problem, severity, related, action, link, kind):
-        m = marks.get(key) or {}
-        items.append({"key": key, "problem": problem, "severity": severity, "related": related, "recommended_action": action,
-                      "link": link, "kind": kind, "status": m.get("status") or "open", "assigned_to": m.get("assigned_to"),
-                      "note": m.get("note"), "updated_by": m.get("updated_by"), "updated_at": m.get("updated_at")})
-    for b in built["bookings"]:
-        rel = "Order %s · %s" % (b["order_number"], b["purchaser_name"] or "")
-        link = {"booking": b["key"], "reconcile_issue": next((c.get("issue_id") for c in b["critical"] if c.get("issue_id")), None)}
-        for c in b["critical"]:
-            code = c["code"]
-            if code == "MISSING_TICKETS":
-                add("%s:missing" % b["key"], "Paid for %s ticket(s), only %s exist" % (c.get("paid_for") or b["paid_for"], b["tickets_generated"]),
-                    "critical", rel, "Complete the booking in Ticket Reconciliation (add the missing seat), then review again.", link, "missing_tickets")
-            elif code == "HELD":
-                add("%s:held" % b["key"], c["detail"], "high", rel, "Resolve or release the hold in Ticket Reconciliation.", link, "held")
-            elif code == "RECONCILIATION":
-                add("%s:recon:%s" % (b["key"], c.get("issue_id")), c["detail"], "high", rel, "Resolve the case in Ticket Reconciliation.",
-                    dict(link, reconcile_issue=c.get("issue_id")), "reconciliation")
-            elif code in ("QR_INVALID", "DUPLICATE_QR", "DUPLICATE_BADGE", "WRONG_HOLDER", "CATEGORY_MISMATCH"):
-                add("%s:%s" % (b["key"], code.lower()), c["detail"], "critical", rel, "Correct the ticket in Ticket Reconciliation or Attendees.", link, code.lower())
-            elif code == "NO_VALID_EMAIL":
-                add("%s:email" % b["key"], "No valid email address for this ticket email", "high", rel,
-                    "Correct the holder's email in Ticket Reconciliation, then review again.", link, "missing_email")
-        if b["changed_since_review"]:
-            add("%s:changed" % b["key"], "Changed after it was %s; the approval no longer counts" % b["review"].get("state"), "medium", rel,
-                "Review the booking again.", link, "approval_invalidated")
-        if b["review_state"] in ("needs_correction",):
-            add("%s:flagged" % b["key"], "Flagged for correction" + ((": " + b["review"].get("note")) if b["review"].get("note") else ""),
-                "medium", rel, "Correct it, then review again.", link, "flagged")
-        if b["delivery"] in ("failed", "bounced", "unknown", "partially_sent"):
-            add("%s:delivery" % b["key"], {"failed": "Ticket email failed", "bounced": "Ticket email bounced",
-                                           "unknown": "Delivery uncertain: the send did not get a clear answer",
-                                           "partially_sent": "Only some of this booking's emails were sent"}[b["delivery"]],
-                "high", rel, ("Check the message in GHL before resending; never resend blind." if b["delivery"] == "unknown"
-                              else "Check the address, then retry or resend from the review panel."), link, "delivery_" + b["delivery"])
-    for r in ex_rows:
-        rel = "%s (booth %s)" % (r["company_name"], r["booth_number"] or "?")
-        link = {"exhibitor": r["id"]}
-        if not r["email_valid"]:
-            add("ex%d:email" % r["id"], "No contact email for this stand", "high", rel, "Add the contact email in Exhibitor Emails.", link, "exhibitor_no_email")
-        if r["setup_link"] in ("none", "expired") and not r["profile_activated_at"]:
-            add("ex%d:setup" % r["id"], "No valid setup link", "medium", rel, "Send the setup invitation (a new link is created).", link, "exhibitor_no_setup_link")
-        if r["eligible_for_scanning"] and not r["scanning_enabled"]:
-            add("ex%d:scan" % r["id"], "Paid/complimentary stand with scanning switched off", "medium", rel,
-                "An organiser decides whether to switch scanning on (Exhibitors).", link, "exhibitor_scanner_off")
-        if r["amount_mismatch"]:
-            add("ex%d:pay" % r["id"], "Marked paid, but the amounts show %s of %s" % (r["amount_paid"], r["amount_due"]), "medium", rel,
-                "Check the payment in the planning sheet.", link, "exhibitor_payment")
-        for kind in ("setup", "scanner"):
-            if r[kind]["status"] in ("failed", "bounced", "unknown"):
-                add("ex%d:%s:delivery" % (r["id"], kind), "%s email %s" % (kind.capitalize(), r[kind]["status"]), "high", rel,
-                    "Check in GHL, then resend.", link, "exhibitor_delivery")
-    sev = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-    items.sort(key=lambda i: (i["status"] == "resolved", sev.get(i["severity"], 9), i["key"]))
-    return items
+
+class _NoUser:
+    id = None
+    is_admin = False
 
 
 # ---------------------------------------------------------------------------
@@ -1171,7 +1120,7 @@ def ec_me(event_id: int, db: Session = Depends(M.get_db), current_user: models.U
     return {"read": CAP_READ in caps, "review": CAP_REVIEW in caps, "send": CAP_SEND in caps, "export": CAP_EXPORT in caps,
             "exhibitors": "exhibitor.write" in caps, "scanner_links": "exhibitor.grant_scanning" in caps,
             "reconcile": "reconcile.read" in caps, "platform_admin": bool(current_user.is_admin),
-            "user": current_user.email, "sending": {k: v for k, v in ss.items() if k != "changed_by"},
+            "user": current_user.email, "user_id": current_user.id, "sending": {k: v for k, v in ss.items() if k != "changed_by"},
             "sending_changed_by": ss["changed_by"][0], "sending_changed_at": ss["changed_by"][1]}
 
 
@@ -1226,7 +1175,7 @@ def ec_overview(event_id: int, db: Session = Depends(M.get_db), current_user: mo
                         "scanner_delivered": exs("scanner", ("delivered", "opened", "clicked")),
                         "failed": exs("setup", ("failed", "bounced", "unknown")) + exs("scanner", ("failed", "bounced", "unknown")),
                         "first_scans": sum(1 for r in ex if r["first_scan_at"]), "leads": sum(r["leads"] for r in ex)}
-    out["needs_attention"] = sum(1 for i in attention(db, event_id) if i["status"] != "resolved")
+    out["needs_attention"] = sum(1 for i in attention(db, event_id, current_user) if i["status"] != "resolved")
     out["batches"] = running
     return out
 
@@ -1545,7 +1494,7 @@ def ec_history(event_id: int, q: Optional[str] = None, kind: Optional[str] = Non
 @router.get(P + "/attention")
 def ec_attention(event_id: int, db: Session = Depends(M.get_db), current_user: models.User = Depends(M.get_current_user)):
     _need(db, current_user, event_id, CAP_READ)
-    return {"items": attention(db, event_id)}
+    return {"items": attention(db, event_id, current_user)}
 
 
 @router.post(P + "/attention/{item_key}")

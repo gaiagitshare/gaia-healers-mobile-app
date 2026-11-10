@@ -18,7 +18,7 @@ const FILTER_LABELS = {
 };
 const FILTERS = Object.keys(FILTER_LABELS);
 
-export default function EmailCenterTickets({ eventId, me, initialFilter, openKey, onOpened }) {
+export default function EmailCenterTickets({ eventId, me, initialFilter, openKey, openFocus, onOpened }) {
     const narrow = useMediaQuery('(max-width:700px)');
     const [filter, setFilter] = useState(initialFilter || '');
     const [q, setQ] = useState('');
@@ -29,11 +29,12 @@ export default function EmailCenterTickets({ eventId, me, initialFilter, openKey
     const [error, setError] = useState('');
     const [picked, setPicked] = useState(new Set());
     const [reviewKey, setReviewKey] = useState(null);
+    const [reviewFocus, setReviewFocus] = useState(undefined);
     const [batchAsk, setBatchAsk] = useState(null); // {selector, title}
     const [batchId, setBatchId] = useState(null);
 
     useEffect(() => { if (initialFilter !== undefined) setFilter(initialFilter || ''); }, [initialFilter]);
-    useEffect(() => { if (openKey) { setReviewKey(openKey); onOpened && onOpened(); } }, [openKey, onOpened]);
+    useEffect(() => { if (openKey) { setReviewKey(openKey); setReviewFocus(openFocus); onOpened && onOpened(); } }, [openKey, openFocus, onOpened]);
 
     const load = useCallback(() => {
         setLoading(true);
@@ -137,7 +138,7 @@ export default function EmailCenterTickets({ eventId, me, initialFilter, openKey
                                             </TableCell>
                                             <TableCell><DeliveryChip s={b.delivery} /></TableCell>
                                             <TableCell sx={{ whiteSpace: 'nowrap' }}>{gst(b.last_sent)}</TableCell>
-                                            <TableCell><Button size="small" variant="outlined" onClick={() => setReviewKey(b.key)}>Review</Button></TableCell>
+                                            <TableCell><Button size="small" variant="outlined" onClick={() => { setReviewFocus(undefined); setReviewKey(b.key); }}>Review</Button></TableCell>
                                         </TableRow>
                                     );
                                 })}
@@ -151,7 +152,7 @@ export default function EmailCenterTickets({ eventId, me, initialFilter, openKey
                 </Typography>
             </Card>
 
-            <EmailCenterReview eventId={eventId} bookingKey={reviewKey} me={me} onClose={() => setReviewKey(null)} onChanged={onChanged} />
+            <EmailCenterReview eventId={eventId} bookingKey={reviewKey} me={me} focus={reviewFocus} onClose={() => setReviewKey(null)} onChanged={onChanged} />
             {batchAsk && (
                 <BatchConfirmDialog eventId={eventId} selector={batchAsk.selector} title={batchAsk.title} me={me}
                                     onClose={() => setBatchAsk(null)}

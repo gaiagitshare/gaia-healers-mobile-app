@@ -1369,6 +1369,39 @@ class EmailHold(Base):
     at = Column(DateTime, default=datetime.utcnow)
 
 
+class ReconProposal(Base):
+    """A proposed correction to a reconciliation issue (Email Center, 10 Nov
+    2026). It is carried out by the SAME actions Ticket Reconciliation uses
+    (main._rc_execute); this row only records who proposed what, why, on what
+    evidence, who approved it, and what the re-check found afterwards. Never
+    deleted or overwritten: a decision adds to it."""
+    __tablename__ = "recon_proposals"
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, index=True)
+    issue_id = Column(Integer, index=True)
+    booking_key = Column(String, index=True)
+    kind = Column(String)                 # what is being corrected, e.g. missing_ticket
+    steps = Column(JSON, default=list)    # [{"action":..., "issue_id":..., "body":{...}}]
+    signature = Column(String, index=True)  # same issue + same steps = same proposal
+    summary = Column(Text)                # plain words: what will change
+    current_value = Column(JSON)          # what the records say now
+    proposed_value = Column(JSON)         # what they will say
+    evidence = Column(JSON)               # payments, orders, facts shown to the approver
+    reason = Column(Text)
+    root_cause = Column(String)           # one_off | mapping | ticket_generation | guest_assignment | payment_sync | unknown
+    state = Column(String, index=True)    # proposed | applying | applied | applied_still_flagged | failed | rejected | withdrawn
+    proposed_by = Column(Integer)
+    proposed_by_name = Column(String)
+    proposed_at = Column(DateTime, default=datetime.utcnow)
+    decided_by = Column(Integer, nullable=True)
+    decided_by_name = Column(String, nullable=True)
+    decided_at = Column(DateTime, nullable=True)
+    decision_note = Column(Text, nullable=True)
+    applied_at = Column(DateTime, nullable=True)
+    results = Column(JSON, nullable=True)     # per step
+    validation = Column(JSON, nullable=True)  # the re-check after applying
+
+
 class EmailPlan(Base):
     """One planned ticket email: who receives it and which tickets it carries.
     Imported from the approved bulk list; an administrator's rebuild replaces a

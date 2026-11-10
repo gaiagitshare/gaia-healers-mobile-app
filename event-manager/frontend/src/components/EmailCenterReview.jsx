@@ -1,11 +1,12 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider,
     Grid, IconButton, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography, useMediaQuery,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import { ecBooking, ecBookingOutcome, ecBookingPreview, ecReview, ecSendBooking } from '../utils/api';
+import { ecBooking, ecBookingOutcome, ecBookingPreview, ecProblems, ecRevalidate, ecReview, ecSendBooking } from '../utils/api';
+import { ProblemsSection, WorkflowBar } from './EmailCenterProblems';
 import {
     DeliveryChip, EmailFrame, errText, GatedButton, gst, is409, MapChip, money, NoteDialog, PAYMENT, RECON, ReviewChip, sendBlock,
 } from './EmailCenterShared';
@@ -32,9 +33,10 @@ function Section({ title, children, sx }) {
 
 /**
  * The Review panel for one booking. `bookingKey` opens it; `onChanged(detail)`
- * lets the list replace its row after every action.
+ * lets the list replace its row after every action. `focus="problems"` scrolls
+ * to "Problems & fixes" once it has loaded (used by Needs Attention).
  */
-export default function EmailCenterReview({ eventId, bookingKey, me, onClose, onChanged }) {
+export default function EmailCenterReview({ eventId, bookingKey, me, onClose, onChanged, focus }) {
     const narrow = useMediaQuery('(max-width:700px)');
     const navigate = useNavigate();
     const [d, setD] = useState(null);
@@ -44,22 +46,49 @@ export default function EmailCenterReview({ eventId, bookingKey, me, onClose, on
     const [noteAsk, setNoteAsk] = useState(null); // {kind, ...}
     const [sendAsk, setSendAsk] = useState(null); // 'send' | 'retry'
     const [preview, setPreview] = useState(null);
+    const [probs, setProbs] = useState(null);
+    const [probsErr, setProbsErr] = useState('');
+    const [recheck, setRecheck] = useState(null); // {at, v}
+    const [rechecking, setRechecking] = useState(false);
+    const problemsRef = useRef(null);
+    const scrolled = useRef(false);
 
     const load = useCallback(() => {
         if (!bookingKey) return Promise.resolve();
         return ecBooking(eventId, bookingKey).then((r) => { setD(r.data); onChanged && onChanged(r.data); })
             .catch((e) => setError(errText(e)));
     }, [eventId, bookingKey, onChanged]);
-    useEffect(() => { setD(null); setError(''); setNotice(null); setPreview(null); load(); }, [load]);
+    const loadProblems = useCallback(() => {
+        if (!bookingKey) return Promise.resolve();
+        return ecProblems(eventId, bookingKey).then((r) => { setProbs(r.data); setProbsErr(''); }).catch((e) => setProbsErr(errText(e)));
+    }, [eventId, bookingKey]);
+    // After any fix, proposal, note or assignment: problems, detail and the list row.
+    const reloadAll = useCallback(() => Promise.all([loadProblems(), load()]), [loadProblems, load]);
+    useEffect(() => {
+        setD(null); setError(''); setNotice(null); setPreview(null); setProbs(null); setProbsErr(''); setRecheck(null);
+        scrolled.current = false;
+        reloadAll();
+    }, [reloadAll]);
+    useEffect(() => {
+        if (focus === 'problems' && probs && d && !scrolled.current && problemsRef.current) {
+            scrolled.current = true;
+            problemsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }, [focus, probs, d]);
+    const recheckNow = () => {
+        setRechecking(true); setProbsErr('');
+        ecRevalidate(eventId, bookingKey).then((r) => { setRecheck({ at: new Date().toISOString(), v: r.data }); return reloadAll(); })
+            .catch((e) => setProbsErr(errText(e))).finally(() => setRechecking(false));
+    };
 
     // Every action: send the fingerprint we displayed; on 409 say why and reload.
     const run = (p, onOk) => {
         setBusy(true); setError('');
-        return p.then((r) => { onOk && onOk(r.data); setNoteAsk(null); setSendAsk(null); return load(); })
+        return p.then((r) => { onOk && onOk(r.data); setNoteAsk(null); setSendAsk(null); return reloadAll(); })
             .catch((e) => {
                 if (is409(e)) {
                     setNotice({ severity: 'warning', text: `${errText(e)} The panel has been reloaded: check it again before acting.` });
-                    setNoteAsk(null); setSendAsk(null); load();
+                    setNoteAsk(null); setSendAsk(null); reloadAll();
                 } else setError(errText(e));
             })
             .finally(() => setBusy(false));
@@ -108,9 +137,13 @@ export default function EmailCenterReview({ eventId, bookingKey, me, onClose, on
                 {notice && <Alert severity={notice.severity} onClose={() => setNotice(null)} sx={{ mb: 1 }}>{notice.text}</Alert>}
                 {!d && !error && <Box sx={{ p: 3, textAlign: 'center' }}><CircularProgress size={24} /></Box>}
                 {d && <>
+                    <WorkflowBar stage={probs?.workflow_stage} />
+                    <ProblemsSection ref={problemsRef} eventId={eventId} data={probs} loading={!probs} error={probsErr} me={me} booking={d}
+                                     onChanged={reloadAll} onRecheck={recheckNow} recheck={recheck} rechecking={rechecking} />
+
                     <Paper sx={{ p: 2, mb: 2, textAlign: 'center', bgcolor: match ? 'success.main' : 'error.main', color: '#fff' }}>
                         <Typography variant="h5" fontWeight={700}>Paid for {d.paid_for} · Generated {d.tickets_generated}</Typography>
-                        <Typography variant="body2">{match ? 'The numbers match.' : 'The numbers do not match. Fix this in Ticket Reconciliation before approving.'}</Typography>
+                        <Typography variant="body2">{match ? 'The numbers match.' : 'The numbers do not match. Fix it under Problems & fixes above before approving.'}</Typography>
                     </Paper>
 
                     {blocked && (

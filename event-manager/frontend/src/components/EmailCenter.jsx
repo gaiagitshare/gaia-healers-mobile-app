@@ -1,13 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Alert, Box, Button, CircularProgress, Stack, Tab, Tabs, Typography } from '@mui/material';
-import { ecMe } from '../utils/api';
+import { ecMe, ecProposals } from '../utils/api';
 import { errText } from './EmailCenterShared';
 import EmailCenterOverview from './EmailCenterOverview';
 import EmailCenterTickets from './EmailCenterTickets';
 import EmailCenterExhibitors from './EmailCenterExhibitors';
 import EmailCenterHistory from './EmailCenterHistory';
 import EmailCenterAttention from './EmailCenterAttention';
+import EmailCenterApprovals from './EmailCenterApprovals';
 
 /**
  * Email Center — review and send the event's ticket and exhibitor emails.
@@ -21,8 +22,9 @@ const TABS = [
     ['overview', 'Overview'],
     ['tickets', 'Attendee Tickets'],
     ['exhibitors', 'Exhibitor Emails'],
-    ['history', 'Delivery History'],
     ['attention', 'Needs Attention'],
+    ['approvals', 'Approvals'],
+    ['history', 'Delivery History'],
 ];
 
 export default function EmailCenter() {
@@ -30,19 +32,22 @@ export default function EmailCenter() {
     const [params, setParams] = useSearchParams();
     const [me, setMe] = useState(null);
     const [error, setError] = useState('');
-    const [extra, setExtra] = useState({}); // cross-tab hand-off: {filter, openKey, focusId}
+    const [extra, setExtra] = useState({}); // cross-tab hand-off: {filter, openKey, focus, focusId}
+    const [waiting, setWaiting] = useState(null); // proposals waiting for approval (tab badge)
 
     const loadMe = useCallback(() => ecMe(id).then((r) => { setMe(r.data); setError(''); }).catch((e) => setError(errText(e))), [id]);
     useEffect(() => { loadMe(); }, [loadMe]);
+    const loadWaiting = useCallback(() => ecProposals(id, 'proposed').then((r) => setWaiting((r.data.items || []).length)).catch(() => {}), [id]);
 
     const tabs = TABS.filter(([k]) => k !== 'exhibitors' || me?.exhibitors);
     const want = params.get('tab') || 'overview';
     const tab = tabs.some(([k]) => k === want) ? want : 'overview';
+    useEffect(() => { if (me?.read) loadWaiting(); }, [tab, me?.read, loadWaiting]); // a proposal made in a Review panel shows on the badge
     const goTab = useCallback((key, more = {}) => {
         setExtra(more);
         setParams((p) => { const n = new URLSearchParams(p); n.set('tab', key); return n; }, { replace: true });
     }, [setParams]);
-    const clearOpenKey = useCallback(() => setExtra((x) => ({ ...x, openKey: undefined })), []);
+    const clearOpenKey = useCallback(() => setExtra((x) => ({ ...x, openKey: undefined, focus: undefined })), []);
 
     if (!me) {
         return error
@@ -76,15 +81,16 @@ export default function EmailCenter() {
 
             <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
                 <Tabs value={tab} onChange={(_, v) => goTab(v)} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile>
-                    {tabs.map(([k, l]) => <Tab key={k} value={k} label={l} sx={{ textTransform: 'none' }} />)}
+                    {tabs.map(([k, l]) => <Tab key={k} value={k} label={k === 'approvals' && waiting ? `${l} (${waiting})` : l} sx={{ textTransform: 'none' }} />)}
                 </Tabs>
             </Box>
 
             {tab === 'overview' && <EmailCenterOverview eventId={id} me={me} reloadMe={loadMe} goTab={goTab} />}
-            {tab === 'tickets' && <EmailCenterTickets eventId={id} me={me} initialFilter={extra.filter} openKey={extra.openKey} onOpened={clearOpenKey} />}
+            {tab === 'tickets' && <EmailCenterTickets eventId={id} me={me} initialFilter={extra.filter} openKey={extra.openKey} openFocus={extra.focus} onOpened={clearOpenKey} />}
             {tab === 'exhibitors' && <EmailCenterExhibitors eventId={id} me={me} focusId={extra.focusId} />}
             {tab === 'history' && <EmailCenterHistory eventId={id} me={me} />}
             {tab === 'attention' && <EmailCenterAttention eventId={id} me={me} goTab={goTab} />}
+            {tab === 'approvals' && <EmailCenterApprovals eventId={id} me={me} goTab={goTab} onCount={setWaiting} />}
         </Box>
     );
 }

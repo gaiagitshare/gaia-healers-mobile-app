@@ -29,6 +29,7 @@ const ROLE_OPTIONS = [
     ['organizer', 'Organizer — full control of this event'],
     ['checkin_staff', 'Check-in staff — doors and search only'],
     ['exhibitor_manager', 'Exhibitor manager — stands and leads'],
+    ['ticket_email_manager', 'Ticket Email Manager — review and send ticket emails only'],
 ];
 
 const EMPTY_TT = { code: '', name: '', description: '', is_vip: false, grants_workshops: false };

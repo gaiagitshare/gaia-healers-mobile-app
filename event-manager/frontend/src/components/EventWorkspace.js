@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Box, Typography, Chip, Stack } from '@mui/material';
-import { getEvent } from '../utils/api';
+import { getEvent, getMyCapabilities } from '../utils/api';
 import EventNav from './EventNav';
 import EventDetail from './EventDetail';
 import LiveAdmin from './LiveAdmin';
@@ -19,6 +19,7 @@ import TicketDelivery from './TicketDelivery';
 import Reconciliation from './Reconciliation';
 import Volunteers from './Volunteers';
 import ShareQr from './ShareQr';
+import EmailCenter from './EmailCenter';
 
 // One workspace per event. The sections are structural, not configured, so any
 // event — the first or the twentieth — gets all of them the moment it exists.
@@ -41,6 +42,7 @@ const SECTIONS = [
     ['mappings', 'Ticket Mappings'],
     ['review', 'Review Queue'],
     ['delivery', 'Ticket Emails'],
+    ['email', 'Email Center'],
     ['reconcile', 'Ticket Reconciliation'],
     ['volunteers', 'Volunteers'],
     ['live', 'Live'],
@@ -51,7 +53,23 @@ function EventWorkspace() {
     const { id, section } = useParams();
     const navigate = useNavigate();
     const [event, setEvent] = useState(null);
-    const active = SECTIONS.some(([key]) => key === section) ? section : 'overview';
+    const [caps, setCaps] = useState(undefined); // undefined = loading, null = unavailable
+    // A Ticket Email Manager holds ticket_email.* but not attendee.read: their
+    // workspace is the Email Center alone. If capabilities cannot be loaded,
+    // everyone keeps the full workspace (the server still enforces access).
+    const emailOnly = Boolean(caps && !caps.includes('attendee.read') && caps.includes('ticket_email.read'));
+    const sections = emailOnly ? SECTIONS.filter(([key]) => key === 'email') : SECTIONS;
+    const fallback = emailOnly ? 'email' : 'overview';
+    const active = sections.some(([key]) => key === section) ? section : fallback;
+
+    useEffect(() => {
+        let cancelled = false;
+        setCaps(undefined);
+        getMyCapabilities(id)
+            .then((r) => { if (!cancelled) setCaps(Array.isArray(r.data?.capabilities) ? r.data.capabilities : null); })
+            .catch(() => { if (!cancelled) setCaps(null); });
+        return () => { cancelled = true; };
+    }, [id]);
 
     useEffect(() => {
         let cancelled = false;
@@ -85,6 +103,7 @@ function EventWorkspace() {
             case 'share': return <ShareQr />;
             case 'volunteers': return <Volunteers />;
             case 'checkin': return <CheckIn timezone={event?.timezone} />;
+            case 'email': return <EmailCenter />;
             default: return <EventDetail section="overview" />;
         }
     };
@@ -106,14 +125,14 @@ function EventWorkspace() {
             </Stack>
 
             <EventNav
-                sections={SECTIONS}
+                sections={sections}
                 active={active}
                 onSelect={(key) => navigate(`/events/${id}/${key}`)}
             />
 
             {/* Keyed on the event id so switching events remounts the panel and
                 cannot leave the previous event's rows on screen. */}
-            <Box key={`${id}:${active}`}>{panel()}</Box>
+            <Box key={`${id}:${active}`}>{caps === undefined ? null : panel()}</Box>
         </Box>
     );
 }

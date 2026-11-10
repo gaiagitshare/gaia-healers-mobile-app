@@ -91,6 +91,20 @@ api.interceptors.response.use(
 
 export default api;
 
+// Is the signed-in person a platform admin? The login token carries an "adm"
+// claim only for them (see backend /auth/login). Used to keep app-wide admin
+// pages (dashboard, payments, entitlement review) out of other roles' menus;
+// the server refuses those routes to them regardless.
+export function isPlatformAdmin() {
+    try {
+        const t = localStorage.getItem('token');
+        const c = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        return !!c.adm;
+    } catch (e) {
+        return false;
+    }
+}
+
 // Auth
 export const login = (email, password) => {
     const body = new URLSearchParams();
@@ -433,3 +447,35 @@ export const addVolunteerAnnouncement = (eventId, data) => api.post(`/events/${e
 export const updateVolunteerAnnouncement = (eventId, id, data) => api.patch(`/events/${eventId}/volunteer-announcements/${id}`, data);
 export const getVolunteerTeam = (teamToken) => api.get(`/volunteer-team/${teamToken}`);
 export const updateVolunteerProfile = (token, data) => api.post(`/volunteer/${token}/profile`, data);
+
+// Email Center (10 Nov 2026): review and send ticket + exhibitor emails.
+// Contract: docs/EMAIL_CENTER_API.md. Every GET here is uncached on purpose:
+// a send decision must never be made on a 20-second-old list.
+const ec = (eventId) => `/events/${eventId}/email-center`;
+export const ecMe = (eventId) => api.get(`${ec(eventId)}/me`);
+export const ecOverview = (eventId) => api.get(`${ec(eventId)}/overview`);
+export const ecBookings = (eventId, params = {}) => api.get(`${ec(eventId)}/bookings`, { params });
+export const ecBooking = (eventId, key) => api.get(`${ec(eventId)}/bookings/${encodeURIComponent(key)}`);
+export const ecBookingPreview = (eventId, key) => api.get(`${ec(eventId)}/bookings/${encodeURIComponent(key)}/preview`);
+export const ecReview = (eventId, key, body) => api.post(`${ec(eventId)}/bookings/${encodeURIComponent(key)}/review`, body);
+export const ecSendBooking = (eventId, key, body) => api.post(`${ec(eventId)}/bookings/${encodeURIComponent(key)}/send`, body);
+export const ecBookingOutcome = (eventId, key, body) => api.post(`${ec(eventId)}/bookings/${encodeURIComponent(key)}/outcome`, body);
+export const ecBatchPreview = (eventId, body) => api.post(`${ec(eventId)}/batches/preview`, body);
+export const ecBatchStart = (eventId, body) => api.post(`${ec(eventId)}/batches`, body);
+export const ecBatches = (eventId) => api.get(`${ec(eventId)}/batches`);
+export const ecBatch = (eventId, batchId) => api.get(`${ec(eventId)}/batches/${batchId}`);
+export const ecBatchAction = (eventId, batchId, action) => api.post(`${ec(eventId)}/batches/${batchId}/${action}`);
+export const ecExhibitors = (eventId) => api.get(`${ec(eventId)}/exhibitors`);
+export const ecExhibitorPreview = (eventId, exId, kind) => api.get(`${ec(eventId)}/exhibitors/${exId}/preview`, { params: { kind } });
+export const ecExhibitorSend = (eventId, exId, body) => api.post(`${ec(eventId)}/exhibitors/${exId}/send`, body);
+export const ecExhibitorLink = (eventId, exId, kind) => api.post(`${ec(eventId)}/exhibitors/${exId}/link`, { kind });
+export const ecExhibitorManual = (eventId, exId, body) => api.post(`${ec(eventId)}/exhibitors/${exId}/manual`, body);
+export const ecExhibitorOutcome = (eventId, exId, body) => api.post(`${ec(eventId)}/exhibitors/${exId}/outcome`, body);
+export const ecExhibitorContact = (eventId, exId, body) => api.patch(`${ec(eventId)}/exhibitors/${exId}/contact`, body);
+export const ecHistory = (eventId, params = {}) => api.get(`${ec(eventId)}/history`, { params });
+export const ecAttention = (eventId) => api.get(`${ec(eventId)}/attention`);
+export const ecAttentionMark = (eventId, itemKey, body) => api.post(`${ec(eventId)}/attention/${encodeURIComponent(itemKey)}`, body);
+export const ecControls = (eventId) => api.get(`${ec(eventId)}/controls`);
+export const ecSetControls = (eventId, body) => api.post(`${ec(eventId)}/controls`, body);
+export const ecRefreshStatus = (eventId) => api.post(`${ec(eventId)}/refresh-status`);
+export const ecExport = (eventId, what) => api.get(`${ec(eventId)}/export.csv`, { params: { what }, responseType: 'blob' });

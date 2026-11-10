@@ -36,7 +36,12 @@ EXHIBITOR_MANAGER = "exhibitor_manager"
 RECONCILER = "reconciliation_admin"
 # Volunteers (7 Nov 2026): runs the volunteer schedule and nothing else.
 VOLUNTEER_COORDINATOR = "volunteer_coordinator"
-GRANTABLE_ROLES = {ORGANIZER, CHECKIN_STAFF, EXHIBITOR_MANAGER, RECONCILER, VOLUNTEER_COORDINATOR}
+# Email Center (10 Nov 2026): reviews ticket orders and sends the ticket
+# emails. Sees what a review needs (orders, tickets, payments as read-only
+# facts) and nothing else: no payment or ticket edits, no reconciliation
+# decisions, no event settings, no roles, no sending switch.
+TICKET_EMAIL_MANAGER = "ticket_email_manager"
+GRANTABLE_ROLES = {ORGANIZER, CHECKIN_STAFF, EXHIBITOR_MANAGER, RECONCILER, VOLUNTEER_COORDINATOR, TICKET_EMAIL_MANAGER}
 
 # What each role may do. Listed explicitly rather than derived from a hierarchy:
 # a hierarchy invites "staff is basically organizer minus a bit", and the minus
@@ -50,6 +55,7 @@ CAPABILITIES = {
         "lead.read", "analytics.read",
         "reconcile.read", "reconcile.resolve",
         "volunteer.manage",
+        "ticket_email.read", "ticket_email.review", "ticket_email.send", "ticket_email.export",
     },
     CHECKIN_STAFF: {
         # Enough to work a door: find someone, admit them. Not enough to export
@@ -66,6 +72,7 @@ CAPABILITIES = {
         "event.read", "exhibitor.read", "exhibitor.write", "lead.read",
     },
     VOLUNTEER_COORDINATOR: {"event.read", "volunteer.manage"},
+    TICKET_EMAIL_MANAGER: {"event.read", "ticket_email.read", "ticket_email.review", "ticket_email.send", "ticket_email.export"},
     RECONCILER: {
         "event.read", "attendee.read", "attendee.write", "checkin.perform", "analytics.read",
         "reconcile.read", "reconcile.resolve",

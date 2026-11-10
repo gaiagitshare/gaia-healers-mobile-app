@@ -13044,9 +13044,13 @@ def _td_bulk_preflight(body: dict, request: FastAPIRequest, db: Session = Depend
     return out
 
 
-def _bulk_check(db, event_id, orders, delivered, holds, held_orders=None, auto_cutoff=None, released=()):
+def _bulk_check(db, event_id, orders, delivered, holds, held_orders=None, auto_cutoff=None, released=(), account_all=True, party_scope=None):
     """The bulk-email rules, shared by the sender's gate and the Reconciliation
     Center. Read-only."""
+    # account_all=False (Email Center, 10 Nov 2026): a send of SOME bookings.
+    # Every check on what is being sent still applies; only the whole-event
+    # accounting ("every paid ticket is in this list or held") is skipped,
+    # because the bookings not in this send are simply not being sent yet.
     holds = dict(holds or {})
     released = set(released or ())
     # Holds recorded per ORDER (the approved list's RED/YELLOW rows) cover
@@ -13121,7 +13125,9 @@ def _bulk_check(db, event_id, orders, delivered, holds, held_orders=None, auto_c
     # As many tickets as they bought: every booking that is in this send, or
     # partly delivered, must end up with all of its paid seats in someone's inbox.
     seen_party, bookings = set(), []
-    for a in live:
+    # party_scope (Email Center): check only these tickets' bookings -- one
+    # booking's review need not walk every party in the event.
+    for a in (live if party_scope is None else [x for x in live if x.id in party_scope]):
         p = _party_members(db, a)
         if not p:
             continue
@@ -13144,7 +13150,7 @@ def _bulk_check(db, event_id, orders, delivered, holds, held_orders=None, auto_c
     # recorded hold list, or the automatic sender's (paid after the cutoff).
     paid_sources = ("ghl_order", "ghl_invoice", "ghl_webhook") + PARTY_SEAT_SOURCES
     unaccounted, held, auto = [], [], []
-    for a in live:
+    for a in (live if account_all else []):
         if a.id in in_send or a.id in delivered:
             continue
         if (a.registration_source or "") not in paid_sources and (a.attendance_type or "paid") != "paid":
@@ -13886,3 +13892,9 @@ _member_auth.register(app, sys.modules[__name__])
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8002)
+
+
+# Email Center (10 Nov 2026): review, approve and send ticket and exhibitor
+# emails from the admin panel. Imported last: it reads helpers defined above.
+import email_center as _email_center  # noqa: E402
+app.include_router(_email_center.router)

@@ -94,7 +94,7 @@ class DeliveryState:
     def delivered(self, event_id, order_id):
         return self.db.execute('select state from order_ticket_delivery where event_id=? and order_id=?', (event_id, order_id)).fetchone()
 
-    def claim(self, order, manifest_sha, retry_rejected=False, resend_reason=None):
+    def claim(self, order, manifest_sha, retry_rejected=False, resend_reason=None, allow_changed=False):
         """True = this caller may send now. Without resend_reason only a first
         send (or an explicitly allowed retry of a DEFINITE rejection) is possible.
         A resend applies only to an accepted/delivered order, never to an
@@ -105,7 +105,9 @@ class DeliveryState:
             r = self.db.execute('select state,recipient,manifest_sha from order_ticket_delivery where event_id=? and order_id=?', key).fetchone()
             kind = 'initial'
             if r:
-                if r[0] == 'rejected' and retry_rejected and r[1] == order['recipient'] and r[2] == manifest_sha:
+                # allow_changed (Email Center): a DEFINITE rejection may be retried to a
+                # corrected address once the booking was reviewed and approved again.
+                if r[0] == 'rejected' and retry_rejected and (allow_changed or (r[1] == order['recipient'] and r[2] == manifest_sha)):
                     kind = 'retry'
                 elif resend_reason and r[0] in ('accepted', 'delivered'):
                     kind = 'resend'
@@ -137,13 +139,13 @@ class DeliveryState:
         self.db.close()
 
 
-def deliver(order, state, manifest_sha, validate, transport, render, retry_rejected=False, resend_reason=None):
+def deliver(order, state, manifest_sha, validate, transport, render, retry_rejected=False, resend_reason=None, allow_changed=False):
     """Validate -> claim -> send -> record. Same contract as order_delivery.deliver."""
     payload = render(order)
     valid, why = validate(order)
     if not valid:
         return {'order_id': order['order_id'], 'state': 'held', 'reason': why}
-    if not state.claim(order, manifest_sha, retry_rejected, resend_reason):
+    if not state.claim(order, manifest_sha, retry_rejected, resend_reason, allow_changed):
         return {'order_id': order['order_id'], 'state': 'skipped_existing_delivery'}
     try:
         result = transport(order, payload)

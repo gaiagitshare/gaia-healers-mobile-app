@@ -54,7 +54,8 @@ LIVE_CAP_PER_RUN = 20
 LIVE_CAP_PER_DAY = 200
 RECHECK_HELD_MINUTES = 30
 STATUS_EVERY_MINUTES = 5
-GHL_READ_CAP = 120
+GHL_READ_CAP = 300
+STATUS_PER_RUN = 200      # 10 Nov 2026: a 341-email run is re-checked within a few runs
 # Set in the timer's unit file for the shadow period. While it is set nothing can
 # reach a customer from this job: not a GREEN order, not a resend -- whatever the
 # mode in the database says. Only the internal alert contact can be emailed.
@@ -380,16 +381,29 @@ def run_cycle(world, state, em, clock=None, log=print):
             state.put('unapproved_template_alerted', template_sha())
             alerts.append('Automatic ticket email is set to LIVE, but the email template changed since it was approved. Nothing was sent. Approve the new template or pause.')
 
-    # 2. Delivery status, for every sender's accepted messages.
-    stale = (t0 - timedelta(minutes=STATUS_EVERY_MINUTES)).isoformat()
-    for ev, oid, mid, prev in state.db.execute("select event_id,order_id,message_id,provider_status from order_ticket_delivery where state='accepted' and message_id!='' "
-                                               "and (provider_status is null or provider_status not in (%s)) and (provider_checked_at is null or provider_checked_at < ?) limit 40"
-                                               % ','.join('?' * len(st.FINAL_PROVIDER)), (*sorted(st.FINAL_PROVIDER), stale)).fetchall():
+    # 2. Delivery status, for every sender's accepted messages -- the ticket
+    # emails and (Email Center, 10 Nov 2026) the exhibitor emails. GHL keeps
+    # one status per message and a later open or click replaces "delivered",
+    # so a delivered email is asked about again for a few days (ec_store).
+    from . import ec_store
+    ec_store.ensure(state.db)
+    bad = []
+
+    def _status(mid, _bad=bad):
         status = provider_status(world, mid)
-        state.set_provider_status(ev, oid, status)
         summary['status_checked'] += 1
         if status in st.BAD_PROVIDER:
-            alerts.append('Ticket email for order %s was %s by the mail provider. Check the address and resend from the dashboard.' % (oid, status.upper()))
+            _bad.append((mid, status))
+        return status
+    before = {r[0]: r[1] for r in state.db.execute("select message_id,order_id from order_ticket_delivery where state='accepted'")}
+    try:
+        ec_store.poll_tickets(state.db, _status, limit=STATUS_PER_RUN)
+        ec_store.poll_exhibitors(state.db, _status, limit=STATUS_PER_RUN // 4)
+    except RuntimeError as e:          # the run's GHL read cap: the rest wait for the next run
+        summary['errors'].append(str(e))
+    for mid, status in bad:
+        if mid in before:
+            alerts.append('Ticket email for order %s was %s by the mail provider. Check the address and resend from the Email Center.' % (before[mid], status.upper()))
 
     # 3. Admin resends (a person asked, with a reason). Not while paused, and
     # not under the shadow-only lock: they wait, visibly, in the dashboard.

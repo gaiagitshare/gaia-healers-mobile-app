@@ -30,7 +30,7 @@ export const NAV_GROUPS = [
     // Who is coming, who is through the door, and what they are saying.
     { label: 'People', keys: ['attendees', 'checkin', 'volunteers', 'review', 'reconcile', 'delivery', 'community'] },
     // Everything we push out to attendees, live or written ahead.
-    { label: 'Comms', keys: ['live', 'updates', 'notify', 'info', 'resources', 'share'] },
+    { label: 'Comms', keys: ['email', 'live', 'updates', 'notify', 'info', 'resources', 'share'] },
     // Wiring. Rarely touched during an event, and it should not sit next to the
     // controls that are.
     { label: 'Setup', keys: ['setup', 'mappings'] },
@@ -78,6 +78,11 @@ export default function EventNav({ sections, active, onSelect }) {
     const [open, setOpen] = useState(false);
     const labelOf = (key) => (sections.find(([k]) => k === key) || [key, key])[1];
     const activeLabel = labelOf(active);
+    // Only the sections this person was given: a role restricted to one
+    // section (e.g. Ticket Email Manager) sees one group with one button.
+    const groups = NAV_GROUPS
+        .map((g) => ({ ...g, keys: g.keys.filter((k) => sections.some(([s]) => s === k)) }))
+        .filter((g) => g.keys.length);
 
     if (wide) {
         // Two rows, always — not a single row that happens to wrap. All four
@@ -85,7 +90,7 @@ export default function EventNav({ sections, active, onSelect }) {
         // flowing row orphans Setup on a line of its own and reads as a
         // mistake. Pairing the groups two-up is the same height, balanced, and
         // stable: the operator learns where Check-In lives and it stays there.
-        const rows = [NAV_GROUPS.slice(0, 2), NAV_GROUPS.slice(2)];
+        const rows = [groups.slice(0, 2), groups.slice(2)].filter((r) => r.length);
         return (
             <Box sx={{ mb: 3, pb: 1.5, borderBottom: 1, borderColor: 'divider' }}>
                 {rows.map((row, r) => (
@@ -157,7 +162,7 @@ export default function EventNav({ sections, active, onSelect }) {
                     </IconButton>
                 </Stack>
                 <Box sx={{ px: 2, pb: 'max(24px, env(safe-area-inset-bottom))', pt: 1 }}>
-                    {NAV_GROUPS.map((group) => (
+                    {groups.map((group) => (
                         <Box key={group.label} sx={{ mb: 1.5 }}>
                             <GroupLabel>{group.label}</GroupLabel>
                             <Stack spacing={0.25}>

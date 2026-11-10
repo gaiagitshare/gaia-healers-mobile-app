@@ -37,9 +37,12 @@ import {
     Logout as LogoutIcon,
     FactCheck as ReviewIcon,
 } from '@mui/icons-material';
-import { changePassword } from '../utils/api';
+import { changePassword, isPlatformAdmin } from '../utils/api';
 
 const drawerWidth = 240;
+
+// App-wide pages only platform admins can use (the server refuses the rest).
+const ADMIN_ONLY_PATHS = ['/dashboard', '/payments', '/entitlement-review'];
 
 function Layout({ children, user, onLogout }) {
     const navigate = useNavigate();
@@ -77,7 +80,7 @@ function Layout({ children, user, onLogout }) {
         { text: 'Check-In', icon: <CheckInIcon />, path: '/checkin' },
         { text: 'Payments', icon: <PaymentsIcon />, path: '/payments' },
         { text: 'Entitlement Review', icon: <ReviewIcon />, path: '/entitlement-review' },
-    ];
+    ].filter((item) => isPlatformAdmin() || !ADMIN_ONLY_PATHS.includes(item.path));
 
     const handleProfileClick = (event) => {
         setAnchorEl(event.currentTarget);

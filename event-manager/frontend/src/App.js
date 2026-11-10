@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { isPlatformAdmin } from './utils/api';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -131,7 +132,7 @@ function App() {
             <Router basename="/event">
                 <Routes>
                     <Route path="/login" element={
-                        user ? <Navigate to="/dashboard" /> : <Login onLogin={handleLogin} />
+                        user ? <Navigate to={isPlatformAdmin() ? '/dashboard' : '/events/current'} /> : <Login onLogin={handleLogin} />
                     } />
                     <Route path="/scan/:token" element={<ExhibitorScan />} />
                     {/* Volunteers: private links, no Event Manager login. */}
@@ -143,7 +144,7 @@ function App() {
                         user ? (
                             <Layout user={user} onLogout={handleLogout}>
                                 <Routes>
-                                    <Route path="/dashboard" element={<Dashboard />} />
+                                    <Route path="/dashboard" element={isPlatformAdmin() ? <Dashboard /> : <Navigate to="/events/current" replace />} />
                                     {/* Events opens the current event; the full list (archived
                                         included) is All Events. Old /events links keep working. */}
                                     <Route path="/events" element={<Navigate to="/events/current" replace />} />
@@ -158,7 +159,7 @@ function App() {
                                     <Route path="/vendors" element={<VendorsRedirect />} />
                                     <Route path="/payments" element={<Payments />} />
                                     <Route path="/entitlement-review" element={<EntitlementReview />} />
-                                    <Route path="/" element={<Navigate to="/dashboard" />} />
+                                    <Route path="/" element={<Navigate to={isPlatformAdmin() ? '/dashboard' : '/events/current'} />} />
                                 </Routes>
                             </Layout>
                         ) : (

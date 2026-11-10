@@ -158,15 +158,26 @@ def register(app, M):
         card = card_for_badge(db, body.get("token"))
         if card is None:
             return {"ok": False, "reason": "unknown_badge"}
+        # A profile email entered at the Bio-Well station and not yet confirmed:
+        # the code goes THERE, and confirming it is what makes it the profile's.
+        import biowell
+        req = biowell.pending_request(db, card)
+        pending = req if (req and req.contact_id_new) else None
+        target = pending.email_new if pending else card.email
         out = {"ok": True, "first_name": first_name(card), "has_password": cred(db, card) is not None,
-               "email_masked": mask_email(card.email) if can_email(card) else "", "desk_only": not can_email(card)}
+               "email_masked": mask_email(target) if (pending or can_email(card)) else "",
+               "desk_only": not (pending or can_email(card))}
         if out["has_password"] or out["desk_only"] or not body.get("send_code"):
+            db.commit()
             return out
         if too_many_codes(db, card, ("activate",)):
             return dict(out, ok=False, reason="too_many_codes")
-        _row, code = M._issue_otp(db, card, "activate", "email", out["email_masked"])
+        _row, code = M._issue_otp(db, card, "activate", "email", out["email_masked"],
+                                  pending_value=("email_request:%d" % pending.id) if pending else None)
         db.commit()
-        return dict(out, code=code, deliver_to=identity(card, db))
+        deliver = ({"contact_id": pending.contact_id_new, "email": pending.email_new, "name": card.name or "",
+                    "card_token": card.public_token, "ghl_lookup": False} if pending else identity(card, db))
+        return dict(out, code=code, deliver_to=deliver)
 
     @app.post("/identity/activate/verify")
     def activate_verify(body: dict, db: Session = Depends(get_db), _: bool = svc):
@@ -176,6 +187,14 @@ def register(app, M):
             return {"ok": False, "reason": "unknown_badge"}
         code = body.get("code")
         ok, reason, _row = M._check_otp(db, card, "activate", code)
+        if ok and _row is not None and str(_row.pending_value or "").startswith("email_request:"):
+            # The code went to a station-entered address: entering it proves it.
+            import biowell
+            req = db.query(models.CardEmailRequest).filter(
+                models.CardEmailRequest.id == int(str(_row.pending_value).split(":")[1])).first()
+            if req is not None and not biowell.apply_request(db, req, card, "activation_code"):
+                db.commit()
+                return {"ok": False, "reason": "verification_expired"}
         if not ok:
             ok2, reason2, _r2 = M._check_otp(db, card, "desk", code)
             if ok2:

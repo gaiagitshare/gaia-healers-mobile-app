@@ -30,6 +30,7 @@ const ROLE_OPTIONS = [
     ['checkin_staff', 'Check-in staff — doors and search only'],
     ['exhibitor_manager', 'Exhibitor manager — stands and leads'],
     ['ticket_email_manager', 'Ticket Email Manager — review and send ticket emails only'],
+    ['biowell_station', 'Bio-Well station — station page only'],
 ];
 
 const EMPTY_TT = { code: '', name: '', description: '', is_vip: false, grants_workshops: false };

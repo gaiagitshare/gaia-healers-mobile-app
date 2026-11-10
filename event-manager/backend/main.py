@@ -14075,3 +14075,8 @@ if __name__ == "__main__":
 import email_center as _email_center  # noqa: E402
 import email_center_fix as _email_center_fix  # noqa: E402,F401  (adds the correction routes to the same router)
 app.include_router(_email_center.router)
+
+
+# Bio-Well station and dashboard (10 Nov 2026): see biowell.py.
+import biowell as _biowell  # noqa: E402
+app.include_router(_biowell.router)

@@ -20,6 +20,8 @@ import Reconciliation from './Reconciliation';
 import Volunteers from './Volunteers';
 import ShareQr from './ShareQr';
 import EmailCenter from './EmailCenter';
+import BiowellStation from './BiowellStation';
+import BiowellDashboard from './BiowellDashboard';
 
 // One workspace per event. The sections are structural, not configured, so any
 // event — the first or the twentieth — gets all of them the moment it exists.
@@ -47,6 +49,8 @@ const SECTIONS = [
     ['volunteers', 'Volunteers'],
     ['live', 'Live'],
     ['checkin', 'Check-In'],
+    ['biowell-station', 'Bio-Well Station'],
+    ['biowell', 'Bio-Well'],
 ];
 
 function EventWorkspace() {
@@ -57,9 +61,21 @@ function EventWorkspace() {
     // A Ticket Email Manager holds ticket_email.* but not attendee.read: their
     // workspace is the Email Center alone. If capabilities cannot be loaded,
     // everyone keeps the full workspace (the server still enforces access).
-    const emailOnly = Boolean(caps && !caps.includes('attendee.read') && caps.includes('ticket_email.read'));
-    const sections = emailOnly ? SECTIONS.filter(([key]) => key === 'email') : SECTIONS;
-    const fallback = emailOnly ? 'email' : 'overview';
+    // A Bio-Well station user (biowell.station without attendee.read) likewise
+    // gets the station screen alone; someone holding both restricted roles
+    // gets both sections.
+    const has = (cap) => Boolean(caps && caps.includes(cap));
+    const restricted = Boolean(caps && !has('attendee.read') && (has('ticket_email.read') || has('biowell.station')));
+    // Bio-Well sections are shown by capability. If capabilities could not be
+    // loaded everyone keeps the full workspace (the server still enforces access).
+    const allowed = (key) => {
+        if (key === 'biowell-station') return caps == null || has('biowell.station');
+        if (key === 'biowell') return caps == null || has('biowell.read');
+        if (restricted) return key === 'email' && has('ticket_email.read');
+        return true;
+    };
+    const sections = SECTIONS.filter(([key]) => allowed(key));
+    const fallback = restricted ? (sections[0]?.[0] || 'overview') : 'overview';
     const active = sections.some(([key]) => key === section) ? section : fallback;
 
     useEffect(() => {
@@ -104,6 +120,8 @@ function EventWorkspace() {
             case 'volunteers': return <Volunteers />;
             case 'checkin': return <CheckIn timezone={event?.timezone} />;
             case 'email': return <EmailCenter />;
+            case 'biowell-station': return <BiowellStation />;
+            case 'biowell': return <BiowellDashboard />;
             default: return <EventDetail section="overview" />;
         }
     };

@@ -37,7 +37,7 @@ import {
     Logout as LogoutIcon,
     FactCheck as ReviewIcon,
 } from '@mui/icons-material';
-import { changePassword, isPlatformAdmin } from '../utils/api';
+import { changePassword, isPlatformAdmin, getEvents, getMyCapabilities } from '../utils/api';
 
 const drawerWidth = 240;
 
@@ -57,6 +57,18 @@ function Layout({ children, user, onLogout }) {
     const [pwErr, setPwErr] = React.useState('');
     const [pwOk, setPwOk] = React.useState(false);
     const [pwBusy, setPwBusy] = React.useState(false);
+    // Check-In is shown to non-admins only when they can work a door at one of
+    // their events (station-only and email-only roles never see it).
+    const [canCheckin, setCanCheckin] = React.useState(isPlatformAdmin());
+    React.useEffect(() => {
+        if (isPlatformAdmin()) return undefined;
+        let live = true;
+        getEvents().then((r) => Promise.all((r.data || []).slice(0, 5).map((ev) => getMyCapabilities(ev.id)
+            .then((c) => (c.data?.capabilities || []).includes('checkin.perform')).catch(() => false))))
+            .then((xs) => { if (live) setCanCheckin(xs.some(Boolean)); })
+            .catch(() => { if (live) setCanCheckin(false); });
+        return () => { live = false; };
+    }, []);
     const openPw = () => { setPwErr(''); setPwOk(false); setCurPw(''); setNewPw(''); setConfPw(''); setPwOpen(true); setAnchorEl(null); };
     const submitPw = async () => {
         setPwErr('');
@@ -80,7 +92,7 @@ function Layout({ children, user, onLogout }) {
         { text: 'Check-In', icon: <CheckInIcon />, path: '/checkin' },
         { text: 'Payments', icon: <PaymentsIcon />, path: '/payments' },
         { text: 'Entitlement Review', icon: <ReviewIcon />, path: '/entitlement-review' },
-    ].filter((item) => isPlatformAdmin() || !ADMIN_ONLY_PATHS.includes(item.path));
+    ].filter((item) => isPlatformAdmin() || (!ADMIN_ONLY_PATHS.includes(item.path) && (item.path !== '/checkin' || canCheckin)));
 
     const handleProfileClick = (event) => {
         setAnchorEl(event.currentTarget);

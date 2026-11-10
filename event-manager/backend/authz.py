@@ -41,7 +41,12 @@ VOLUNTEER_COORDINATOR = "volunteer_coordinator"
 # facts) and nothing else: no payment or ticket edits, no reconciliation
 # decisions, no event settings, no roles, no sending switch.
 TICKET_EMAIL_MANAGER = "ticket_email_manager"
-GRANTABLE_ROLES = {ORGANIZER, CHECKIN_STAFF, EXHIBITOR_MANAGER, RECONCILER, VOLUNTEER_COORDINATOR, TICKET_EMAIL_MANAGER}
+# Bio-Well station (10 Nov 2026): find a person from their ticket or badge,
+# fix the email on their PROFILE (verified by a code), help them activate and
+# link their own results. Never sees results, payments or other attendees.
+BIOWELL_STATION = "biowell_station"
+GRANTABLE_ROLES = {ORGANIZER, CHECKIN_STAFF, EXHIBITOR_MANAGER, RECONCILER, VOLUNTEER_COORDINATOR, TICKET_EMAIL_MANAGER,
+                   BIOWELL_STATION}
 
 # What each role may do. Listed explicitly rather than derived from a hierarchy:
 # a hierarchy invites "staff is basically organizer minus a bit", and the minus
@@ -57,6 +62,7 @@ CAPABILITIES = {
         "volunteer.manage",
         "ticket_email.read", "ticket_email.review", "ticket_email.send", "ticket_email.export",
         "ticket.correct_details",
+        "biowell.station", "biowell.read",
     },
     CHECKIN_STAFF: {
         # Enough to work a door: find someone, admit them. Not enough to export
@@ -76,6 +82,7 @@ CAPABILITIES = {
     # ticket.correct_details: holder name/phone and delivery address only --
     # never a pass, a seat, a payment or the ticket's email (those are
     # proposed and approved by a platform admin in the Email Center).
+    BIOWELL_STATION: {"event.read", "biowell.station"},
     TICKET_EMAIL_MANAGER: {"event.read", "ticket_email.read", "ticket_email.review", "ticket_email.send", "ticket_email.export",
                            "ticket.correct_details"},
     RECONCILER: {

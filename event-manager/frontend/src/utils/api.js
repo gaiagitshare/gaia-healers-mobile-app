@@ -497,3 +497,16 @@ export const ecProposalWithdraw = (eventId, pid, note) => api.post(`${ec(eventId
 export const ecQueue = (eventId, filter = '') => api.get(`${ec(eventId)}/queue`, { params: filter ? { filter } : {} });
 export const ecReviewers = (eventId) => api.get(`${ec(eventId)}/reviewers`);
 export const ecPassOptions = (eventId) => api.get(`${ec(eventId)}/pass-options`);
+
+// Bio-Well station & dashboard (docs/BIOWELL_STATION_API.md, 10 Nov 2026)
+const bw = (eventId) => `/events/${eventId}/biowell`;
+export const bwLookup = (eventId, code) => api.post(`${bw(eventId)}/lookup`, { code });
+export const bwStartSession = (eventId, body) => api.post(`${bw(eventId)}/sessions`, body);
+export const bwSession = (eventId, sid) => api.get(`${bw(eventId)}/sessions/${sid}`);
+export const bwSendEmail = (eventId, sid, email) => api.post(`${bw(eventId)}/sessions/${sid}/email`, { email });
+export const bwVerify = (eventId, sid, code) => api.post(`${bw(eventId)}/sessions/${sid}/verify`, { code });
+export const bwResend = (eventId, sid) => api.post(`${bw(eventId)}/sessions/${sid}/resend`);
+export const bwCancelEmail = (eventId, sid) => api.post(`${bw(eventId)}/sessions/${sid}/cancel-email`);
+export const bwClose = (eventId, sid, outcome, note) => api.post(`${bw(eventId)}/sessions/${sid}/close`, { outcome, note });
+export const bwOverview = (eventId) => api.get(`${bw(eventId)}/overview`);
+export const bwSessions = (eventId, filter = '') => api.get(`${bw(eventId)}/sessions`, { params: filter ? { filter } : {} });

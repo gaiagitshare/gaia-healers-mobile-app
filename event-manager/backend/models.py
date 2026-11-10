@@ -1402,6 +1402,58 @@ class ReconProposal(Base):
     validation = Column(JSON, nullable=True)  # the re-check after applying
 
 
+class CardEmailRequest(Base):
+    """A new email for a person's PROFILE (member card), entered at the
+    Bio-Well station (10 Nov 2026). It takes effect only when the person proves
+    they control it (a code sent there). The ticket's own email, its buyer and
+    its payments are never touched. Kept forever as the audit trail."""
+    __tablename__ = "card_email_requests"
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, index=True)
+    card_id = Column(Integer, index=True)
+    attendee_id = Column(Integer, index=True)
+    email_old = Column(String)
+    email_new = Column(String, index=True)
+    contact_id_old = Column(String)
+    contact_id_new = Column(String)       # the GHL contact of the NEW address (found, or created if allowed)
+    contact_created = Column(Boolean, default=False)
+    source = Column(String)               # biowell_station
+    status = Column(String, index=True)   # pending | verified | cancelled | superseded | expired
+    requested_by = Column(Integer)
+    requested_by_name = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime)
+    verified_at = Column(DateTime, nullable=True)
+    verified_via = Column(String, nullable=True)   # station_code | activation_code
+    note = Column(Text, nullable=True)
+
+
+class BiowellSession(Base):
+    """One visit of one person to the Bio-Well station: an OPERATIONAL record.
+    No scan result, reading or report is ever stored here; whether a scan
+    happened is the partner's to say."""
+    __tablename__ = "biowell_sessions"
+    id = Column(Integer, primary_key=True, index=True)
+    session_uid = Column(String, unique=True, index=True)
+    client_key = Column(String, unique=True, index=True)   # one per tap on "Start": a double submit is the same session
+    event_id = Column(Integer, index=True)
+    attendee_id = Column(Integer, index=True)
+    card_id = Column(Integer, index=True)
+    station = Column(String)
+    staff_user_id = Column(Integer)
+    staff_name = Column(String)
+    email_status = Column(String)          # ok | pending | verified | needs_email | blocked
+    email_request_id = Column(Integer, nullable=True)
+    profile_status = Column(String)        # activated | not_activated
+    consent_status = Column(String)        # none | code_issued | linked
+    status = Column(String, index=True)    # open | done | abandoned
+    error = Column(Text, nullable=True)
+    note = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+    closed_at = Column(DateTime, nullable=True)
+
+
 class EmailPlan(Base):
     """One planned ticket email: who receives it and which tickets it carries.
     Imported from the approved bulk list; an administrator's rebuild replaces a

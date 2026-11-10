@@ -6934,7 +6934,9 @@ const server = http.createServer(async (req, res) => {
       if (found.length > 1) { sendJson(res, 409, { ok: false, reason: 'several_contacts' }, origin); return; }
       if (found.length === 1) { sendJson(res, 200, { ok: true, contactId: found[0].id, created: false }, origin); return; }
       const up = await ghlUpsertContact({ email, firstName: String(body.firstName || '').slice(0, 80), lastName: String(body.lastName || '').slice(0, 80),
-        source: 'Gaia Healers event - Bio-Well station' });
+        // Only these two sources; anything else falls back to the station's.
+        source: ['Gaia Healers event - Bio-Well station', 'Gaia Healers event - Exhibitor'].includes(String(body.source || ''))
+          ? String(body.source) : 'Gaia Healers event - Bio-Well station' });
       console.log('[Gaia Event] ensure-contact', { created: Boolean(up.ok && up.contactId), reason: up.reason });
       sendJson(res, up.ok && up.contactId ? 200 : 502, up.ok && up.contactId ? { ok: true, contactId: up.contactId, created: true } : { ok: false, reason: up.reason || 'ghl_error' }, origin);
       return;

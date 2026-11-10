@@ -299,6 +299,8 @@ def run_step(db, event_id, step, note, user):
     is never issued above the paid quantity, a hold or release twice is the
     same state, a rebuild gives the same record."""
     a = step["action"]
+    if a == "replay":
+        return _replay(db, event_id, step, user)
     i = _issue(db, event_id, int(step["issue_id"]))
     if a == "issue_seat":
         key, party = _booking_of_issue(db, event_id, i)
@@ -307,7 +309,7 @@ def run_step(db, event_id, step, note, user):
     if a == "decide_duplicate":
         r = M._rc_set_status(db, event_id, i, {"status": "reviewed", "note": note,
                                                "real_seat": bool((step.get("body") or {}).get("real_seat"))}, user)
-        return {"action": a, "state": "done", "status": r.get("status")}
+        return {"action": a, "state": "done", "status": r.get("status"), "response": _jsonable(r)}
     if a == "acknowledge":
         r = M._rc_set_status(db, event_id, i, {"status": "reviewed", "note": note}, user)
         return {"action": a, "state": "done", "status": r.get("status")}
@@ -315,11 +317,100 @@ def run_step(db, event_id, step, note, user):
         RC._hist(db, i, "comment", "Admin action requested: %s" % note, actor=_who(user), user_id=user.id)
         db.commit()
         return {"action": a, "state": "done"}
+    if a == "recon_action":
+        b = dict(step.get("body") or {})
+        b["confirm"] = True
+        b["note"] = (b.get("note") or note)[:4000]
+        r = M._rc_execute(db, event_id, i, b, user)
+        return {"action": a, "state": "done", "result": r.get("result"), "issue_status": r.get("status"), "response": _jsonable(r)}
     body = _step_body(step, note)
     if body is None:
         raise HTTPException(status_code=400, detail="Unknown correction")
     r = M._rc_execute(db, event_id, i, body, user)
     return {"action": a, "state": "done", "result": r.get("result"), "issue_status": r.get("status")}
+
+
+REPLAYABLE = {"add_party_seat", "change_pass", "set_addon_day", "update_attendee", "delete_attendee", "transfer_ticket",
+              "revoke_attendee", "reinstate_attendee", "place_payment", "door_identity", "map_reconcile_apply"}
+
+
+def _replay(db, event_id, step, user):
+    """Carry out the exact request that was held for approval, as the approver."""
+    import schemas
+    fn = step.get("fn")
+    if fn not in REPLAYABLE:
+        raise HTTPException(status_code=400, detail="Unknown correction")
+    kw = dict(step.get("kwargs") or {})
+    if step.get("schema"):
+        kw[step["body_param"]] = getattr(schemas, step["schema"])(**(step.get("body") or {}))
+    r = getattr(M, fn)(**kw, db=db, current_user=user)
+    rid = getattr(r, "id", None) if not isinstance(r, dict) else (r.get("attendee_id") or r.get("id"))
+    return {"action": "replay", "fn": fn, "state": "done", "result": {"id": rid} if rid else None, "response": _jsonable(r)}
+
+
+def _jsonable(r):
+    """The endpoint's own answer, as its caller would have received it."""
+    from fastapi.encoders import jsonable_encoder
+    import schemas
+    if isinstance(r, models.Attendee):
+        try:
+            return jsonable_encoder(schemas.Attendee.model_validate(r, from_attributes=True))
+        except Exception:
+            return {"id": r.id}
+    try:
+        return jsonable_encoder(r)
+    except Exception:
+        return None
+
+
+def file_proposal(db, user, event_id, *, label, step, attendee_id=None, issue_id=None, reason=""):
+    """Record a held request as a proposal (main._four_eyes). Returns (id, already_waiting)."""
+    steps = [step]
+    sig = _signature(issue_id or ("a%s" % attendee_id), steps)
+    db.rollback()       # nothing of the refused request may be committed with it
+    pending = db.query(models.ReconProposal).filter(models.ReconProposal.event_id == event_id, models.ReconProposal.signature == sig,
+                                                    models.ReconProposal.state.in_(("proposed", "applying"))).first()
+    if pending:
+        return pending.id, True
+    i = db.query(models.ReconIssue).filter(models.ReconIssue.id == issue_id).first() if issue_id else None
+    key, party = (_booking_of_issue(db, event_id, i) if i else (None, None))
+    if not key and attendee_id:
+        a = db.query(models.Attendee).filter(models.Attendee.id == int(attendee_id)).first()
+        if a is not None:
+            p = M._party_members(db, a)
+            key = "B%d" % ((p or {}).get("buyer_attendee_id") or int((a.custom_data or {}).get("bought_by_attendee") or 0) or a.id)
+            party = p
+    ev = _evidence(db, event_id, i, party) if i else _evidence_for_ticket(db, event_id, attendee_id)
+    summary = label + ("" if not step.get("body") else ": " + ", ".join("%s=%s" % (k, v) for k, v in (step.get("body") or {}).items()
+                                                              if v not in (None, "", [], {}) and k not in ("note", "confirm", "reason"))[:300])
+    cur = []
+    if attendee_id:
+        a = db.query(models.Attendee).filter(models.Attendee.id == int(attendee_id)).first()
+        if a is not None:
+            cur = [{"ticket": a.id, "name": EC._name(a), "email": a.email, "pass": M._pass_display(db, a), "status": M._ticket_status(a)}]
+    p = models.ReconProposal(event_id=event_id, issue_id=issue_id, booking_key=key, kind="request", steps=steps,
+                             signature=sig, summary=summary, current_value=cur, proposed_value=[step.get("body") or {}],
+                             evidence=ev, reason=(reason or "Requested from an admin page")[:2000], root_cause="unknown",
+                             state="proposed", proposed_by=user.id, proposed_by_name=_who(user), proposed_at=_now())
+    db.add(p)
+    if i is not None:
+        RC._hist(db, i, "comment", "Held for a second admin's approval: %s" % summary, actor=_who(user), user_id=user.id)
+    db.commit()
+    return p.id, False
+
+
+def _evidence_for_ticket(db, event_id, attendee_id):
+    if not attendee_id:
+        return {"payments": [], "tickets": []}
+    a = db.query(models.Attendee).filter(models.Attendee.id == int(attendee_id)).first()
+    if a is None:
+        return {"payments": [], "tickets": []}
+    pays = [{"order_id": pe.ghl_entity_id, "transaction": pe.ghl_transaction_id, "status": pe.status, "amount": pe.amount,
+             "refunded": pe.amount_refunded or 0, "products": EC._names(pe.product_names), "paid_at": EC._iso(pe.occurred_at),
+             "ticket_id": pe.attendee_id}
+            for pe in db.query(models.PaymentEvent).filter(models.PaymentEvent.attendee_id == a.id).all()]
+    return {"payments": pays, "tickets": [{"id": a.id, "name": EC._name(a), "email": (a.email or "").lower(),
+                                           "pass": M._pass_display(db, a), "status": M._ticket_status(a)}]}
 
 
 def _signature(issue_id, steps):
@@ -538,14 +629,15 @@ def ec_decide(event_id: int, pid: int, body: dict, db: Session = Depends(M.get_d
         raise HTTPException(status_code=404, detail="Proposal not found")
     if p.proposed_by == current_user.id:
         raise HTTPException(status_code=403, detail="The person who proposed a correction cannot approve it. Ask another admin.")
-    i = _issue(db, event_id, p.issue_id)
+    i = _issue(db, event_id, p.issue_id) if p.issue_id else None
     if decision == "reject":
         n = db.query(models.ReconProposal).filter(models.ReconProposal.id == pid, models.ReconProposal.state == "proposed").update(
             {"state": "rejected", "decided_by": current_user.id, "decided_by_name": _who(current_user), "decided_at": _now(),
              "decision_note": note}, synchronize_session=False)
         if n != 1:
             raise HTTPException(status_code=409, detail="This proposal was already decided")
-        RC._hist(db, i, "comment", "Correction rejected: %s" % note, actor=_who(current_user), user_id=current_user.id)
+        if i is not None:
+            RC._hist(db, i, "comment", "Correction rejected: %s" % note, actor=_who(current_user), user_id=current_user.id)
         db.commit()
         return {"ok": True, "state": "rejected"}
     # Claim it: only one approver, one application, even with two clicks at once.
@@ -559,6 +651,18 @@ def ec_decide(event_id: int, pid: int, body: dict, db: Session = Depends(M.get_d
     db.refresh(p)
     results, failed = list(p.results or []) if decision == "retry" else [], False
     done_idx = {r.get("index") for r in results if r.get("state") in ("done", "already_fulfilled")}
+    token = M._APPROVED_CORRECTION.set(p.id)
+    try:
+        results, failed = _apply_steps(db, event_id, p, results, done_idx, current_user)
+    finally:
+        M._APPROVED_CORRECTION.reset(token)
+    v = revalidate(db, event_id, [i.id] if i is not None else [], p.booking_key, actor="re-check after approved correction #%d" % p.id)
+    still = v["issues"].get(str(i.id), {}).get("still_found") if i is not None else False
+    return _finish_decision(db, event_id, p, i, results, failed, v, still, note, current_user)
+
+
+def _apply_steps(db, event_id, p, results, done_idx, current_user):
+    failed = False
     for idx, step in enumerate(p.steps or []):
         if idx in done_idx:
             continue
@@ -566,7 +670,7 @@ def ec_decide(event_id: int, pid: int, body: dict, db: Session = Depends(M.get_d
             r = run_step(db, event_id, step, "Approved correction #%d (%s): %s" % (p.id, p.proposed_by_name, p.reason), current_user)
         except HTTPException as e:
             db.rollback()
-            r, failed = {"action": step["action"], "state": "failed", "error": e.detail}, True
+            r, failed = {"action": step["action"], "state": "failed", "error": e.detail, "status": e.status_code}, True
         except Exception as e:
             db.rollback()
             r, failed = {"action": step["action"], "state": "failed", "error": type(e).__name__}, True
@@ -574,14 +678,18 @@ def ec_decide(event_id: int, pid: int, body: dict, db: Session = Depends(M.get_d
         results = [x for x in results if x.get("index") != idx] + [r]
         if failed:
             break
-    v = revalidate(db, event_id, [i.id], p.booking_key, actor="re-check after approved correction #%d" % p.id)
-    still = v["issues"].get(str(i.id), {}).get("still_found")
+    return results, failed
+
+
+def _finish_decision(db, event_id, p, i, results, failed, v, still, note, current_user):
+    pid = p.id
     state = "failed" if failed else ("applied_still_flagged" if still else "applied")
     db.query(models.ReconProposal).filter(models.ReconProposal.id == pid).update(
         {"state": state, "results": results, "validation": v, "applied_at": _now()}, synchronize_session=False)
-    RC._hist(db, i, "comment", "Correction #%d %s by %s. Re-check: %s." % (
-        p.id, "applied" if not failed else "FAILED", _who(current_user),
-        "the problem is still found" if still else "the problem no longer appears"), actor=_who(current_user), user_id=current_user.id)
+    if i is not None:
+        RC._hist(db, i, "comment", "Correction #%d %s by %s. Re-check: %s." % (
+            p.id, "applied" if not failed else "FAILED", _who(current_user),
+            "the problem is still found" if still else "the problem no longer appears"), actor=_who(current_user), user_id=current_user.id)
     db.commit()
     s = EC._store()
     try:
@@ -785,6 +893,19 @@ def work_queue(db, event_id, user):
             if r[kind]["status"] in ("failed", "bounced", "unknown"):
                 item(key="ex%d:%s:delivery" % (r["id"], kind), problem="%s email %s" % (kind.capitalize(), r[kind]["status"]),
                      kind="exhibitor_delivery", kind_label="Exhibitor email", severity="high", recommended_action="Check in GHL, then resend.", **base)
+    # Requests held from other admin pages (pass change, transfer, ...) that
+    # belong to no reconciliation case: one item each until decided.
+    for p in db.query(models.ReconProposal).filter(models.ReconProposal.event_id == event_id,
+                                                   models.ReconProposal.issue_id.is_(None),
+                                                   models.ReconProposal.state.in_(("proposed", "failed"))).all():
+        b = built["by_key"].get(p.booking_key or "")
+        item(key="proposal:%d" % p.id, issue_id=None, booking=p.booking_key if b else None,
+             order_number=b["order_number"] if b else None, customer=b["purchaser_name"] if b else None,
+             problem="Waiting for a second admin: %s" % (p.summary or "")[:200], kind="held_request", kind_label="Awaiting approval",
+             severity="high", recommended_action="Another platform admin approves or rejects it in Approvals.",
+             stage="correction_proposed" if p.state == "proposed" else "flagged", status="awaiting_approval" if p.state == "proposed" else "open",
+             assigned_to=None, assigned_name=p.proposed_by_name, last_update=EC._iso(p.proposed_at),
+             awaiting_approval=p.state == "proposed", proposals=1, ready_to_fix=False, blocks_email=False)
     # Systemic causes: the same root cause corrected again and again is a bug.
     causes = {}
     for pl in props.values():

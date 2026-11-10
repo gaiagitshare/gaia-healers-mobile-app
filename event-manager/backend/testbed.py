@@ -113,6 +113,12 @@ def start(wait_seconds=40):
 
     bed = Testbed(base, db, proc, workdir)
     _beds.append(bed)
+    # Suites that predate second-admin approval (10 Nov 2026) get their held
+    # corrections approved by a separate test admin; suites about the
+    # approval rule itself set TESTBED_RAW_APPROVALS=1 to see the refusal.
+    if os.environ.get("TESTBED_RAW_APPROVALS") != "1":
+        import testapprove
+        testapprove.install(base, db)
     return base, db
 
 

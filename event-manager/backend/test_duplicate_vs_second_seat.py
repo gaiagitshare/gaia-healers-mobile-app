@@ -190,7 +190,10 @@ check(party.get("unnamed") == 2,
       "and that two of them still have nobody's name on them", party)
 
 print("\n== 8) naming those seats at the desk, one at a time ==")
-staff = db.query(models.User).filter(models.User.email != None).first()   # noqa: E711
+# Door staff name the seats (10 Nov 2026: an admin's seat needs approval).
+staff = models.User(email="zz-dsp-desk-%s@example.invalid" % uuid.uuid4().hex[:6], hashed_password="x", full_name="ZZ Desk", is_admin=False)
+db.add(staff); db.flush()
+db.add(models.EventRole(user_id=staff.id, event_id=ev.id, role="checkin_staff")); db.commit()
 named = []
 for who in (("Friend", "One"), ("Friend", "Two")):
     out = main.add_party_seat(ev.id, buyer.id,

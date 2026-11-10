@@ -1736,6 +1736,10 @@ def door_identity(event_id: int, attendee_id: int, body: schemas.DoorIdentity,
             # Changing the address is an organiser's call, and it must stay
             # unique at this event or two people claim one card.
             authz.require_cap(db, current_user, event_id, "attendee.write")
+            _four_eyes(db, current_user, event_id, label='Change the email on a ticket (who it belongs to)',
+                       step={"action": "replay", "fn": 'door_identity', "kwargs": {"event_id": event_id, "attendee_id": attendee_id},
+                             "body_param": "body", "schema": "DoorIdentity", "body": body.dict()},
+                       attendee_id=attendee_id, reason=getattr(body, "reason", "") or "")
             if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
                 raise HTTPException(status_code=400, detail="That is not a valid email address")
             clash = db.query(models.Attendee).filter(
@@ -1824,6 +1828,12 @@ def add_party_seat(event_id: int, attendee_id: int, body: schemas.AddPartySeat,
     event = _get_event_or_404(event_id, db)
     authz.require_cap(db, current_user, event_id, "checkin.perform")
     _assert_event_writable(db, event, "add a seat at its door")
+    if _back_office(db, current_user, event_id):
+        _four_eyes(db, current_user, event_id, label="Create a missing paid ticket",
+                   step={"action": "replay", "fn": "add_party_seat", "kwargs": {"event_id": event_id, "attendee_id": attendee_id},
+                         "body_param": "body", "schema": "AddPartySeat", "body": body.dict()},
+                   attendee_id=attendee_id, reason=body.reason or "")
+        _verify_missing_seat(db, event_id, attendee_id)
     anchor = db.query(models.Attendee).filter(models.Attendee.id == attendee_id,
                                               models.Attendee.event_id == event_id).first()
     if not anchor:
@@ -2149,6 +2159,11 @@ def set_addon_day(attendee_id: int, payload: schemas.AddonDay,
     # set any date; the desk may only set a day this event actually runs, which
     # is the only thing anybody would ever want anyway and makes it safe to hand
     # over.
+    if _back_office(db, current_user, att.event_id):
+        _four_eyes(db, current_user, att.event_id, label="Change a ticket's access day",
+                   step={"action": "replay", "fn": "set_addon_day", "kwargs": {"attendee_id": attendee_id},
+                         "body_param": "payload", "schema": "AddonDay", "body": payload.dict()},
+                   attendee_id=attendee_id, reason="Access day change requested")
     if not authz.can(db, current_user, att.event_id, "attendee.write"):
         authz.require_cap(db, current_user, att.event_id, "checkin.perform")
         _ev = db.query(models.Event).filter(models.Event.id == att.event_id).first()
@@ -2431,6 +2446,13 @@ def update_attendee(
     authz.require_cap(db, current_user, attendee.event_id, "attendee.write")
     
     changes = attendee_update.dict(exclude_unset=True)
+    _sens = {k for k in ("email", "ticket_type_id", "registration_status", "custom_data") if k in changes
+             and changes[k] != getattr(attendee, k, None)}
+    if _sens:
+        _four_eyes(db, current_user, attendee.event_id, label="Edit a ticket's %s" % ", ".join(sorted(_sens)).replace("_", " "),
+                   step={"action": "replay", "fn": "update_attendee", "kwargs": {"attendee_id": attendee_id},
+                         "body_param": "attendee_update", "schema": "AttendeeUpdate", "body": changes},
+                   attendee_id=attendee_id, reason="Ticket edit from Attendees")
     # Every edit is kept in the ticket's own history: who changed what, from what.
     diff = {k: {"from": getattr(attendee, k, None), "to": v} for k, v in changes.items()
             if k != "custom_data" and getattr(attendee, k, None) != v}
@@ -2459,6 +2481,10 @@ def delete_attendee(
     if not attendee:
         raise HTTPException(status_code=404, detail="Attendee not found")
     authz.require_cap(db, current_user, attendee.event_id, "attendee.write")
+    _four_eyes(db, current_user, attendee.event_id, label='Delete a ticket',
+               step={"action": "replay", "fn": 'delete_attendee', "kwargs": {"attendee_id": attendee_id},
+                     "body_param": None, "schema": None, "body": None},
+               attendee_id=attendee_id, reason="Delete requested")
     # A real ticket is never erased: it was paid for, scanned or emailed, and
     # deleting it would lose that trail. Revoke it instead (kept, audited, undoable).
     paid = db.query(models.PaymentEvent).filter(models.PaymentEvent.attendee_id == attendee.id,
@@ -8317,6 +8343,10 @@ def place_payment(event_id: int, payment_id: int, body: schemas.PlacePayment,
     """
     _get_event_or_404(event_id, db)
     authz.require_cap(db, current_user, event_id, "attendee.write")
+    _four_eyes(db, current_user, event_id, label='Link a payment to a ticket',
+               step={"action": "replay", "fn": 'place_payment', "kwargs": {"event_id": event_id, "payment_id": payment_id},
+                     "body_param": "body", "schema": "PlacePayment", "body": body.dict()},
+               attendee_id=getattr(body, "attendee_id", None), reason=getattr(body, "note", "") or getattr(body, "reason", "") or "")
     pe = db.query(models.PaymentEvent).filter(models.PaymentEvent.id == payment_id,
                                               models.PaymentEvent.event_id == event_id).first()
     if not pe:
@@ -9611,6 +9641,10 @@ def map_reconcile_apply(event_id: int, payload: schemas.MapReconcileRequest,
     if not payload.confirm:
         raise HTTPException(status_code=400,
                             detail="Confirmation is required. Review the preview first.")
+    _four_eyes(db, current_user, event_id, label="Map a product and grant its past buyers their tickets",
+               step={"action": "replay", "fn": "map_reconcile_apply", "kwargs": {"event_id": event_id},
+                     "body_param": "payload", "schema": "MapReconcileRequest", "body": payload.dict()},
+               reason="Mapping reconciliation")
     product_id = (payload.product_id or "").strip()
     if not product_id:
         raise HTTPException(status_code=400, detail="A GHL product id is required")
@@ -10459,6 +10493,10 @@ def transfer_ticket(attendee_id: int, body: schemas.TicketTransfer, db: Session 
     if not att:
         raise HTTPException(status_code=404, detail="Ticket not found")
     authz.require_cap(db, current_user, att.event_id, "attendee.write")
+    _four_eyes(db, current_user, att.event_id, label='Transfer a ticket to someone else',
+               step={"action": "replay", "fn": 'transfer_ticket', "kwargs": {"attendee_id": attendee_id},
+                     "body_param": "body", "schema": "TicketTransfer", "body": body.dict()},
+               attendee_id=attendee_id, reason=getattr(body, "reason", "") or "")
     event = _get_event_or_404(att.event_id, db)
     _assert_event_writable(db, event, "transfer a ticket")
     email = (body.email or "").strip().lower()
@@ -10546,6 +10584,10 @@ def revoke_attendee(attendee_id: int, payload: schemas.RevokeTicket,
     if not attendee:
         raise HTTPException(status_code=404, detail="Attendee not found")
     authz.require_cap(db, current_user, attendee.event_id, "attendee.write")
+    _four_eyes(db, current_user, attendee.event_id, label='Void (revoke) a ticket',
+               step={"action": "replay", "fn": 'revoke_attendee', "kwargs": {"attendee_id": attendee_id},
+                     "body_param": "payload", "schema": "RevokeTicket", "body": payload.dict()},
+               attendee_id=attendee_id, reason=getattr(payload, "reason", "") or "")
     attendee.registration_status = "revoked"
     _lifecycle_append(attendee, "revoked", actor=(current_user.email or "admin"),
                       reason=payload.reason)
@@ -10562,6 +10604,10 @@ def reinstate_attendee(attendee_id: int, payload: schemas.RevokeTicket,
     if not attendee:
         raise HTTPException(status_code=404, detail="Attendee not found")
     authz.require_cap(db, current_user, attendee.event_id, "attendee.write")
+    _four_eyes(db, current_user, attendee.event_id, label='Reinstate a voided ticket',
+               step={"action": "replay", "fn": 'reinstate_attendee', "kwargs": {"attendee_id": attendee_id},
+                     "body_param": "payload", "schema": "RevokeTicket", "body": payload.dict()},
+               attendee_id=attendee_id, reason=getattr(payload, "reason", "") or "")
     prev = _ticket_status(attendee)
     attendee.registration_status = "active"
     _lifecycle_append(attendee, "reinstated", actor=(current_user.email or "admin"),
@@ -10599,6 +10645,11 @@ def change_pass(attendee_id: int, payload: schemas.ChangePass,
     _organiser = authz.can(db, current_user, attendee.event_id, "attendee.write")
     if not _organiser:
         authz.require_cap(db, current_user, attendee.event_id, "checkin.perform")
+    if _back_office(db, current_user, attendee.event_id):
+        _four_eyes(db, current_user, attendee.event_id, label="Change a ticket's pass (access)",
+                   step={"action": "replay", "fn": "change_pass", "kwargs": {"attendee_id": attendee_id},
+                         "body_param": "payload", "schema": "ChangePass", "body": payload.dict()},
+                   attendee_id=attendee_id, reason=getattr(payload, "reason", "") or "")
     tt = db.query(models.TicketType).filter(
         models.TicketType.id == payload.ticket_type_id,
         models.TicketType.event_id == attendee.event_id).first()
@@ -13388,6 +13439,85 @@ RECON_STATUSES = ("open", "in_review", "reviewed", "resolved", "dismissed")
 # is entitled to: these need confirm=true from the person clicking.
 RECON_SENSITIVE = {"issue_seat", "change_category", "fix_identity_email", "set_delivery_email", "release"}
 
+def _verify_missing_seat(db, event_id, attendee_id):
+    """Before an approved missing ticket is created: the purchase really is
+    larger than the tickets that exist. Paid, unrefunded payments of the
+    booking (plus quantities bought in one checkout) must equal what the
+    booking paid for, and fewer tickets must exist. Otherwise the correction
+    stays pending (409) -- never a guess."""
+    anchor = db.query(models.Attendee).filter(models.Attendee.id == attendee_id, models.Attendee.event_id == event_id).first()
+    p = _party_members(db, anchor) if anchor else None
+    if not p:
+        raise HTTPException(status_code=409, detail="Not a multi-seat booking: nothing to create")
+    ids = [m["attendee_id"] for m in p["members"]]
+    pays = db.query(models.PaymentEvent).filter(models.PaymentEvent.event_id == event_id,
+                                                models.PaymentEvent.attendee_id.in_(ids)).all()
+    if any((pe.amount_refunded or 0) > 0 or pe.status in ("refunded", "partially_refunded") for pe in pays):
+        raise HTTPException(status_code=409, detail="A payment of this booking was refunded. The correction stays pending until that is settled.")
+    paid = {pe.ghl_entity_id or ("pe%d" % pe.id) for pe in pays if pe.status == "paid"}
+    slots = 0
+    for a in db.query(models.Attendee).filter(models.Attendee.id.in_(ids)).all():
+        for e in ((a.custom_data or {}).get("entitlements") or []):
+            if e.get("status") == "paid" and not e.get("addon_code") and not e.get("is_upgrade"):
+                slots += max(1, int(e.get("quantity") or 1)) - 1
+    purchased = len(paid) + slots
+    if purchased < int(p["paid_for"]) or len(ids) >= int(p["paid_for"]):
+        raise HTTPException(status_code=409, detail=(
+            "The purchase does not cover it: %d paid seat(s) on record, the booking counts %d, %d ticket(s) exist. "
+            "The correction stays pending until the records agree." % (purchased, int(p["paid_for"]), len(ids))))
+
+
+# ---------------------------------------------------------------------------
+# Second-admin approval for sensitive corrections (Babak, 10 Nov 2026).
+#
+# Creating a paid ticket, changing a pass, access day, ticket email/owner,
+# voiding/reinstating/deleting a ticket, moving a payment, or releasing a
+# protective hold needs a SECOND platform admin. One mechanism for every page
+# and endpoint: the function that makes the change calls _four_eyes() first.
+# Unless it is running as part of an approved proposal, the request is filed
+# as a proposal (the Email Center's Approvals queue) and NOT applied.
+# Door-desk operations by door staff (naming a paid seat, a paid upgrade, an
+# add-on day of the event, a holder's name) are bounded by payment/arithmetic
+# and stay direct; organisers and admins doing the same go through approval.
+# ---------------------------------------------------------------------------
+import contextvars as _contextvars  # noqa: E402
+_APPROVED_CORRECTION = _contextvars.ContextVar("approved_correction", default=None)
+
+
+def _back_office(db, user, event_id):
+    """An organiser/admin (not door-only staff) is making this change."""
+    return bool(getattr(user, "is_admin", False)) or authz.can(db, user, event_id, "attendee.write") \
+        or authz.can(db, user, event_id, "reconcile.resolve")
+
+
+def _four_eyes(db, user, event_id, *, label, step, attendee_id=None, issue_id=None, reason=""):
+    """Return if this runs inside an approved proposal; otherwise file it as a
+    proposal and refuse with 409. Never applies anything itself."""
+    if _APPROVED_CORRECTION.get():
+        return
+    import email_center_fix as _ecf
+    pid, existed = _ecf.file_proposal(db, user, event_id, label=label, step=step, attendee_id=attendee_id,
+                                      issue_id=issue_id, reason=reason)
+    raise HTTPException(status_code=409, detail=(
+        "This change needs a second admin's approval. %s as proposal #%d; another platform admin "
+        "approves it in Email Center > Approvals. Nothing was changed yet."
+        % ("It is already waiting" if existed else "It was sent", pid)))
+
+
+def _rc_needs_approval(db, event_id, i, body):
+    action = (body.get("action") or "").strip()
+    if action in ("issue_seat", "change_category"):
+        return True
+    if action == "fix_identity" and (body.get("email") or "").strip():
+        return True
+    if action == "release":
+        import email_center_fix as _ecf
+        ids = [int(x) for x in (body.get("ticket_ids") or ([body["ticket_id"]] if body.get("ticket_id") else []))]
+        holds = _ecf._holds_for(db, event_id, ids)
+        return any(not _ecf._contact_hold(h) for h in holds.values())
+    return False
+
+
 
 def _rc_issue_or_404(db, event_id, issue_id):
     i = db.query(models.ReconIssue).filter(models.ReconIssue.id == issue_id,
@@ -13673,6 +13803,13 @@ def recon_status(event_id: int, issue_id: int, body: dict, db: Session = Depends
     Anything but 'open' and 'in_review' needs a note saying why."""
     authz.require_cap(db, current_user, event_id, "reconcile.resolve")
     i = _rc_issue_or_404(db, event_id, issue_id)
+    if body.get("real_seat") is not None and i.kind == "possible_duplicate_payment":
+        # A payment decision (real seat or double charge) is sensitive.
+        if len((body.get("note") or "").strip()) < 3:
+            raise HTTPException(status_code=400, detail="Add a note explaining the decision")
+        _four_eyes(db, current_user, event_id, label="Payment decision: %s" % ("real extra seat" if body.get("real_seat") else "double charge"),
+                   step={"action": "decide_duplicate", "issue_id": i.id, "body": {"real_seat": bool(body.get("real_seat"))}},
+                   issue_id=i.id, reason=body.get("note") or "")
     return _rc_set_status(db, event_id, i, body, current_user)
 
 
@@ -13691,6 +13828,9 @@ def _rc_set_status(db, event_id, i, body, current_user):
         i.resolved_by, i.resolved_at = current_user.id, datetime.utcnow()
         i.resolution = ((i.resolution + "\n") if i.resolution else "") + "%s: %s" % (st, note)
     if body.get("real_seat") is not None and i.kind == "possible_duplicate_payment":
+        _four_eyes(db, current_user, event_id, label="Payment decision",
+                   step={"action": "decide_duplicate", "issue_id": i.id, "body": {"real_seat": bool(body.get("real_seat"))}},
+                   issue_id=i.id, reason=note)
         f = dict(i.facts or {}); f["decision"] = "real_seat" if body.get("real_seat") else "duplicate"
         i.facts = f
     _rc._hist(db, i, "status", note or ("Marked %s" % st), actor=_rc_actor(current_user), user_id=current_user.id,
@@ -13727,6 +13867,15 @@ def recon_action(event_id: int, issue_id: int, body: dict, db: Session = Depends
     event = _get_event_or_404(event_id, db)
     authz.require_cap(db, current_user, event_id, "reconcile.resolve")
     i = _rc_issue_or_404(db, event_id, issue_id)
+    if _rc_needs_approval(db, event_id, i, body):
+        if body.get("confirm") is not True:
+            raise HTTPException(status_code=428, detail="This changes who holds a ticket, what it grants or where it is "
+                                                        "sent. Confirm to go ahead.")
+        if len((body.get("note") or "").strip()) < 3:
+            raise HTTPException(status_code=400, detail="Add a short note explaining the decision")
+        _four_eyes(db, current_user, event_id, label="Ticket Reconciliation: %s" % (body.get("action") or "").replace("_", " "),
+                   step={"action": "recon_action", "issue_id": i.id, "body": {k: v for k, v in body.items() if k != "confirm"}},
+                   issue_id=i.id, reason=body.get("note") or "")
     return _rc_execute(db, event_id, i, body, current_user)
 
 
@@ -13864,6 +14013,10 @@ def _rc_execute(db, event_id, i, body, current_user):
         targets = [int(x) for x in (body.get("ticket_ids") or ([att.id] if att else []))]
         if not targets or not set(targets) <= allowed_ids:
             raise HTTPException(status_code=400, detail="Choose tickets that belong to this issue")
+        if action == "release" and _rc_needs_approval(db, event_id, i, dict(body, ticket_ids=targets)):
+            _four_eyes(db, current_user, event_id, label="Release a protective hold",
+                       step={"action": "recon_action", "issue_id": i.id, "body": dict({k: v for k, v in body.items() if k != "confirm"}, ticket_ids=targets)},
+                       issue_id=i.id, reason=note)
         before, after = {}, {}
         for t in targets:
             h = db.query(models.EmailHold).filter(models.EmailHold.event_id == event_id,

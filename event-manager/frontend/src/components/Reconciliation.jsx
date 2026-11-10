@@ -46,6 +46,9 @@ const err = (e) => {
     const d = e?.response?.data?.detail;
     return typeof d === 'string' ? d : (e?.message || 'Something went wrong');
 };
+// Sensitive corrections are not applied here directly: the server files them
+// for a second admin's approval (10 Nov 2026). That is not an error.
+const held = (e) => e?.response?.status === 409 && /second admin's approval/.test(String(e?.response?.data?.detail || ''));
 const money = (n, c) => (n == null ? '' : `${c && c !== 'USD' ? c + ' ' : '$'}${Number(n).toFixed(2)}`);
 
 const FACT_LABELS = { amount: 'Amount', when: 'When', name: 'Name on the payment', email: 'Email on the payment',
@@ -176,14 +179,17 @@ export default function Reconciliation() {
             setNotice(`${spec.label}: done.${res.issued_ticket_id ? ` New ticket #${res.issued_ticket_id}.` : ''} ${res.note || ''} `
                 + `The checks ran again${r.data.detected ? '; this issue is still found' : ' and no longer find this issue'}.`);
             setAct(null); setForm({}); setNote(''); refreshDetail();
-        }).catch((e) => setError(err(e))).finally(() => setBusy(false));
+        }).catch((e) => {
+            if (held(e)) { setNotice(err(e)); setAct(null); setForm({}); setNote(''); refreshDetail(); } else setError(err(e));
+        }).finally(() => setBusy(false));
     };
 
     const submitStatus = () => {
         setBusy(true);
         reconStatus(id, detail.id, { status: statusAsk.status, note: (statusAsk.prefix || '') + note, real_seat: statusAsk.real_seat })
             .then((r) => { setNotice(`Marked ${STATUS_LABEL[r.data.status] || r.data.status}.`); setStatusAsk(null); setNote(''); refreshDetail(); })
-            .catch((e) => setError(err(e))).finally(() => setBusy(false));
+            .catch((e) => { if (held(e)) { setNotice(err(e)); setStatusAsk(null); setNote(''); refreshDetail(); } else setError(err(e)); })
+            .finally(() => setBusy(false));
     };
 
     const submitBulk = () => {

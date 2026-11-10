@@ -32,6 +32,14 @@ for line in open(HERE + "/.env"):
         env[k] = v.strip().strip('"').strip("'")
 SVC = {"Authorization": "Bearer " + env["IDENTITY_SERVICE_TOKEN"]}
 ADMIN = {"Authorization": "Bearer " + main.create_access_token({"sub": "1", "adm": True})}
+# The desks are door staff (10 Nov 2026: an admin's seat goes to a second
+# admin for approval; naming a paid seat at the desk stays a door action).
+import sqlite3 as _sq
+_c = _sq.connect(DB, timeout=60)
+DESK_ID = _c.execute("insert into users(email,hashed_password,full_name,is_admin,created_at) values('zz-desk-seats@example.invalid','x','ZZ Desk',0,datetime('now'))").lastrowid
+_c.execute("insert into event_roles(user_id,event_id,role,created_at) values(?,1,'checkin_staff',datetime('now'))", (DESK_ID,))
+_c.commit(); _c.close()
+DESK = {"Authorization": "Bearer " + main.create_access_token({"sub": str(DESK_ID)})}
 fails = []
 def check(ok, label, detail=""):
     print(("  PASS  " if ok else "  FAIL  ") + label + ("" if ok else "\n          %r" % (detail,)))
@@ -76,20 +84,20 @@ print("\n== 1. naming the last free seat is atomic ==")
 b1, _ = buyer("seat-race", quantity=2)
 res = []
 def name_seat(i):
-    res.append(call("POST", "/events/%d/attendees/%d/add-seat" % (EV, b1), {"first_name": "Zz", "last_name": "Desk%d" % i, "reason": "synthetic race"})[0])
+    res.append(call("POST", "/events/%d/attendees/%d/add-seat" % (EV, b1), {"first_name": "Zz", "last_name": "Desk%d" % i, "reason": "synthetic race"}, DESK)[0])
 ts = [threading.Thread(target=name_seat, args=(i,)) for i in range(8)]
 [t.start() for t in ts]; [t.join() for t in ts]
 seats = db.execute("select count(*) from attendees where json_extract(custom_data,'$.bought_by_attendee')=?", (b1,)).fetchone()[0]
 check(sorted(res).count(200) == 1 and sorted(res).count(409) == 7,
       "8 desks naming the last seat of a 2-ticket booking at once: one succeeds, seven are refused", sorted(res))
 check(seats == 1, "the booking has exactly the badges it paid for (buyer + 1 seat)", seats)
-st, _ = call("POST", "/events/%d/attendees/%d/add-seat" % (EV, b1), {"first_name": "Zz", "last_name": "Late"})
+st, _ = call("POST", "/events/%d/attendees/%d/add-seat" % (EV, b1), {"first_name": "Zz", "last_name": "Late"}, DESK)
 check(st == 409, "a full booking refuses another seat", st)
 
 b3, _ = buyer("seat-three", quantity=3)
 res = []
 def name3(i):
-    res.append(call("POST", "/events/%d/attendees/%d/add-seat" % (EV, b3), {"first_name": "Zz", "last_name": "Three%d" % i})[0])
+    res.append(call("POST", "/events/%d/attendees/%d/add-seat" % (EV, b3), {"first_name": "Zz", "last_name": "Three%d" % i}, DESK)[0])
 ts = [threading.Thread(target=name3, args=(i,)) for i in range(6)]
 [t.start() for t in ts]; [t.join() for t in ts]
 n3 = db.execute("select count(*) from attendees where json_extract(custom_data,'$.bought_by_attendee')=?", (b3,)).fetchone()[0]
@@ -115,7 +123,7 @@ outcomes = []
 def direct(i):
     s = SessionLocal()
     try:
-        main.add_party_seat(EV, b5, main.schemas.AddPartySeat(first_name="Zz", last_name="Barrier%d" % i), s, s.get(models.User, 1))
+        main.add_party_seat(EV, b5, main.schemas.AddPartySeat(first_name="Zz", last_name="Barrier%d" % i), s, s.get(models.User, DESK_ID))
         outcomes.append("ok")
     except Exception as ex:
         s.rollback(); outcomes.append(type(ex).__name__)
@@ -157,8 +165,8 @@ st, g = gate([order("ZZ-1", solo_email, solo)], holds_all_but=[solo])
 check(st == 200 and g.get("ok") is True and not g["critical"], "a correct one-ticket email passes", (st, g.get("critical")))
 
 pb, pb_email = buyer("gate-party", quantity=3)
-s1 = call("POST", "/events/%d/attendees/%d/add-seat" % (EV, pb), {"first_name": "Zz", "last_name": "Guest1"})[1]["attendee_id"]
-s2 = call("POST", "/events/%d/attendees/%d/add-seat" % (EV, pb), {"first_name": "Zz", "last_name": "Guest2"})[1]["attendee_id"]
+s1 = call("POST", "/events/%d/attendees/%d/add-seat" % (EV, pb), {"first_name": "Zz", "last_name": "Guest1"}, DESK)[1]["attendee_id"]
+s2 = call("POST", "/events/%d/attendees/%d/add-seat" % (EV, pb), {"first_name": "Zz", "last_name": "Guest2"}, DESK)[1]["attendee_id"]
 live_ids = live_ids + [solo, pb, s1, s2, b1, b3, b5]
 st, g = gate([order("ZZ-P", pb_email, pb, s1, s2)], holds_all_but=[pb, s1, s2])
 check(g.get("ok") is True, "a 3-ticket booking with all 3 tickets in the buyer's email passes", g.get("critical"))

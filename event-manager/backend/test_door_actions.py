@@ -40,6 +40,8 @@ server = subprocess.Popen(
      "--log-level", "warning"],
     cwd=HERE, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 BASE = "http://127.0.0.1:%d" % PORT
+import testapprove  # noqa: E402  (second-admin approval, 10 Nov 2026: held corrections approved by a test admin)
+testapprove.install(BASE, COPY)
 
 def stop():
     server.terminate()

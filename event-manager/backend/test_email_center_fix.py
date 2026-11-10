@@ -31,6 +31,7 @@ FAKE = os.path.join(WORK, "fake.json"); json.dump({}, open(FAKE, "w"))
 os.environ.update(TICKET_DELIVERY_DB=TD, EMAIL_CENTER_FAKE=FAKE, EMAIL_CENTER_FAKE_OUTBOX=os.path.join(WORK, "outbox.jsonl"),
                   EMAIL_CENTER_SEND_PAUSE="0.05", EMAIL_CENTER_CACHE_SECONDS="0")
 
+os.environ["TESTBED_RAW_APPROVALS"] = "1"
 import testbed                                                # noqa: E402
 BASE, DB = testbed.start()
 import main                                                   # noqa: E402

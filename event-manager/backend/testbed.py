@@ -77,6 +77,19 @@ def start(wait_seconds=40):
     workdir = tempfile.mkdtemp(prefix="testbed-")
     db = os.path.join(workdir, "event.db")
     shutil.copy(LIVE_DB, db)
+    # The delivery history (data/ticket-delivery.db) is the second database.
+    # A suite that does not bring its own copy gets one here, so no test can
+    # write audit rows into the live history (10 Nov 2026: the correction
+    # suites had added 114 audit-only rows to production that way).
+    if not os.environ.get("TICKET_DELIVERY_DB"):
+        import sqlite3 as _sq
+        live_td = os.path.join(HERE, "data", "ticket-delivery.db")
+        td_copy = os.path.join(workdir, "ticket-delivery.db")
+        if os.path.exists(live_td):
+            _src = _sq.connect("file:%s?mode=ro" % live_td, uri=True)
+            _dst = _sq.connect(td_copy)
+            _src.backup(_dst); _dst.close(); _src.close()
+        os.environ["TICKET_DELIVERY_DB"] = td_copy
     port = _free_port()
     env = dict(os.environ, DATABASE_URL="sqlite:///" + db)
     proc = subprocess.Popen(

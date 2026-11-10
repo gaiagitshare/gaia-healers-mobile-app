@@ -5214,9 +5214,13 @@ def vendor_setup_save(token: str, payload: schemas.VendorSetup,
         _vendor_set.add("website")
     if payload.logo_url is not None:
         ex.logo_url = payload.logo_url.strip()[:400] or None
+    _email_change = None
     if payload.contact_email is not None:
+        _old = (ex.contact_email or "").strip().lower()
         ex.contact_email = payload.contact_email.strip()[:160]
         _vendor_set.add("contact_email")
+        if ex.contact_email.strip().lower() != _old:
+            _email_change = (_old, ex.contact_email.strip().lower())
     if payload.contact_phone is not None:
         ex.contact_phone = payload.contact_phone.strip()[:40] or None
         _vendor_set.add("contact_phone")
@@ -5228,6 +5232,7 @@ def vendor_setup_save(token: str, payload: schemas.VendorSetup,
         # A stand that is not confirmed yet may prepare its listing; it goes
         # into the directory when the organiser confirms it.
         db.commit()
+        _email_center.note_stand_email_change(ex, _email_change)
         return {"ok": True, "company_name": ex.company_name, "is_published": False,
                 "activated": ex.activated_at is not None,
                 "message": "Saved. Your listing goes live once the organisers confirm your stand."}
@@ -5238,6 +5243,7 @@ def vendor_setup_save(token: str, payload: schemas.VendorSetup,
         if not ex.activated_at:
             ex.activated_at = datetime.utcnow()
     db.commit()
+    _email_center.note_stand_email_change(ex, _email_change)
     return {"ok": True, "company_name": ex.company_name,
             "is_published": bool(ex.is_published),
             "activated": ex.activated_at is not None}

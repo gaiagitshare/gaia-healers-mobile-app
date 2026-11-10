@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import {
-    ecExhibitorActivity, ecExhibitorCheckContacts, ecExhibitorContact, ecExhibitorCreateContact, ecExhibitorLink, ecExhibitorManual, ecExhibitorOutcome, ecExhibitorPreview, ecExhibitorSend, ecExhibitors,
+    ecExhibitorActivity, ecExhibitorCheckContacts, ecExhibitorContact, ecExhibitorCreateContact, ecExhibitorHold, ecExhibitorLink, ecExhibitorManual, ecExhibitorOutcome, ecExhibitorPreview, ecExhibitorSend, ecExhibitors,
 } from '../utils/api';
 import {
     BatchCard, BatchConfirmDialog, copyText, DeliveryChip, EmailFrame, errText, GatedButton, gst, money, NoteDialog, REFUSED, sendBlock,
@@ -15,7 +15,7 @@ const SETUP_LINK = {
     activated: ['Profile set up', 'success'], valid: ['Link sent / valid', 'info'], created_not_tracked: ['Link created', 'info'],
     expired: ['Link expired', 'warning'], none: ['No link yet', 'default'],
 };
-const KIND_LABEL = { setup: 'setup', scanner: 'scanner' };
+const KIND_LABEL = { setup: 'setup', scanner: 'scanner', reminder: 'setup reminder' };
 const SENT = new Set(['accepted', 'delivered', 'opened', 'clicked', 'sent_manually', 'bounced']);
 // Readiness: can this stand be emailed through GHL right now?
 const READY = {
@@ -26,23 +26,38 @@ const READY = {
 const FLAG = {
     paid_or_comp_scanning_off: ['Paid/comp · scanner off', 'warning'], partially_paid: ['Partially paid · review', 'warning'],
     no_scanner_link: ['No scanner link', 'error'],
+    email_changed_by_stand: ['Email changed by stand', 'info'],
+    possible_duplicate: ['Possible duplicate stand', 'warning'],
+};
+// What an admin should do next (server decides; colour here only).
+const NEXT_COLOR = {
+    on_hold: 'default', add_email: 'error', check_duplicate: 'warning', check_ghl: 'info', create_contact: 'warning',
+    resolve_contact: 'error', settle: 'warning', fix_setup: 'error', send_setup: 'primary', wait_setup: 'default',
+    remind: 'secondary', decide_scanning: 'warning', send_scanner: 'primary', done: 'success',
 };
 const FAILED = new Set(['failed', 'bounced', 'unknown', 'refused']);
-const kinds = (r) => [r.setup?.status, r.scanner?.status];
+const kinds = (r) => [r.setup?.status, r.scanner?.status, r.reminder?.status];
 // Dashboard filters: [key, label, test]
 const FILTERS = [
     ['', 'All', () => true],
-    ['ready', 'Ready to send', (r) => r.readiness === 'ready' && r.setup?.eligible && !SENT.has(r.setup?.status)],
+    ['action', 'Needs action', (r) => !['done', 'wait_setup', 'on_hold'].includes(r.next_action?.key)],
+    ['ready', 'Ready to send', (r) => !r.hold && r.readiness === 'ready' && r.setup?.eligible && !SENT.has(r.setup?.status)],
     ['missing_email', 'Missing email', (r) => r.readiness === 'missing_email'],
     ['missing_ghl_contact', 'Missing GHL contact', (r) => ['missing_ghl_contact', 'several_contacts', 'do_not_email'].includes(r.readiness)],
     ['not_checked', 'GHL not checked', (r) => r.readiness === 'not_checked'],
     ['setup_sent', 'Setup invitation sent', (r) => SENT.has(r.setup?.status)],
-    ['setup_completed', 'Setup completed', (r) => r.setup_link === 'activated'],
+    ['setup_completed', 'Setup completed', (r) => r.setup_completed],
+    ['setup_pending', 'Invited, setup not completed', (r) => SENT.has(r.setup?.status) && !r.setup_completed],
+    ['remind', 'Reminder due', (r) => r.next_action?.key === 'remind'],
+    ['reminded', 'Reminder sent', (r) => SENT.has(r.reminder?.status)],
+    ['scanner_sent', 'Scanner invitation sent', (r) => SENT.has(r.scanner?.status)],
+    ['email_changed', 'Email changed by stand', (r) => Boolean(r.stand_email_change)],
+    ['on_hold', 'On hold', (r) => Boolean(r.hold)],
     ['scanner_on', 'Scanner enabled', (r) => r.scanning_enabled],
     ['scanner_off', 'Scanner disabled', (r) => !r.scanning_enabled],
     ['failed', 'Delivery failed', (r) => kinds(r).some((k) => FAILED.has(k))],
     ['manual', 'Manually sent', (r) => kinds(r).includes('sent_manually')],
-    ['review', 'Needs admin review', (r) => (r.flags || []).some((f) => FLAG[f])],
+    ['review', 'Needs admin review', (r) => (r.flags || []).some((f) => FLAG[f] && f !== 'email_changed_by_stand')],
 ];
 const reasonText = (r) => REFUSED[r] || (r ? String(r).replace(/_/g, ' ') : '');
 
@@ -53,6 +68,7 @@ export default function EmailCenterExhibitors({ eventId, me: meIn, focusId }) {
     const [checking, setChecking] = useState(false);
     const [createAsk, setCreateAsk] = useState(null); // {row, note, confirmed}
     const [activity, setActivity] = useState(null); // {row, items}
+    const [holdAsk, setHoldAsk] = useState(null); // {row, hold, reason}
     const narrow = useMediaQuery('(max-width:700px)');
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -151,6 +167,12 @@ export default function EmailCenterExhibitors({ eventId, me: meIn, focusId }) {
         ecExhibitorActivity(eventId, row.id).then((r) => setActivity({ row, items: r.data.items || [] }))
             .catch((e) => { setActivity(null); setError(errText(e)); });
     };
+    const saveHold = () => {
+        setBusy(true);
+        ecExhibitorHold(eventId, holdAsk.row.id, { hold: holdAsk.hold, reason: holdAsk.reason.trim() })
+            .then(() => { setNotice({ severity: 'success', text: `${holdAsk.row.company_name}: ${holdAsk.hold ? 'put on hold' : 'hold released'}.` }); setHoldAsk(null); load(); })
+            .catch((e) => setError(errText(e))).finally(() => setBusy(false));
+    };
     const counts = Object.fromEntries(FILTERS.map(([k, , t]) => [k, rows.filter(t).length]));
 
     const m = menu?.row;
@@ -182,6 +204,10 @@ export default function EmailCenterExhibitors({ eventId, me: meIn, focusId }) {
                                      onClick={() => setBatchAsk({ selector: { exhibitor_kind: 'setup', ids: [...picked] }, title: `Send setup email to ${picked.size} stand(s)` })}>
                             Send setup to selected
                         </GatedButton>
+                        <GatedButton variant="outlined" reason={sBlock || (!picked.size ? 'Select stands first.' : '')}
+                                     onClick={() => setBatchAsk({ selector: { exhibitor_kind: 'reminder', ids: [...picked] }, title: `Send setup reminder to ${picked.size} stand(s)` })}>
+                            Send reminder to selected
+                        </GatedButton>
                         {me?.scanner_links && (
                             <GatedButton variant="outlined" reason={sBlock || (!picked.size ? 'Select stands first.' : '')}
                                          onClick={() => setBatchAsk({ selector: { exhibitor_kind: 'scanner', ids: [...picked] }, title: `Send scanner email to ${picked.size} stand(s)` })}>
@@ -208,9 +234,9 @@ export default function EmailCenterExhibitors({ eventId, me: meIn, focusId }) {
                                     <Checkbox size="small" checked={allPicked} indeterminate={picked.size > 0 && !allPicked} inputProps={{ 'aria-label': 'Select all shown' }}
                                               onChange={() => setPicked(allPicked ? new Set() : new Set(shown.map((r) => r.id)))} />
                                 </TableCell>
-                                <TableCell>Booth</TableCell><TableCell>Company</TableCell><TableCell>Status</TableCell><TableCell>Contact</TableCell><TableCell>Email</TableCell>
+                                <TableCell>Booth</TableCell><TableCell>Company</TableCell><TableCell>Next action</TableCell><TableCell>Status</TableCell><TableCell>Contact</TableCell><TableCell>Email</TableCell>
                                 <TableCell>Payment</TableCell><TableCell>Profile setup</TableCell><TableCell>Scanner</TableCell><TableCell>Scanner link</TableCell>
-                                <TableCell>Setup email</TableCell><TableCell>Scanner email</TableCell><TableCell>Last sent</TableCell>
+                                <TableCell>Setup email</TableCell><TableCell>Reminder</TableCell><TableCell>Scanner email</TableCell><TableCell>Last sent</TableCell>
                                 <TableCell>First scan</TableCell><TableCell align="right">Leads</TableCell><TableCell>Actions</TableCell>
                             </TableRow></TableHead>
                             <TableBody>
@@ -224,10 +250,17 @@ export default function EmailCenterExhibitors({ eventId, me: meIn, focusId }) {
                                             </TableCell>
                                             <TableCell>{r.booth_number || '—'}</TableCell>
                                             <TableCell>{r.company_name}</TableCell>
+                                            <TableCell sx={{ minWidth: 160 }}>
+                                                <Chip size="small" label={r.next_action?.label || '—'} color={NEXT_COLOR[r.next_action?.key] || 'default'}
+                                                      variant={['wait_setup', 'done', 'on_hold'].includes(r.next_action?.key) ? 'outlined' : 'filled'} />
+                                                {r.hold && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{r.hold.reason} · {r.hold.by}</Typography>}
+                                            </TableCell>
                                             <TableCell sx={{ minWidth: 170 }}>
                                                 <Stack spacing={0.5} alignItems="flex-start">
                                                     {(() => { const [l, c] = READY[r.readiness] || [r.readiness || '—', 'default']; return <Chip size="small" label={l} color={c} />; })()}
                                                     {(r.flags || []).filter((f) => FLAG[f]).map((f) => <Chip key={f} size="small" variant="outlined" label={FLAG[f][0]} color={FLAG[f][1]} />)}
+                                                    {r.stand_email_change && <Typography variant="caption" color="info.main">Changed by the stand {gst(r.stand_email_change.at)}{r.stand_email_change.old ? ` (was ${r.stand_email_change.old})` : ''}</Typography>}
+                                                    {r.possible_duplicate && <Typography variant="caption" color="warning.main">Pending online purchase: {r.possible_duplicate.name}{r.possible_duplicate.package ? ` (${r.possible_duplicate.package})` : ''}</Typography>}
                                                     {r.ghl_contact?.checked_at && <Typography variant="caption" color="text.secondary">GHL checked {gst(r.ghl_contact.checked_at)}</Typography>}
                                                 </Stack>
                                             </TableCell>
@@ -250,6 +283,7 @@ export default function EmailCenterExhibitors({ eventId, me: meIn, focusId }) {
                                                 <DeliveryChip s={r.setup?.status} />
                                                 {r.setup?.last_error && <Typography variant="caption" color="error" sx={{ display: 'block' }}>{reasonText(r.setup.last_error)}</Typography>}
                                             </TableCell>
+                                            <TableCell><DeliveryChip s={r.reminder?.status} /></TableCell>
                                             <TableCell>
                                                 <DeliveryChip s={r.scanner?.status} />
                                                 {r.scanner?.last_error && <Typography variant="caption" color="error" sx={{ display: 'block' }}>{reasonText(r.scanner.last_error)}</Typography>}
@@ -263,7 +297,7 @@ export default function EmailCenterExhibitors({ eventId, me: meIn, focusId }) {
                                         </TableRow>
                                     );
                                 })}
-                                {!shown.length && <TableRow><TableCell colSpan={16}>No stands match.</TableCell></TableRow>}
+                                {!shown.length && <TableRow><TableCell colSpan={18}>No stands match.</TableCell></TableRow>}
                             </TableBody>
                         </Table>
                     )}
@@ -276,14 +310,18 @@ export default function EmailCenterExhibitors({ eventId, me: meIn, focusId }) {
             <Menu anchorEl={menu?.anchor} open={Boolean(menu)} onClose={closeMenu}>
                 {m && [
                     <MenuItem key="ps" onClick={() => doPreview(m, 'setup')}>Preview setup email</MenuItem>,
+                    <MenuItem key="pr" onClick={() => doPreview(m, 'reminder')}>Preview setup reminder</MenuItem>,
                     me?.send && <MenuItem key="ss" disabled={Boolean(sBlock) || !m.setup?.eligible} onClick={() => { closeMenu(); setResendReason(''); setSendAsk({ row: m, kind: 'setup' }); }}>
                         Send setup email{!m.setup?.eligible ? (m.email_valid ? ' (profile already set up)' : ' (no contact email)') : ''}</MenuItem>,
                     <MenuItem key="cs" onClick={() => copyLink(m, 'setup')}>Copy setup link</MenuItem>,
+                    me?.send && <MenuItem key="rm" disabled={Boolean(sBlock) || !m.reminder?.eligible} onClick={() => { closeMenu(); setResendReason(''); setSendAsk({ row: m, kind: 'reminder' }); }}>
+                        Send setup reminder{!m.reminder?.eligible ? (m.setup_completed ? ' (already set up)' : m.hold ? ' (on hold)' : ' (send setup first)') : ''}</MenuItem>,
                     me?.scanner_links && <MenuItem key="pc" onClick={() => doPreview(m, 'scanner')}>Preview scanner email</MenuItem>,
                     me?.scanner_links && me?.send && m.scanner?.eligible && (
                         <MenuItem key="sc" disabled={Boolean(sBlock)} onClick={() => { closeMenu(); setResendReason(''); setSendAsk({ row: m, kind: 'scanner' }); }}>Send scanner email</MenuItem>),
                     me?.scanner_links && m.scanning_enabled && <MenuItem key="cc" onClick={() => copyLink(m, 'scanner')}>Copy scanner link</MenuItem>,
                     <MenuItem key="ac" onClick={() => openActivity(m)}>Activity</MenuItem>,
+                    me?.exhibitors && <MenuItem key="hd" onClick={() => { closeMenu(); setHoldAsk({ row: m, hold: !m.hold, reason: '' }); }}>{m.hold ? 'Release hold…' : 'Put on hold…'}</MenuItem>,
                     me?.platform_admin && ['missing_ghl_contact', 'not_checked'].includes(m.readiness) && m.email_valid && (
                         <MenuItem key="gc" onClick={() => { closeMenu(); setCreateAsk({ row: m, note: '', confirmed: false }); }}>Create GHL contact…</MenuItem>),
                     <MenuItem key="mm" onClick={() => { closeMenu(); setNoteAsk({ type: 'manual', row: m }); }}>Mark sent manually</MenuItem>,
@@ -403,6 +441,23 @@ export default function EmailCenterExhibitors({ eventId, me: meIn, focusId }) {
                                 ))}
                     </DialogContent>
                     <DialogActions><Button onClick={() => setActivity(null)}>Close</Button></DialogActions>
+                </>}
+            </Dialog>
+            {/* Hold / release */}
+            <Dialog open={Boolean(holdAsk)} onClose={() => setHoldAsk(null)} fullWidth maxWidth="sm" fullScreen={narrow}>
+                {holdAsk && <>
+                    <DialogTitle>{holdAsk.hold ? 'Put on hold' : 'Release hold'} — {holdAsk.row.company_name}</DialogTitle>
+                    <DialogContent dividers>
+                        <Typography variant="body2" sx={{ mb: 2 }}>
+                            {holdAsk.hold ? 'No exhibitor email (setup, reminder or scanner) can be sent to this stand while it is on hold. Payment, scanning and the listing do not change.'
+                                : 'The stand can be emailed again.'}
+                        </Typography>
+                        <TextField autoFocus fullWidth multiline minRows={2} label="Reason (required)" value={holdAsk.reason} onChange={(e) => setHoldAsk({ ...holdAsk, reason: e.target.value })} />
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setHoldAsk(null)}>Cancel</Button>
+                        <Button variant="contained" disabled={busy || holdAsk.reason.trim().length < 3} onClick={saveHold}>{busy ? 'Saving…' : holdAsk.hold ? 'Put on hold' : 'Release'}</Button>
+                    </DialogActions>
                 </>}
             </Dialog>
         </Box>

@@ -392,11 +392,14 @@ check(enriched >= 14, "most confirmed stands have a logo and a description", enr
 # operation has one address. Read off their site before it was written here,
 # not copied from the sheet, which is the distinction this guard exists for.
 SAME_ON_PURPOSE = {"Hair By Mermaid", "Medi Air Purifier", "The Real Framework/BOOK"}
-same = {r[0] for r in sql("SELECT company_name FROM exhibitors WHERE event_id=1 "
-                          "AND public_email IS NOT NULL AND public_email = contact_email")}
-check(same == SAME_ON_PURPOSE,
-      "the only public addresses matching a sheet contact are the two that genuinely publish it",
-      same - SAME_ON_PURPOSE)
+# A stand that typed its own contact email on its setup page (vendor_fields
+# lists contact_email) chose that address itself -- e.g. Vibra Tec on 10 Nov
+# switched its contact to the info@ address on its own website. Not a leak.
+_rows = sql("SELECT company_name, coalesce(vendor_fields,'') FROM exhibitors WHERE event_id=1 "
+            "AND public_email IS NOT NULL AND public_email = contact_email")
+same = {n for n, vf in _rows if "contact_email" not in vf}
+check(same <= SAME_ON_PURPOSE,
+      "the only public addresses matching a sheet contact are the ones that genuinely publish it", (same, _rows))
 mismatch = sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 "
                "AND public_phone IS NOT NULL AND public_phone = contact_phone")[0][0]
 check(mismatch == 0, "and no sheet phone number was copied into the public field", mismatch)

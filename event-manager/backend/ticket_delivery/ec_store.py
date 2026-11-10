@@ -49,6 +49,8 @@ def ensure(db):
         primary key(event_id, exhibitor_id, kind))''')
     db.execute('''create table if not exists ec_exhibitor_attempts(id integer primary key autoincrement, event_id integer,
         exhibitor_id integer, kind text, recipient text, state text, message_id text, result text, reason text, at text, actor text)''')
+    db.execute('''create table if not exists ec_exhibitor_holds(event_id integer, exhibitor_id integer, reason text,
+        held_by text, held_at text, primary key(event_id, exhibitor_id))''')
     db.execute('''create table if not exists ec_exhibitor_contacts(event_id integer, exhibitor_id integer, email text,
         status text, contact_id text, checked_at text, checked_by text, created_contact integer default 0,
         primary key(event_id, exhibitor_id))''')
@@ -281,3 +283,32 @@ def save_contact_check(db, event_id, exhibitor_id, email, status, contact_id, ac
                   contact_id=excluded.contact_id,checked_at=excluded.checked_at,checked_by=excluded.checked_by,
                   created_contact=max(created_contact,excluded.created_contact)""",
                (event_id, exhibitor_id, email, status, contact_id, now(), actor, 1 if created else 0))
+
+
+# -- exhibitor holds: an admin keeps a stand out of every send ----------------
+def holds(db, event_id):
+    return {r[0]: {"reason": r[1], "by": r[2], "at": r[3]}
+            for r in db.execute("select exhibitor_id,reason,held_by,held_at from ec_exhibitor_holds where event_id=?", (event_id,))}
+
+
+def set_hold(db, event_id, exhibitor_id, reason, actor):
+    db.execute("insert into ec_exhibitor_holds(event_id,exhibitor_id,reason,held_by,held_at) values(?,?,?,?,?) "
+               "on conflict(event_id,exhibitor_id) do update set reason=excluded.reason,held_by=excluded.held_by,held_at=excluded.held_at",
+               (event_id, exhibitor_id, reason, actor, now()))
+
+
+def clear_hold(db, event_id, exhibitor_id):
+    return db.execute("delete from ec_exhibitor_holds where event_id=? and exhibitor_id=?", (event_id, exhibitor_id)).rowcount
+
+
+def stand_email_changes(db, event_id):
+    """exhibitor_id -> latest change a stand made to its own contact email."""
+    out = {}
+    for at, oid, detail in db.execute("select at,order_id,detail from delivery_admin_audit where event_id=? and "
+                                      "action='email_center_exhibitor_contact_by_stand' order by id", (event_id,)):
+        try:
+            d = json.loads(detail or "{}")
+            out[int(oid.split(":")[1])] = {"at": at, "old": d.get("old"), "new": d.get("new")}
+        except (ValueError, IndexError, AttributeError):
+            pass
+    return out

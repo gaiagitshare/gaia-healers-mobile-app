@@ -474,6 +474,7 @@ export const ecExhibitorOutcome = (eventId, exId, body) => api.post(`${ec(eventI
 export const ecExhibitorContact = (eventId, exId, body) => api.patch(`${ec(eventId)}/exhibitors/${exId}/contact`, body);
 export const ecExhibitorCheckContacts = (eventId) => api.post(`${ec(eventId)}/exhibitors/check-contacts`, {});
 export const ecExhibitorCreateContact = (eventId, exId, body) => api.post(`${ec(eventId)}/exhibitors/${exId}/create-contact`, body);
+export const ecExhibitorHold = (eventId, exId, body) => api.post(`${ec(eventId)}/exhibitors/${exId}/hold`, body);
 export const ecExhibitorActivity = (eventId, exId) => api.get(`${ec(eventId)}/exhibitors/${exId}/activity`);
 export const ecHistory = (eventId, params = {}) => api.get(`${ec(eventId)}/history`, { params });
 export const ecAttention = (eventId) => api.get(`${ec(eventId)}/attention`);

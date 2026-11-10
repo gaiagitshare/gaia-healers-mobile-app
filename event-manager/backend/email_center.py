@@ -808,6 +808,9 @@ def _ex_view(ex):
 def exhibitor_rows(db, event_id, s):
     recs = ec_store.exhibitor_rows(s.db, event_id)
     checks = ec_store.contact_checks(s.db, event_id)
+    holds = ec_store.holds(s.db, event_id)
+    changes = ec_store.stand_email_changes(s.db, event_id)
+    pending = db.query(models.Exhibitor).filter(models.Exhibitor.event_id == event_id, models.Exhibitor.stage == "purchased").all()
     out = []
     first_scan = dict(db.query(models.Lead.exhibitor_id, M.func.min(models.Lead.scanned_at)).group_by(models.Lead.exhibitor_id).all())
     leads = dict(db.query(models.Lead.exhibitor_id, M.func.count(models.Lead.id)).group_by(models.Lead.exhibitor_id).all())
@@ -830,13 +833,20 @@ def exhibitor_rows(db, event_id, s):
                "first_scan_at": _iso(first_scan.get(ex.id)), "leads": int(leads.get(ex.id) or 0),
                "eligible_for_scanning": (ex.payment_status or "").lower() in ("paid", "comp"),
                "amount_mismatch": bool(ex.amount_due and (ex.amount_paid or 0) < ex.amount_due and (ex.payment_status or "").lower() == "paid")}
-        for kind in ("setup", "scanner"):
+        for kind in EX_KINDS:
             r = recs.get((ex.id, kind)) or {}
             row[kind] = {"status": _ex_status(r), "attempts": r.get("attempts") or 0, "last_sent": r.get("sent_at"),
                          "sent_by": r.get("sent_by"), "last_error": r.get("result") if _ex_status(r) in ("failed", "unknown") else None,
                          "provider_status": r.get("provider_status"), "provider_checked_at": r.get("provider_checked_at")}
-        row["scanner"]["eligible"] = bool(ex.can_scan_leads and ex.access_token and row["email_valid"])
-        row["setup"]["eligible"] = row["email_valid"] and not ex.activated_at
+        hold = holds.get(ex.id)
+        row["hold"] = hold
+        setup_sent = row["setup"]["status"] not in ("not_sent", "failed")
+        row["scanner"]["eligible"] = bool(ex.can_scan_leads and ex.access_token and row["email_valid"]) and not hold
+        row["setup"]["eligible"] = row["email_valid"] and not ex.activated_at and not hold
+        row["reminder"]["eligible"] = row["email_valid"] and setup_sent and not ex.activated_at and not hold
+        row["setup_completed"] = bool(ex.activated_at)
+        ch = changes.get(ex.id)
+        row["stand_email_change"] = ({"at": ch["at"], "old": ch["old"]} if ch and ch.get("new") == email else None)
         chk = checks.get(ex.id) if checks.get(ex.id, {}).get("email") == email else None
         row["ghl_contact"] = ({"status": chk["status"], "checked_at": chk["checked_at"], "created": chk["created"]}
                               if chk else {"status": "not_checked", "checked_at": None, "created": False})
@@ -850,10 +860,113 @@ def exhibitor_rows(db, event_id, s):
             ("paid_or_comp_scanning_off", row["eligible_for_scanning"] and not row["scanning_enabled"]),
             ("partially_paid", row["amount_mismatch"] or (ex.payment_status or "").lower() == "partial"),
             ("no_scanner_link", not ex.access_token),
-            ("setup_completed", bool(ex.activated_at))) if on]
+            ("setup_completed", bool(ex.activated_at)),
+            ("email_changed_by_stand", bool(row["stand_email_change"])),
+            ("on_hold", bool(hold))) if on]
+        dup = _possible_duplicate(ex, pending)
+        row["possible_duplicate"] = dup
+        if dup:
+            row["flags"].append("possible_duplicate")
+        row["next_action"] = _next_action(row, ex)
         out.append(row)
     out.sort(key=lambda r: (_booth_sort(r["booth_number"]), r["company_name"] or ""))
     return out
+
+
+EX_KINDS = ("setup", "scanner", "reminder")
+REMIND_AFTER_HOURS = 48
+
+# The one thing an admin should do next for a stand, in priority order.
+NEXT_ACTIONS = {
+    "on_hold": "On hold", "add_email": "Add contact email", "check_duplicate": "Check possible duplicate stand",
+    "check_ghl": "Check GHL contact", "create_contact": "Confirm representative, create GHL contact",
+    "resolve_contact": "Resolve GHL contact", "settle": "Settle uncertain outcome", "fix_setup": "Fix and retry setup email",
+    "send_setup": "Send setup email", "wait_setup": "Wait for setup", "remind": "Send setup reminder",
+    "decide_scanning": "Decide scanning", "send_scanner": "Send scanner email", "done": "Nothing to do",
+}
+
+
+def _next_action(row, ex):
+    def a(k):
+        return {"key": k, "label": NEXT_ACTIONS[k]}
+    if row["hold"]:
+        return a("on_hold")
+    if not row["email_valid"]:
+        return a("check_duplicate" if row["possible_duplicate"] else "add_email")
+    rd = row["readiness"]
+    if rd == "not_checked":
+        return a("check_ghl")
+    if rd == "missing_ghl_contact":
+        return a("create_contact")
+    if rd in ("several_contacts", "do_not_email"):
+        return a("resolve_contact")
+    if "unknown" in (row["setup"]["status"], row["scanner"]["status"], row["reminder"]["status"]):
+        return a("settle")
+    st_ = row["setup"]["status"]
+    if not ex.activated_at:
+        if st_ == "failed":
+            return a("fix_setup")
+        if st_ == "not_sent":
+            return a("send_setup")
+        last = max([x for x in (row["setup"].get("last_sent"), row["reminder"].get("last_sent")) if x] or [""])
+        if row["reminder"]["status"] == "not_sent" and last and \
+                last[:19] <= (datetime.now(timezone.utc) - timedelta(hours=REMIND_AFTER_HOURS)).isoformat()[:19]:
+            return a("remind")
+        return a("wait_setup")
+    if row["eligible_for_scanning"] and not row["scanning_enabled"]:
+        return a("decide_scanning")
+    if row["scanning_enabled"] and row["scanner"]["status"] in ("not_sent", "failed"):
+        return a("send_scanner")
+    return a("done")
+
+
+def _name_tokens(*vals):
+    out = set()
+    for v in vals:
+        v = (v or "").lower()
+        if "@" in v:
+            v = v.split("@")[0]
+        out |= {t for t in re.split(r"[^a-z0-9]+", v) if len(t) >= 4}
+    return out
+
+
+_GENERIC = {"gaia", "healers", "health", "wellness", "info", "booking", "contact", "hello", "admin", "sales", "inc", "llc"}
+
+
+def _possible_duplicate(ex, pending):
+    """A stand still pending from an online purchase that looks like this
+    confirmed stand (same email, same company, or the buyer's name/email
+    matches this stand's contact). A hint for an admin, never acted on."""
+    if not pending:
+        return None
+    email = (ex.contact_email or "").strip().lower()
+    mine = _name_tokens(ex.company_name, ex.contact_name, email) - _GENERIC
+    for p in pending:
+        if p.id == ex.id:
+            continue
+        pe = (p.contact_email or "").strip().lower()
+        same = (email and pe == email) or ((p.company_name or "").strip().lower() == (ex.company_name or "").strip().lower())
+        theirs = _name_tokens(p.company_name, p.contact_name, pe) - _GENERIC
+        if same or (mine & theirs):
+            return {"id": p.id, "name": p.company_name, "package": p.package}
+    return None
+
+
+def note_stand_email_change(ex, change):
+    """Called by the setup page after a stand saved a NEW contact email of its
+    own. Recorded in the stand's activity; the stand then shows 'Email changed
+    by stand' until GHL is checked for the new address. Never fails the save."""
+    if not change:
+        return
+    try:
+        s = _store()
+        try:
+            s.audit("stand (setup page)", "email_center_exhibitor_contact_by_stand", ex.event_id, "exhibitor:%d" % ex.id,
+                    "", {"old": change[0], "new": change[1]})
+        finally:
+            s.close()
+    except Exception:                                            # noqa: BLE001
+        pass
 
 
 def _booth_sort(b):
@@ -876,9 +989,19 @@ def send_exhibitor(db, event_id, ex_id, kind, actor, resend_reason=None, gw=None
         ex = db.query(models.Exhibitor).filter(models.Exhibitor.id == ex_id, models.Exhibitor.event_id == event_id).first()
         if not ex or ex.stage != "confirmed":
             return {"id": ex_id, "kind": kind, "state": "refused", "reason": "not_a_confirmed_stand"}
+        if ec_store.holds(s.db, event_id).get(ex_id):
+            return {"id": ex_id, "kind": kind, "state": "refused", "reason": "on_hold"}
         email = (ex.contact_email or "").strip().lower()
         if not EMAIL_RE.match(email):
             return {"id": ex_id, "kind": kind, "state": "refused", "reason": "missing_contact_email"}
+        if kind == "reminder":
+            if ex.activated_at:
+                return {"id": ex_id, "kind": kind, "state": "refused", "reason": "profile_already_set_up"}
+            first = ec_store.exhibitor_rows(s.db, event_id).get((ex_id, "setup")) or {}
+            if first.get("state") not in ("accepted", "manual"):
+                return {"id": ex_id, "kind": kind, "state": "refused", "reason": "setup_not_sent_yet"}
+            if not _setup_link(db, s, ex, mint_if_missing=False)[0]:
+                return {"id": ex_id, "kind": kind, "state": "refused", "reason": "setup_link_expired"}
         if kind == "scanner" and not (ex.can_scan_leads and ex.access_token):
             return {"id": ex_id, "kind": kind, "state": "refused", "reason": "scanning_not_enabled"}
         if kind == "setup" and ex.activated_at and not resend_reason:
@@ -901,6 +1024,9 @@ def send_exhibitor(db, event_id, ex_id, kind, actor, resend_reason=None, gw=None
                 url, exp, _ = _setup_link(db, s, ex)
                 exp_text = exp[:10] if exp else ""
                 payload = exhibitor_email.render_setup(_ex_view(ex), url, exp_text)
+            elif kind == "reminder":
+                url, exp, _ = _setup_link(db, s, ex, mint_if_missing=False)
+                payload = exhibitor_email.render_reminder(_ex_view(ex), url, exp[:10] if exp else "")
             else:
                 payload = exhibitor_email.render_scanner(_ex_view(ex), _scanner_url(ex))
             body = {"subject": payload["subject"], "html": payload["html"]}
@@ -975,8 +1101,10 @@ def _ex_batch_plan(db, event_id, ids, kind):
             exclude.append({"id": i, "reason": "not a confirmed stand"}); continue
         k = r[kind]
         if not k["eligible"]:
-            exclude.append({"id": i, "company": r["company_name"], "reason": "missing contact email" if not r["email_valid"] else
-                            ("scanning not enabled" if kind == "scanner" else "profile already set up")}); continue
+            why = ("on hold" if r["hold"] else "missing contact email" if not r["email_valid"] else
+                   "scanning not enabled" if kind == "scanner" else "profile already set up" if r["setup_completed"] else
+                   "setup email not sent yet")
+            exclude.append({"id": i, "company": r["company_name"], "reason": why}); continue
         if k["status"] not in ("not_sent", "failed", "sent_manually"):
             exclude.append({"id": i, "company": r["company_name"], "reason": "already %s" % k["status"].replace("_", " ")}); continue
         include.append(r)
@@ -1367,7 +1495,7 @@ def ec_batch_preview(event_id: int, body: dict, db: Session = Depends(M.get_db),
     if body.get("exhibitor_kind"):
         authz.require_cap(db, current_user, event_id, "exhibitor.write")
         kind = body["exhibitor_kind"]
-        if kind not in ("setup", "scanner"):
+        if kind not in EX_KINDS:
             raise HTTPException(status_code=400, detail="Unknown email type")
         if kind == "scanner":
             authz.require_cap(db, current_user, event_id, "exhibitor.grant_scanning")
@@ -1394,6 +1522,8 @@ def ec_batch_start(event_id: int, body: dict, db: Session = Depends(M.get_db),
     if body.get("exhibitor_kind"):
         authz.require_cap(db, current_user, event_id, "exhibitor.write")
         kind = body["exhibitor_kind"]
+        if kind not in EX_KINDS:
+            raise HTTPException(status_code=400, detail="Unknown email type")
         if kind == "scanner":
             authz.require_cap(db, current_user, event_id, "exhibitor.grant_scanning")
         plan = _ex_batch_plan(db, event_id, [int(x) for x in body.get("ids") or []], kind)
@@ -1568,6 +1698,9 @@ def ec_ex_preview(event_id: int, ex_id: int, kind: str, db: Session = Depends(M.
             url, exp, _ = _setup_link(db, s, ex, mint_if_missing=False)
             p = exhibitor_email.render_setup(_ex_view(ex), url or "https://api.gaiahealers.app/vendor/(a new link is created when you send)",
                                              (exp or "")[:10])
+        elif kind == "reminder":
+            url, exp, _ = _setup_link(db, s, ex, mint_if_missing=False)
+            p = exhibitor_email.render_reminder(_ex_view(ex), url or "(send the setup email first)", (exp or "")[:10])
         elif kind == "scanner":
             if not authz.can(db, current_user, event_id, "exhibitor.grant_scanning"):
                 raise HTTPException(status_code=403, detail="Not permitted for this event")
@@ -1584,7 +1717,7 @@ def ec_ex_send(event_id: int, ex_id: int, body: dict, db: Session = Depends(M.ge
                current_user: models.User = Depends(M.get_current_user)):
     _need(db, current_user, event_id, "exhibitor.write")
     kind = body.get("kind")
-    if kind not in ("setup", "scanner"):
+    if kind not in EX_KINDS:
         raise HTTPException(status_code=400, detail="Unknown email type")
     if kind == "scanner":
         authz.require_cap(db, current_user, event_id, "exhibitor.grant_scanning")
@@ -1618,11 +1751,41 @@ def ec_ex_link(event_id: int, ex_id: int, body: dict, db: Session = Depends(M.ge
     return {"url": url, "created": created}
 
 
+@router.post(P + "/exhibitors/{ex_id}/hold")
+def ec_ex_hold(event_id: int, ex_id: int, body: dict, db: Session = Depends(M.get_db),
+               current_user: models.User = Depends(M.get_current_user)):
+    """Keep a stand out of every exhibitor email until an admin releases it.
+    Changes nothing about the stand itself (payment, scanning, listing)."""
+    _need(db, current_user, event_id, "exhibitor.write")
+    ex = db.query(models.Exhibitor).filter(models.Exhibitor.id == ex_id, models.Exhibitor.event_id == event_id).first()
+    if not ex:
+        raise HTTPException(status_code=404, detail="Not found")
+    reason = (body.get("reason") or "").strip()
+    if len(reason) < 3:
+        raise HTTPException(status_code=400, detail="Say why")
+    s = _store()
+    try:
+        if body.get("hold") is True:
+            ec_store.set_hold(s.db, event_id, ex_id, reason[:300], _who(current_user))
+            s.audit(_who(current_user), "email_center_exhibitor_hold", event_id, "exhibitor:%d" % ex_id, reason)
+        elif body.get("hold") is False:
+            ec_store.clear_hold(s.db, event_id, ex_id)
+            s.audit(_who(current_user), "email_center_exhibitor_unhold", event_id, "exhibitor:%d" % ex_id, reason)
+        else:
+            raise HTTPException(status_code=400, detail="hold must be true or false")
+    finally:
+        s.close()
+    return {"ok": True, "hold": body.get("hold")}
+
+
 _ACT_LABEL = {"email_center_exhibitor_setup": "Setup email sent", "email_center_exhibitor_scanner": "Scanner email sent",
               "email_center_copy_link_setup": "Setup link copied", "email_center_copy_link_scanner": "Scanner link copied",
               "email_center_manual_setup": "Setup email marked sent by hand", "email_center_manual_scanner": "Scanner email marked sent by hand",
               "email_center_exhibitor_outcome": "Uncertain outcome settled", "email_center_exhibitor_contact": "Contact changed",
-              "email_center_exhibitor_contact_created": "GHL contact created", "email_center_exhibitor_contact_found": "GHL contact confirmed"}
+              "email_center_exhibitor_contact_created": "GHL contact created",
+              "email_center_exhibitor_contact_by_stand": "Contact email changed by the stand",
+              "email_center_exhibitor_hold": "Put on hold", "email_center_exhibitor_unhold": "Hold released",
+              "email_center_exhibitor_reminder": "Setup reminder sent", "email_center_manual_reminder": "Reminder marked sent by hand", "email_center_exhibitor_contact_found": "GHL contact confirmed"}
 
 
 @router.get(P + "/exhibitors/{ex_id}/activity")
@@ -1722,7 +1885,7 @@ def ec_ex_manual(event_id: int, ex_id: int, body: dict, db: Session = Depends(M.
                  current_user: models.User = Depends(M.get_current_user)):
     _need(db, current_user, event_id, "exhibitor.write")
     kind = body.get("kind")
-    if kind not in ("setup", "scanner"):
+    if kind not in EX_KINDS:
         raise HTTPException(status_code=400, detail="Unknown email type")
     ex = db.query(models.Exhibitor).filter(models.Exhibitor.id == ex_id, models.Exhibitor.event_id == event_id).first()
     if not ex:
@@ -1743,7 +1906,7 @@ def ec_ex_outcome(event_id: int, ex_id: int, body: dict, db: Session = Depends(M
     """Settle an exhibitor email whose outcome was uncertain, after checking GHL."""
     _need(db, current_user, event_id, "exhibitor.write")
     kind, outcome, note = body.get("kind"), body.get("outcome"), (body.get("note") or "").strip()
-    if kind not in ("setup", "scanner") or outcome not in ("not_sent", "sent") or not note:
+    if kind not in EX_KINDS or outcome not in ("not_sent", "sent") or not note:
         raise HTTPException(status_code=400, detail="Choose the email, what GHL shows, and say how you checked")
     s = _store()
     try:

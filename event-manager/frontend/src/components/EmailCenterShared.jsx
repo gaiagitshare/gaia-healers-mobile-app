@@ -56,8 +56,10 @@ export const DELIVERY = {
     sent_manually: ['Sent manually', 'info'],
     accepted: ['Accepted', 'info'],
     delivered: ['Delivered', 'success'],
-    opened: ['Opened', 'success'],
-    clicked: ['Clicked', 'success'],
+    // GHL's open/click tracking: mail apps and security scanners can open or
+    // click automatically, so neither proves a person read the email.
+    opened: ['Opened (indicative)', 'success'],
+    clicked: ['Clicked (indicative)', 'success'],
     failed: ['Failed', 'error'],
     rejected: ['Failed', 'error'],
     bounced: ['Bounced', 'error'],
@@ -110,6 +112,9 @@ export const REFUSED = {
     several_ghl_contacts: 'More than one GHL contact has this email, so the system will not guess. Copy the link and send it yourself, then mark it sent.',
     contact_do_not_disturb: 'This contact has Do Not Disturb set in GHL, so email is blocked. Contact them another way.',
     profile_already_set_up: 'This stand has already set up its profile; the setup email is no longer needed.',
+    on_hold: 'This stand is on hold. Release the hold first (it says who put it on hold and why).',
+    setup_not_sent_yet: 'Send the setup email first; a reminder follows it.',
+    setup_link_expired: 'The setup link has expired. Send the setup email again (with a reason) for a fresh link.',
 };
 
 // ── Send-gated button ───────────────────────────────────────────────────────

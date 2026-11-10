@@ -9,6 +9,7 @@ from .ticket_email import ASSET_BASE, G, INK, MUTED, esc
 SUBJECTS = {
     "setup": "Set up your stand profile — Gaia Healers ELEVATE 2026",
     "scanner": "Your badge scanner for the stand — Gaia Healers ELEVATE 2026",
+    "reminder": "Reminder: set up your stand profile — Gaia Healers ELEVATE 2026",
 }
 
 
@@ -77,3 +78,17 @@ def render_scanner(ex, url):
                '<strong>Keep this link private.</strong> Anyone with it can see your stand\'s leads. Share it only with '
                'your own stand staff; if it is ever shared by mistake, reply and we will replace it.</p>')
     return {"subject": SUBJECTS["scanner"], "html": _frame(SUBJECTS["scanner"], inner)}
+
+
+def render_reminder(ex, url, expires_text=""):
+    """A friendly nudge carrying the SAME setup link as the first email."""
+    inner = (_head(ex)
+             + '<p style="line-height:1.55;margin:0 0 8px">A quick reminder: your stand page in the Gaia Healers event app '
+               'is still waiting for your logo, description and products. It takes about five minutes, and attendees are '
+               'already browsing the exhibitor directory before the event.</p>'
+             + _button(url, "Set up my stand profile")
+             + '<ul style="margin:0 0 8px;padding-left:20px;line-height:1.6;font-size:14px">'
+               '<li>This is the same link as in our earlier email. No account or password is needed.</li>'
+             + ('<li>The link works until ' + esc(expires_text) + '.</li>' if expires_text else '')
+             + '<li>Already done? Thank you, and please ignore this email.</li></ul>')
+    return {"subject": SUBJECTS["reminder"], "html": _frame(SUBJECTS["reminder"], inner)}

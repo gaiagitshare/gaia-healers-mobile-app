@@ -20,13 +20,48 @@ nullable columns, created if missing, never a rewrite of what is there.
 import json
 import os
 import sqlite3
+import tempfile
 from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def db_path():
-    return os.environ.get("TICKET_DELIVERY_DB") or os.path.join(HERE, "data", "ticket-delivery.db")
+    """The delivery history. Production: data/ticket-delivery.db.
+
+    A test run serves a throwaway copy of event.db from the system temp
+    folder. When such a run does not name its own delivery history, it gets a
+    copy beside that event.db instead of the live file (10 Nov 2026: suites
+    that start their own server had written 114 audit-only rows into the live
+    history). Production's database is never under the temp folder."""
+    explicit = os.environ.get("TICKET_DELIVERY_DB")
+    if explicit:
+        return explicit
+    live = os.path.join(HERE, "data", "ticket-delivery.db")
+    url = os.environ.get("DATABASE_URL", "")
+    if url.startswith("sqlite:///"):
+        main_db = url.split("sqlite:///", 1)[1]
+        tmp = os.path.realpath(tempfile.gettempdir()) + os.sep
+        if os.path.isabs(main_db) and os.path.realpath(main_db).startswith(tmp):
+            copy = os.path.join(os.path.dirname(main_db), "ticket-delivery.db")
+            if not os.path.exists(copy):
+                _seed_copy(live, copy)
+            return copy
+    return live
+
+
+def _seed_copy(live, copy):
+    part = "%s.%d.part" % (copy, os.getpid())
+    dst = sqlite3.connect(part)
+    if os.path.exists(live):
+        src = sqlite3.connect("file:%s?mode=ro" % live, uri=True)
+        src.backup(dst)
+        src.close()
+    dst.close()
+    if os.path.exists(copy):          # another worker got there first
+        os.remove(part)
+    else:
+        os.replace(part, copy)
 
 
 def now():

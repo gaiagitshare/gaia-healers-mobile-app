@@ -55,8 +55,13 @@ args = [sys.executable, HERE + "/tools/volunteers_elevate_2026.py", "--apply"] +
 r1 = subprocess.run(args, env=env, capture_output=True, text=True, timeout=300).stdout
 r2 = subprocess.run(args, env=env, capture_output=True, text=True, timeout=300).stdout
 st, ov = call("GET", "/events/%d/volunteers/overview" % EV)
-check(st == 200 and ov["stats"]["shifts"] == 61 and ov["stats"]["positions"] == 144,
-      "61 shifts and 144 places over four days, as on SignUpGenius", (st, ov.get("stats") if isinstance(ov, dict) else ov))
+# 144 places as imported from SignUpGenius; organisers may lower a shift's
+# places afterwards (10 Nov 2026: Exhibit Hall Support went down to 130), and a
+# re-import must keep their numbers, never put the old ones back.
+cap = db.execute("select coalesce(sum(capacity),0) from volunteer_shifts where event_id=?", (EV,)).fetchone()[0]
+check(st == 200 and ov["stats"]["shifts"] == 61 and ov["stats"]["positions"] == cap and 0 < cap <= 144,
+      "61 shifts over four days, as on SignUpGenius; places as the organisers set them (at most the imported 144)",
+      (st, ov.get("stats") if isinstance(ov, dict) else ov, cap))
 check("shifts_added': 0" in r2 and "bookings_added': 0" in r2, "loading it again adds nothing twice", r2[-300:])
 days = sorted({s["day"] for s in ov["shifts"]})
 check(days == ["2026-11-19", "2026-11-20", "2026-11-21", "2026-11-22"], "Thursday setup through Sunday", days)

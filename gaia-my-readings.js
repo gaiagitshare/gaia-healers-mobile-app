@@ -421,6 +421,12 @@
     if (!status.linked) { root.innerHTML = consentCard(status); return; }
     root.innerHTML = note('Loading your readings… this fetches live from Bio-Well and can take about 20 seconds.');
     const r = await api('/api/practitioners/my-readings');
+    if (r.ok && !r.body.latest && !(r.body.series || []).length && !(r.body.files || []).length) {
+      // Linked, but the practitioner has not published a reading yet. Not a
+      // failure: say so plainly (Babak's wording, 10 Nov 2026).
+      root.innerHTML = note('No Bio-Well results are available for your profile yet. They appear here as soon as your practitioner publishes them.');
+      return;
+    }
     if (r.ok) {
       lastSummary = r.body.summary || null; lastReadings = r.body; lastPrefs = prefs;
       root.innerHTML = expanded ? readingsCard(r.body, status, prefs) : foldedCard(r.body);

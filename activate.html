@@ -135,7 +135,7 @@
     <div class="ep-card">
       <h2>Your Bio-Well readings</h2>
       <div id="member-readings" hidden></div>
-      <p data-ep-noreadings hidden>Your Bio-Well readings will appear here after your practitioner shares them.</p>
+      <p data-ep-noreadings hidden>No Bio-Well results are available for your profile yet.</p>
     </div>
     <div id="member-data-sharing" hidden></div>
 
@@ -214,7 +214,7 @@
   // Nothing here asks for the Gaia Path questionnaire; the main app still does.
   const STYLES = ['vendor/phosphor/phosphor.css', 'gaia-system.css', 'gaia-app-v3.css', 'gaia-app-v3-learn-connect.css', 'gaia-app-v3-shop-you.css', 'gaia-shell.css'];
   const SCRIPTS = ['gaia-myevents.js', 'gaia-card.js', 'gaia-my-readings.js'];
-  const V = '20261109c';
+  const V = '20261110a';
   function loadStyle(href) { return new Promise((ok) => { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href + '?v=' + V; l.onload = l.onerror = ok; document.head.appendChild(l); }); }
   function loadScript(src) { return new Promise((ok) => { const t = document.createElement('script'); t.src = src + '?v=' + V; t.onload = t.onerror = ok; document.body.appendChild(t); }); }
   let profileShown = false;

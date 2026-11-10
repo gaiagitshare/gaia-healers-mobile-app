@@ -72,9 +72,10 @@ export default function EmailCenter() {
                     <b>Test mode — emails go to a simulated mailbox; nothing reaches anyone.</b>
                 </Alert>
             )}
-            {!s.enabled && (
+            {(!s.enabled || !me.sending_exhibitors?.enabled) && (
                 <Alert severity="warning" sx={{ mb: 1 }}>
-                    <b>Sending is off.</b> {s.reason || 'No email can be sent from the Email Center right now.'} Every Send button is disabled until it is switched on.
+                    <b>Ticket emails: {s.enabled ? 'ON' : 'OFF'} · Exhibitor emails: {me.sending_exhibitors?.enabled ? 'ON' : 'OFF'}.</b>
+                    {' '}Each has its own switch on the Overview. Send buttons for a switched-off kind stay disabled.
                 </Alert>
             )}
             {error && <Alert severity="error" onClose={() => setError('')} sx={{ mb: 1 }}>{error}</Alert>}

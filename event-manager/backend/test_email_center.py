@@ -131,8 +131,8 @@ def send(key, who=ORG, **kw):
     fp = booking(key, who)[1]["fingerprint"]
     return call("POST", "/events/%d/email-center/bookings/%s/send" % (EV, key), dict(kw, fingerprint=fp), who)
 
-def switch(state, who=ADMIN):
-    return call("POST", "/events/%d/email-center/controls" % EV, {"sending": state, "reason": "test %s" % TAG}, who)
+def switch(state, who=ADMIN, channel="tickets"):
+    return call("POST", "/events/%d/email-center/controls" % EV, {"channel": channel, "sending": state, "reason": "test %s" % TAG}, who)
 
 E = "/events/%d/email-center" % EV
 
@@ -203,6 +203,7 @@ st_, r = send(K1, TEM)
 check(st_ == 409 and "switched off" in str(r), "Switch OFF: send refused (409)", r)
 check(len(outbox()) == 0, "Nothing reached the simulated mailbox")
 check(switch("on")[0] == 200, "Platform admin turns sending ON (reason recorded)")
+check(switch("on", channel="exhibitors")[0] == 200, "Platform admin turns exhibitor sending ON (its own switch)")
 td.execute("insert into delivery_control(key,value,updated_at,updated_by) values('mode','paused','x','test') on conflict(key) do update set value='paused'")
 td.commit()
 st_, r = send(K1, TEM)
@@ -522,7 +523,7 @@ check(AFTER[1] == BEFORE[1], "Real payments unchanged")
 check(AFTER[2] == BEFORE[2] and AFTER[3] == BEFORE[3], "Existing delivery history unchanged")
 real_sent = [x for x in outbox() if "example.invalid" not in (x.get("to") or "")]
 check(not real_sent, "No email to any real address, even simulated", len(real_sent))
-switch("off")
+switch("off"); switch("off", channel="exhibitors")
 
 print("\n%d failure(s)" % len(fails))
 for f in fails:

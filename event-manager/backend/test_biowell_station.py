@@ -283,6 +283,60 @@ check("Get my code" not in s["next_step"] and "practitioner" not in s["next_step
       "Station never asks for a results code while sharing is not open", s["next_step"])
 
 # ---------------------------------------------------------------------------
+print("\n== GHL contacts: several guests, existing contacts, retries, failures")
+BUY2 = ticket("Zz", "Buyertwo", "zz-buyer2-%s@example.invalid" % TAG, contact="zz-c-buyer2-" + TAG)
+G1 = ticket("Zz", "Guestone", "zz-buyer2-%s+seat2@example.invalid" % TAG, cd={"bought_by_attendee": BUY2["id"], "seat_of_party": "2 of 3"}, source="rebuilt_seat")
+G2 = ticket("Zz", "Guesttwo", "zz-buyer2-%s+seat3@example.invalid" % TAG, cd={"bought_by_attendee": BUY2["id"], "seat_of_party": "3 of 3"}, source="rebuilt_seat")
+call("POST", B + "/lookup", {"code": BUY2["qr"]}, STA)
+cb2 = card_of(BUY2)
+created0 = len([x for x in outbox() if x.get("kind") == "contact_created"])
+for g, em in ((G1, "zz-g1-own-%s@example.invalid" % TAG), (G2, "zz-g2-own-%s@example.invalid" % TAG)):
+    st, sg = start(g)
+    st, r = call("POST", B + "/sessions/%s/email" % sg["session_id"], {"email": em}, STA)
+    st, r = call("POST", B + "/sessions/%s/verify" % sg["session_id"], {"code": last_code(em)}, STA)
+c1, c2 = card_of(G1), card_of(G2)
+check(c1[2] and c2[2] and c1[2] != c2[2] and cb2[2] not in (c1[2], c2[2]), "D: two guests of one buyer get two separate own contacts", (c1, c2))
+check(card_of(BUY2) == cb2, "D: the buyer's profile and contact are unchanged")
+check(len([x for x in outbox() if x.get("kind") == "contact_created"]) - created0 == 2, "D: exactly one contact created per guest")
+# E: the new address already has a GHL contact.
+E3 = ticket("Zz", "Existing", "zz-e3-%s@example.invalid" % TAG, contact="zz-c-e3-" + TAG)
+mine = "zz-e3-other-%s@example.invalid" % TAG
+fake(existing={mine: "zz-c-e3-other-" + TAG})
+st, s3 = start(E3)
+n0 = len([x for x in outbox() if x.get("kind") == "contact_created"])
+st, r = call("POST", B + "/sessions/%s/email" % s3["session_id"], {"email": mine}, STA)
+st, r = call("POST", B + "/sessions/%s/verify" % s3["session_id"], {"code": last_code(mine)}, STA)
+check(card_of(E3)[2] == "zz-c-e3-other-" + TAG and len([x for x in outbox() if x.get("kind") == "contact_created"]) == n0,
+      "E: an existing contact for the person's own email is linked as is; nothing created", card_of(E3))
+taken = ticket("Zz", "Taken", "zz-taken-%s@example.invalid" % TAG, contact="zz-c-taken-" + TAG)
+call("POST", B + "/lookup", {"code": taken["qr"]}, STA)
+other_addr = "zz-taken-alt-%s@example.invalid" % TAG
+fake(existing={other_addr: "zz-c-taken-" + TAG})
+E4 = ticket("Zz", "Fourth", "zz-e4-%s@example.invalid" % TAG, contact="zz-c-e4-" + TAG)
+st, s4 = start(E4)
+st, r = call("POST", B + "/sessions/%s/email" % s4["session_id"], {"email": other_addr}, STA)
+check(st == 409 and "belongs to another person" in str(r), "E: an email whose contact belongs to another profile is refused (no merge)", (st, r))
+# F: retries never create a second contact.
+F2 = ticket("Zz", "Retry", "zz-f2-%s@example.invalid" % TAG, contact="zz-c-f2-" + TAG)
+st, sf = start(F2)
+newF2 = "zz-f2-new-%s@example.invalid" % TAG
+n0 = len([x for x in outbox() if x.get("kind") == "contact_created"])
+call("POST", B + "/sessions/%s/email" % sf["session_id"], {"email": newF2}, STA)
+call("POST", B + "/sessions/%s/resend" % sf["session_id"], {}, STA)
+call("POST", B + "/sessions/%s/resend" % sf["session_id"], {}, STA)
+check(len([x for x in outbox() if x.get("kind") == "contact_created"]) - n0 == 1, "F: send + 2 resends = one contact created")
+# G: GHL failures save nothing.
+G3 = ticket("Zz", "Gfail", "zz-g3-%s@example.invalid" % TAG, contact="zz-c-g3-" + TAG)
+st, sg3 = start(G3)
+fake(existing={}, lookup_error=["zz-g3-new-%s@example.invalid" % TAG], create_fail=["zz-g3-new2-%s@example.invalid" % TAG])
+st, r = call("POST", B + "/sessions/%s/email" % sg3["session_id"], {"email": "zz-g3-new-%s@example.invalid" % TAG}, STA)
+check(st == 503, "G: GHL unreachable -> 'try again', nothing saved", (st, r))
+st, r = call("POST", B + "/sessions/%s/email" % sg3["session_id"], {"email": "zz-g3-new2-%s@example.invalid" % TAG}, STA)
+check(st == 409 and db.execute("select count(*) from card_email_requests where attendee_id=?", (G3["id"],)).fetchone()[0] == 0,
+      "G: contact creation failure -> refused, nothing saved", (st, r))
+fake(lookup_error=[], create_fail=[])
+
+# ---------------------------------------------------------------------------
 print("\n== I/N. duplicate submits; several sessions")
 key = secrets.token_hex(8)
 res = []

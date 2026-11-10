@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import {
-    ecExhibitorContact, ecExhibitorLink, ecExhibitorManual, ecExhibitorOutcome, ecExhibitorPreview, ecExhibitorSend, ecExhibitors,
+    ecExhibitorActivity, ecExhibitorCheckContacts, ecExhibitorContact, ecExhibitorCreateContact, ecExhibitorLink, ecExhibitorManual, ecExhibitorOutcome, ecExhibitorPreview, ecExhibitorSend, ecExhibitors,
 } from '../utils/api';
 import {
     BatchCard, BatchConfirmDialog, copyText, DeliveryChip, EmailFrame, errText, GatedButton, gst, money, NoteDialog, REFUSED, sendBlock,
@@ -17,9 +17,42 @@ const SETUP_LINK = {
 };
 const KIND_LABEL = { setup: 'setup', scanner: 'scanner' };
 const SENT = new Set(['accepted', 'delivered', 'opened', 'clicked', 'sent_manually', 'bounced']);
+// Readiness: can this stand be emailed through GHL right now?
+const READY = {
+    ready: ['Ready to send', 'success'], missing_email: ['Missing contact email', 'error'],
+    missing_ghl_contact: ['Missing GHL contact', 'warning'], not_checked: ['GHL not checked', 'default'],
+    do_not_email: ['Do not email (GHL)', 'error'], several_contacts: ['Several GHL contacts', 'warning'],
+};
+const FLAG = {
+    paid_or_comp_scanning_off: ['Paid/comp · scanner off', 'warning'], partially_paid: ['Partially paid · review', 'warning'],
+    no_scanner_link: ['No scanner link', 'error'],
+};
+const FAILED = new Set(['failed', 'bounced', 'unknown', 'refused']);
+const kinds = (r) => [r.setup?.status, r.scanner?.status];
+// Dashboard filters: [key, label, test]
+const FILTERS = [
+    ['', 'All', () => true],
+    ['ready', 'Ready to send', (r) => r.readiness === 'ready' && r.setup?.eligible && !SENT.has(r.setup?.status)],
+    ['missing_email', 'Missing email', (r) => r.readiness === 'missing_email'],
+    ['missing_ghl_contact', 'Missing GHL contact', (r) => ['missing_ghl_contact', 'several_contacts', 'do_not_email'].includes(r.readiness)],
+    ['not_checked', 'GHL not checked', (r) => r.readiness === 'not_checked'],
+    ['setup_sent', 'Setup invitation sent', (r) => SENT.has(r.setup?.status)],
+    ['setup_completed', 'Setup completed', (r) => r.setup_link === 'activated'],
+    ['scanner_on', 'Scanner enabled', (r) => r.scanning_enabled],
+    ['scanner_off', 'Scanner disabled', (r) => !r.scanning_enabled],
+    ['failed', 'Delivery failed', (r) => kinds(r).some((k) => FAILED.has(k))],
+    ['manual', 'Manually sent', (r) => kinds(r).includes('sent_manually')],
+    ['review', 'Needs admin review', (r) => (r.flags || []).some((f) => FLAG[f])],
+];
 const reasonText = (r) => REFUSED[r] || (r ? String(r).replace(/_/g, ' ') : '');
 
-export default function EmailCenterExhibitors({ eventId, me, focusId }) {
+export default function EmailCenterExhibitors({ eventId, me: meIn, focusId }) {
+    // Every send control here follows the EXHIBITOR switch, never the ticket one.
+    const me = { ...meIn, sending: meIn?.sending_exhibitors || { enabled: false, reason: 'Exhibitor sending is switched off.' } };
+    const [filter, setFilter] = useState('');
+    const [checking, setChecking] = useState(false);
+    const [createAsk, setCreateAsk] = useState(null); // {row, note, confirmed}
+    const [activity, setActivity] = useState(null); // {row, items}
     const narrow = useMediaQuery('(max-width:700px)');
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -49,7 +82,8 @@ export default function EmailCenterExhibitors({ eventId, me, focusId }) {
     }, [focusId, rows]);
 
     const sBlock = sendBlock(me);
-    const shown = rows.filter((r) => !q.trim() || [r.company_name, r.booth_number, r.contact_name, r.contact_email]
+    const fTest = (FILTERS.find((f) => f[0] === filter) || FILTERS[0])[2];
+    const shown = rows.filter(fTest).filter((r) => !q.trim() || [r.company_name, r.booth_number, r.contact_name, r.contact_email]
         .some((v) => String(v || '').toLowerCase().includes(q.trim().toLowerCase())));
     const toggle = (k) => setPicked((p) => { const n = new Set(p); if (n.has(k)) n.delete(k); else n.add(k); return n; });
     const allPicked = shown.length > 0 && shown.every((r) => picked.has(r.id));
@@ -98,6 +132,27 @@ export default function EmailCenterExhibitors({ eventId, me, focusId }) {
             .catch((e) => setError(errText(e))).finally(() => setBusy(false));
     };
 
+    const checkContacts = () => {
+        setChecking(true);
+        ecExhibitorCheckContacts(eventId).then((r) => {
+            const t = r.data.results || {};
+            setNotice({ severity: 'success', text: `Checked ${r.data.checked} stand email(s) in GHL (read-only): ${Object.entries(t).map(([k, v]) => `${k} ${v}`).join(' · ') || 'nothing to check'}.` });
+            load();
+        }).catch((e) => setError(errText(e))).finally(() => setChecking(false));
+    };
+    const createContact = () => {
+        setBusy(true);
+        ecExhibitorCreateContact(eventId, createAsk.row.id, { confirm_representative: true, note: createAsk.note.trim() })
+            .then((r) => { setNotice({ severity: 'success', text: `${createAsk.row.company_name}: ${r.data.created ? 'GHL contact created' : 'an existing GHL contact was found and used as it is'}.` }); setCreateAsk(null); load(); })
+            .catch((e) => setError(errText(e))).finally(() => setBusy(false));
+    };
+    const openActivity = (row) => {
+        closeMenu(); setActivity({ row, items: null });
+        ecExhibitorActivity(eventId, row.id).then((r) => setActivity({ row, items: r.data.items || [] }))
+            .catch((e) => { setActivity(null); setError(errText(e)); });
+    };
+    const counts = Object.fromEntries(FILTERS.map(([k, , t]) => [k, rows.filter(t).length]));
+
     const m = menu?.row;
     const unknownKinds = (r) => ['setup', 'scanner'].filter((k) => r?.[k]?.status === 'unknown');
 
@@ -117,6 +172,9 @@ export default function EmailCenterExhibitors({ eventId, me, focusId }) {
             {batchId && <Box sx={{ mb: 2 }}><BatchCard eventId={eventId} id={batchId} me={me} onFinished={load} /></Box>}
 
             <Stack direction={narrow ? 'column' : 'row'} spacing={1} sx={{ mb: 1.5 }} alignItems={narrow ? 'stretch' : 'center'}>
+                {me?.exhibitors && (
+                    <Button variant="outlined" disabled={checking} onClick={checkContacts}>{checking ? 'Checking GHL…' : 'Check GHL contacts'}</Button>
+                )}
                 <TextField size="small" label="Search company, booth or contact" value={q} onChange={(e) => setQ(e.target.value)} sx={{ flex: 1, minWidth: 220 }} />
                 {me?.send && (
                     <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
@@ -134,6 +192,13 @@ export default function EmailCenterExhibitors({ eventId, me, focusId }) {
                 )}
             </Stack>
 
+            <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
+                {FILTERS.map(([k, l]) => (
+                    <Chip key={k || 'all'} label={`${l} ${counts[k] ?? 0}`} clickable onClick={() => setFilter(k)}
+                          color={filter === k ? 'primary' : 'default'} variant={filter === k ? 'filled' : 'outlined'} />
+                ))}
+            </Stack>
+
             <Card variant="outlined">
                 <Box sx={{ overflowX: 'auto' }}>
                     {loading ? <Box sx={{ p: 3, textAlign: 'center' }}><CircularProgress size={24} /></Box> : (
@@ -143,7 +208,7 @@ export default function EmailCenterExhibitors({ eventId, me, focusId }) {
                                     <Checkbox size="small" checked={allPicked} indeterminate={picked.size > 0 && !allPicked} inputProps={{ 'aria-label': 'Select all shown' }}
                                               onChange={() => setPicked(allPicked ? new Set() : new Set(shown.map((r) => r.id)))} />
                                 </TableCell>
-                                <TableCell>Booth</TableCell><TableCell>Company</TableCell><TableCell>Contact</TableCell><TableCell>Email</TableCell>
+                                <TableCell>Booth</TableCell><TableCell>Company</TableCell><TableCell>Status</TableCell><TableCell>Contact</TableCell><TableCell>Email</TableCell>
                                 <TableCell>Payment</TableCell><TableCell>Profile setup</TableCell><TableCell>Scanner</TableCell><TableCell>Scanner link</TableCell>
                                 <TableCell>Setup email</TableCell><TableCell>Scanner email</TableCell><TableCell>Last sent</TableCell>
                                 <TableCell>First scan</TableCell><TableCell align="right">Leads</TableCell><TableCell>Actions</TableCell>
@@ -159,9 +224,16 @@ export default function EmailCenterExhibitors({ eventId, me, focusId }) {
                                             </TableCell>
                                             <TableCell>{r.booth_number || '—'}</TableCell>
                                             <TableCell>{r.company_name}</TableCell>
+                                            <TableCell sx={{ minWidth: 170 }}>
+                                                <Stack spacing={0.5} alignItems="flex-start">
+                                                    {(() => { const [l, c] = READY[r.readiness] || [r.readiness || '—', 'default']; return <Chip size="small" label={l} color={c} />; })()}
+                                                    {(r.flags || []).filter((f) => FLAG[f]).map((f) => <Chip key={f} size="small" variant="outlined" label={FLAG[f][0]} color={FLAG[f][1]} />)}
+                                                    {r.ghl_contact?.checked_at && <Typography variant="caption" color="text.secondary">GHL checked {gst(r.ghl_contact.checked_at)}</Typography>}
+                                                </Stack>
+                                            </TableCell>
                                             <TableCell>{r.contact_name || '—'}</TableCell>
                                             <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                                                {r.email_valid ? r.contact_email : <Chip size="small" color="error" label="Missing contact" />}
+                                                {r.email_valid ? r.contact_email : <Chip size="small" color="error" label="Missing contact email" />}
                                                 <Button size="small" onClick={() => setContact({ row: r, name: r.contact_name || '', email: r.contact_email || '' })}>Edit</Button>
                                             </TableCell>
                                             <TableCell>
@@ -191,7 +263,7 @@ export default function EmailCenterExhibitors({ eventId, me, focusId }) {
                                         </TableRow>
                                     );
                                 })}
-                                {!shown.length && <TableRow><TableCell colSpan={15}>No stands match.</TableCell></TableRow>}
+                                {!shown.length && <TableRow><TableCell colSpan={16}>No stands match.</TableCell></TableRow>}
                             </TableBody>
                         </Table>
                     )}
@@ -211,6 +283,9 @@ export default function EmailCenterExhibitors({ eventId, me, focusId }) {
                     me?.scanner_links && me?.send && m.scanner?.eligible && (
                         <MenuItem key="sc" disabled={Boolean(sBlock)} onClick={() => { closeMenu(); setResendReason(''); setSendAsk({ row: m, kind: 'scanner' }); }}>Send scanner email</MenuItem>),
                     me?.scanner_links && m.scanning_enabled && <MenuItem key="cc" onClick={() => copyLink(m, 'scanner')}>Copy scanner link</MenuItem>,
+                    <MenuItem key="ac" onClick={() => openActivity(m)}>Activity</MenuItem>,
+                    me?.platform_admin && ['missing_ghl_contact', 'not_checked'].includes(m.readiness) && m.email_valid && (
+                        <MenuItem key="gc" onClick={() => { closeMenu(); setCreateAsk({ row: m, note: '', confirmed: false }); }}>Create GHL contact…</MenuItem>),
                     <MenuItem key="mm" onClick={() => { closeMenu(); setNoteAsk({ type: 'manual', row: m }); }}>Mark sent manually</MenuItem>,
                     me?.send && unknownKinds(m).length > 0 && (
                         <MenuItem key="so" onClick={() => { closeMenu(); setNoteAsk({ type: 'outcome', row: m }); }}>Settle uncertain outcome</MenuItem>),
@@ -288,6 +363,48 @@ export default function EmailCenterExhibitors({ eventId, me, focusId }) {
                                     onClose={() => setBatchAsk(null)}
                                     onStarted={(bid) => { setBatchAsk(null); setBatchId(bid); setPicked(new Set()); load(); }} />
             )}
+            {/* Create GHL contact: admin, deliberate, one stand */}
+            <Dialog open={Boolean(createAsk)} onClose={() => setCreateAsk(null)} fullWidth maxWidth="sm" fullScreen={narrow}>
+                {createAsk && <>
+                    <DialogTitle>Create GHL contact — {createAsk.row.company_name}</DialogTitle>
+                    <DialogContent dividers>
+                        <Typography variant="body2" sx={{ mb: 1 }}>Email: <b>{createAsk.row.contact_email}</b>{createAsk.row.contact_name ? ` (${createAsk.row.contact_name})` : ''}</Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                            GHL is checked first: an existing contact is used as it is. Otherwise one contact is created with no tags and the source
+                            "Gaia Healers event - Exhibitor". No email is sent.
+                        </Typography>
+                        <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
+                            <Checkbox checked={createAsk.confirmed} onChange={(e) => setCreateAsk({ ...createAsk, confirmed: e.target.checked })} />
+                            <Typography variant="body2">I confirm this address belongs to the stand's authorised representative.</Typography>
+                        </Stack>
+                        <TextField fullWidth multiline minRows={2} label="How you know (required)" value={createAsk.note} onChange={(e) => setCreateAsk({ ...createAsk, note: e.target.value })} />
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setCreateAsk(null)}>Cancel</Button>
+                        <Button variant="contained" disabled={busy || !createAsk.confirmed || createAsk.note.trim().length < 5} onClick={createContact}>
+                            {busy ? 'Working…' : 'Create contact'}
+                        </Button>
+                    </DialogActions>
+                </>}
+            </Dialog>
+
+            {/* Activity trail */}
+            <Dialog open={Boolean(activity)} onClose={() => setActivity(null)} fullWidth maxWidth="sm" fullScreen={narrow}>
+                {activity && <>
+                    <DialogTitle>Activity — {activity.row.company_name}</DialogTitle>
+                    <DialogContent dividers>
+                        {!activity.items ? <Box sx={{ p: 2, textAlign: 'center' }}><CircularProgress size={22} /></Box>
+                            : !activity.items.length ? <Typography variant="body2">Nothing recorded yet.</Typography>
+                                : activity.items.map((it, i) => (
+                                    <Box key={i} sx={{ py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
+                                        <Typography variant="body2"><b>{it.what}</b></Typography>
+                                        <Typography variant="caption" color="text.secondary">{gst(it.at)} · {it.actor || '—'}{it.note ? ` · ${it.note}` : ''}</Typography>
+                                    </Box>
+                                ))}
+                    </DialogContent>
+                    <DialogActions><Button onClick={() => setActivity(null)}>Close</Button></DialogActions>
+                </>}
+            </Dialog>
         </Box>
     );
 }

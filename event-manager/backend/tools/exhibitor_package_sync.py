@@ -23,7 +23,8 @@ EXHIBITOR_PACKAGE_SYNC=1):
   * the sale leaves the "unmapped" review queue with status "exhibitor";
   * a ticket is never created from a package; nothing is ever deleted.
 """
-import json, os, sqlite3, sys
+import json
+import uuid, os, sqlite3, sys
 from datetime import datetime, timedelta, timezone
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -112,6 +113,10 @@ def main():
                 f = {"event_id": EVENT, "company_name": (first["buyer_name"] or first["buyer_email"] or first["reference"]).strip(),
                      "contact_name": first["buyer_name"], "contact_email": (first["buyer_email"] or "").lower() or None,
                      "stage": "purchased", "is_published": 0, "can_scan_leads": 0,
+                     # Every stand gets its own scanner link and a creation date at
+                     # birth (10 Nov 2026: stands added here had neither, so the
+                     # scanner could not be switched on and lists broke on NULL dates).
+                     "access_token": "EXH-" + uuid.uuid4().hex[:16].upper(), "created_at": now,
                      "package": " + ".join("%s %s" % (s["product_name"], money(s["amount"])) for s in ss),
                      "payment_status": "paid", "amount_paid": total, "sort_order": 0,
                      "payment_note": "Bought online through GHL (%s). Confirm the company name and booth."

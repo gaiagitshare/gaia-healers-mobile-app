@@ -49,6 +49,9 @@ def ensure(db):
         primary key(event_id, exhibitor_id, kind))''')
     db.execute('''create table if not exists ec_exhibitor_attempts(id integer primary key autoincrement, event_id integer,
         exhibitor_id integer, kind text, recipient text, state text, message_id text, result text, reason text, at text, actor text)''')
+    db.execute('''create table if not exists ec_exhibitor_contacts(event_id integer, exhibitor_id integer, email text,
+        status text, contact_id text, checked_at text, checked_by text, created_contact integer default 0,
+        primary key(event_id, exhibitor_id))''')
     db.execute('''create table if not exists ec_attention(event_id integer, item_key text, status text, assigned_to text, note text,
         updated_by text, updated_at text, primary key(event_id, item_key))''')
 
@@ -263,3 +266,18 @@ def poll_tickets(db, status_of, limit=100):
 
 def counts_json(d):
     return json.dumps(d, sort_keys=True)
+
+
+# -- exhibitor GHL contact checks (read-only lookups, remembered) -------------
+def contact_checks(db, event_id):
+    return {r[0]: {"email": r[1], "status": r[2], "contact_id": r[3], "checked_at": r[4], "checked_by": r[5], "created": bool(r[6])}
+            for r in db.execute("select exhibitor_id,email,status,contact_id,checked_at,checked_by,created_contact "
+                                "from ec_exhibitor_contacts where event_id=?", (event_id,))}
+
+
+def save_contact_check(db, event_id, exhibitor_id, email, status, contact_id, actor, created=False):
+    db.execute("""insert into ec_exhibitor_contacts(event_id,exhibitor_id,email,status,contact_id,checked_at,checked_by,created_contact)
+                  values(?,?,?,?,?,?,?,?) on conflict(event_id,exhibitor_id) do update set email=excluded.email,status=excluded.status,
+                  contact_id=excluded.contact_id,checked_at=excluded.checked_at,checked_by=excluded.checked_by,
+                  created_contact=max(created_contact,excluded.created_contact)""",
+               (event_id, exhibitor_id, email, status, contact_id, now(), actor, 1 if created else 0))

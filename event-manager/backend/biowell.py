@@ -159,6 +159,8 @@ def _ghl_lookup(email):
             return "several", None
         if email in f.get("dnd", []):
             return "dnd", None
+        if email in f.get("lookup_error", []):
+            return "error", None
         if email in f.get("existing", {}):
             return "found", f["existing"][email]
         return "none", None
@@ -180,15 +182,19 @@ def _ghl_lookup(email):
     return "found", c.get("id")
 
 
-def _ghl_create(email, first, last):
-    if os.environ.get("BIOWELL_CREATE_CONTACTS") != "1":
+def _ghl_create(email, first, last, source="Gaia Healers event - Bio-Well station", allow=False):
+    """allow=True: a caller that has its own explicit authorisation (an admin
+    creating a stand's contact) -- not governed by the station's switch."""
+    if not allow and os.environ.get("BIOWELL_CREATE_CONTACTS") != "1":
         return None, "contact_creation_off"
     if _fake():
+        if email in _fake_cfg().get("create_fail", []):
+            return None, "ghl_error"
         cid = "fake-new-" + secrets.token_hex(5)
-        _fake_log({"kind": "contact_created", "email": email, "contact_id": cid})
+        _fake_log({"kind": "contact_created", "email": email, "contact_id": cid, "source": source})
         return cid, None
     token = os.environ.get("IDENTITY_SERVICE_TOKEN") or ""
-    req = urllib.request.Request(ENSURE_URL, data=json.dumps({"email": email, "firstName": first, "lastName": last}).encode(),
+    req = urllib.request.Request(ENSURE_URL, data=json.dumps({"email": email, "firstName": first, "lastName": last, "source": source}).encode(),
                                  headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"}, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=25) as r:

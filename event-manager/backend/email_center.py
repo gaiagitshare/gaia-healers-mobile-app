@@ -642,24 +642,32 @@ def _render(order):
 # ---------------------------------------------------------------------------
 # Safety switch
 # ---------------------------------------------------------------------------
-def sending_state(s):
+SWITCH_KEYS = {"tickets": "email_center_ticket_sending", "exhibitors": "email_center_exhibitor_sending"}
+
+
+def sending_state(s, channel="tickets"):
+    """Two independent switches (10 Nov 2026): attendee ticket emails and
+    exhibitor emails. One never opens the other. The ticket switch is also
+    held shut by the ticket-delivery pause; the exhibitor switch is not."""
+    channel = channel if channel in SWITCH_KEYS else "tickets"
     env_off = os.environ.get("EMAIL_CENTER_DISABLED") == "1"
-    on = s.get("email_center_sending", "off") == "on"
-    paused = s.mode() == "paused"
+    on = s.get(SWITCH_KEYS[channel], "off") == "on"
+    paused = channel == "tickets" and s.mode() == "paused"
+    what = "Ticket email" if channel == "tickets" else "Exhibitor email"
     reason = None
     if env_off:
         reason = "Email Center sending is disabled on this server."
     elif not on:
-        reason = "Sending is switched off. A platform admin must switch it on in Email Center > Overview."
+        reason = "%s sending is switched off. A platform admin must switch it on in Email Center > Overview." % what
     elif paused:
         reason = "Ticket email is paused (Ticket Emails > Pause). Nothing is sent while paused."
-    return {"enabled": not reason, "switch": "on" if on else "off", "global_mode": s.mode(),
-            "reason": reason, "fake_gateway": bool(os.environ.get("EMAIL_CENTER_FAKE")),
-            "changed_by": (s.db.execute("select updated_by,updated_at from delivery_control where key='email_center_sending'").fetchone() or (None, None))}
+    row = s.db.execute("select updated_by,updated_at from delivery_control where key=?", (SWITCH_KEYS[channel],)).fetchone()
+    return {"enabled": not reason, "switch": "on" if on else "off", "channel": channel, "global_mode": s.mode(),
+            "reason": reason, "fake_gateway": bool(os.environ.get("EMAIL_CENTER_FAKE")), "changed_by": row or (None, None)}
 
 
-def _require_sending(s):
-    ss = sending_state(s)
+def _require_sending(s, channel="tickets"):
+    ss = sending_state(s, channel)
     if not ss["enabled"]:
         raise HTTPException(status_code=409, detail=ss["reason"])
 
@@ -706,7 +714,7 @@ def send_booking(db, event_id, key, actor, resend_reason=None, retry=False, gw=N
     s = _store()
     s.actor = actor
     try:
-        _require_sending(s)
+        _require_sending(s, "tickets")
         b, built = booking(db, event_id, key)
         if not b:
             return {"key": key, "state": "refused", "reason": "booking_not_found"}
@@ -799,6 +807,7 @@ def _ex_view(ex):
 
 def exhibitor_rows(db, event_id, s):
     recs = ec_store.exhibitor_rows(s.db, event_id)
+    checks = ec_store.contact_checks(s.db, event_id)
     out = []
     first_scan = dict(db.query(models.Lead.exhibitor_id, M.func.min(models.Lead.scanned_at)).group_by(models.Lead.exhibitor_id).all())
     leads = dict(db.query(models.Lead.exhibitor_id, M.func.count(models.Lead.id)).group_by(models.Lead.exhibitor_id).all())
@@ -828,6 +837,20 @@ def exhibitor_rows(db, event_id, s):
                          "provider_status": r.get("provider_status"), "provider_checked_at": r.get("provider_checked_at")}
         row["scanner"]["eligible"] = bool(ex.can_scan_leads and ex.access_token and row["email_valid"])
         row["setup"]["eligible"] = row["email_valid"] and not ex.activated_at
+        chk = checks.get(ex.id) if checks.get(ex.id, {}).get("email") == email else None
+        row["ghl_contact"] = ({"status": chk["status"], "checked_at": chk["checked_at"], "created": chk["created"]}
+                              if chk else {"status": "not_checked", "checked_at": None, "created": False})
+        gs = row["ghl_contact"]["status"]
+        row["readiness"] = ("missing_email" if not row["email_valid"] else
+                            "ready" if gs == "found" else
+                            "missing_ghl_contact" if gs == "none" else
+                            "do_not_email" if gs == "dnd" else
+                            "several_contacts" if gs == "several" else "not_checked")
+        row["flags"] = [f for f, on in (
+            ("paid_or_comp_scanning_off", row["eligible_for_scanning"] and not row["scanning_enabled"]),
+            ("partially_paid", row["amount_mismatch"] or (ex.payment_status or "").lower() == "partial"),
+            ("no_scanner_link", not ex.access_token),
+            ("setup_completed", bool(ex.activated_at))) if on]
         out.append(row)
     out.sort(key=lambda r: (_booth_sort(r["booth_number"]), r["company_name"] or ""))
     return out
@@ -849,7 +872,7 @@ def _ex_status(r):
 def send_exhibitor(db, event_id, ex_id, kind, actor, resend_reason=None, gw=None):
     s = _store()
     try:
-        _require_sending(s)
+        _require_sending(s, "exhibitors")
         ex = db.query(models.Exhibitor).filter(models.Exhibitor.id == ex_id, models.Exhibitor.event_id == event_id).first()
         if not ex or ex.stage != "confirmed":
             return {"id": ex_id, "kind": kind, "state": "refused", "reason": "not_a_confirmed_stand"}
@@ -1114,10 +1137,13 @@ def ec_me(event_id: int, db: Session = Depends(M.get_db), current_user: models.U
         raise HTTPException(status_code=403, detail="Not permitted for this event")
     s = _store()
     try:
-        ss = sending_state(s)
+        ss = sending_state(s, "tickets")
+        sx = sending_state(s, "exhibitors")
     finally:
         s.close()
-    return {"read": CAP_READ in caps, "review": CAP_REVIEW in caps, "send": CAP_SEND in caps, "export": CAP_EXPORT in caps,
+    return {"sending_exhibitors": {k: v for k, v in sx.items() if k != "changed_by"},
+            "sending_exhibitors_changed_by": sx["changed_by"][0], "sending_exhibitors_changed_at": sx["changed_by"][1],
+            "read": CAP_READ in caps, "review": CAP_REVIEW in caps, "send": CAP_SEND in caps, "export": CAP_EXPORT in caps,
             "exhibitors": "exhibitor.write" in caps, "scanner_links": "exhibitor.grant_scanning" in caps,
             "reconcile": "reconcile.read" in caps, "platform_admin": bool(current_user.is_admin),
             "user": current_user.email, "user_id": current_user.id, "sending": {k: v for k, v in ss.items() if k != "changed_by"},
@@ -1161,7 +1187,8 @@ def ec_overview(event_id: int, db: Session = Depends(M.get_db), current_user: mo
     s = _store()
     try:
         ex = exhibitor_rows(db, event_id, s)
-        out["sending"] = {k: v for k, v in sending_state(s).items() if k != "changed_by"}
+        out["sending"] = {k: v for k, v in sending_state(s, "tickets").items() if k != "changed_by"}
+        out["sending_exhibitors"] = {k: v for k, v in sending_state(s, "exhibitors").items() if k != "changed_by"}
         running = [batch_view(s, r[0]) for r in s.db.execute("select id from ec_batches where event_id=? and state in ('running','queued','paused') order by id desc limit 3", (event_id,))]
     finally:
         s.close()
@@ -1350,7 +1377,8 @@ def ec_batch_preview(event_id: int, body: dict, db: Session = Depends(M.get_db),
         plan = _batch_plan(db, event_id, body.get("keys"), bool(body.get("all_approved")), mode)
     s = _store()
     try:
-        plan["sending"] = {k: v for k, v in sending_state(s).items() if k != "changed_by"}
+        plan["sending"] = {k: v for k, v in sending_state(s, "exhibitors" if body.get("exhibitor_kind") else "tickets").items()
+                           if k != "changed_by"}
     finally:
         s.close()
     plan["sender"] = current_user.email
@@ -1382,7 +1410,7 @@ def ec_batch_start(event_id: int, body: dict, db: Session = Depends(M.get_db),
         raise HTTPException(status_code=400, detail="At most %d per run" % BATCH_LIMIT)
     s = _store()
     try:
-        _require_sending(s)
+        _require_sending(s, "exhibitors" if bkind.startswith("exhibitor:") else "tickets")
         bid = create_batch(s, event_id, bkind, _who(current_user), plan, keys)
         s.audit(_who(current_user), "email_center_batch_start", event_id, "batch:%d" % bid, "",
                 {"kind": bkind, "items": len(keys), "emails": plan.get("emails"), "confirm": plan["confirm_token"][:16]})
@@ -1436,7 +1464,7 @@ def ec_batch_action(event_id: int, batch_id: int, action: str, db: Session = Dep
                          (_who(current_user), ec_store.now(), batch_id))
             s.db.execute("update ec_batch_items set state='cancelled',updated_at=? where batch_id=? and state='queued'", (ec_store.now(), batch_id))
         elif action == "resume":
-            _require_sending(s)
+            _require_sending(s, "exhibitors" if v["kind"].startswith("exhibitor:") else "tickets")
             if v["state"] not in ("paused", "interrupted"):
                 raise HTTPException(status_code=409, detail="Only a paused or interrupted run can be resumed")
             # A 'working' item of an interrupted run never finished here: its
@@ -1590,6 +1618,105 @@ def ec_ex_link(event_id: int, ex_id: int, body: dict, db: Session = Depends(M.ge
     return {"url": url, "created": created}
 
 
+_ACT_LABEL = {"email_center_exhibitor_setup": "Setup email sent", "email_center_exhibitor_scanner": "Scanner email sent",
+              "email_center_copy_link_setup": "Setup link copied", "email_center_copy_link_scanner": "Scanner link copied",
+              "email_center_manual_setup": "Setup email marked sent by hand", "email_center_manual_scanner": "Scanner email marked sent by hand",
+              "email_center_exhibitor_outcome": "Uncertain outcome settled", "email_center_exhibitor_contact": "Contact changed",
+              "email_center_exhibitor_contact_created": "GHL contact created", "email_center_exhibitor_contact_found": "GHL contact confirmed"}
+
+
+@router.get(P + "/exhibitors/{ex_id}/activity")
+def ec_ex_activity(event_id: int, ex_id: int, db: Session = Depends(M.get_db), current_user: models.User = Depends(M.get_current_user)):
+    """Everything done to one stand from the Email Center, newest first."""
+    _need(db, current_user, event_id, "exhibitor.write")
+    s = _store()
+    try:
+        items = [{"at": r[0], "actor": r[1], "what": _ACT_LABEL.get(r[2], r[2].replace("email_center_", "").replace("_", " ")),
+                  "note": r[3] or "", "detail": json.loads(r[4]) if r[4] else None}
+                 for r in s.db.execute("select at,actor,action,reason,detail from delivery_admin_audit where event_id=? and order_id=? "
+                                       "order by id desc limit 200", (event_id, "exhibitor:%d" % ex_id))]
+        for h in ec_store.exhibitor_history(s.db, event_id, ex_id):
+            items.append({"at": h["at"], "actor": h["actor"], "what": "%s email: %s" % (h["kind"].capitalize(), h["state"]),
+                          "note": h["reason"] or "", "detail": None})
+        chk = ec_store.contact_checks(s.db, event_id).get(ex_id)
+        if chk:
+            items.append({"at": chk["checked_at"], "actor": chk["checked_by"], "what": "GHL contact check: " + chk["status"],
+                          "note": "", "detail": None})
+    finally:
+        s.close()
+    items.sort(key=lambda x: x["at"] or "", reverse=True)
+    return {"items": items}
+
+
+@router.post(P + "/exhibitors/check-contacts")
+def ec_ex_check_contacts(event_id: int, db: Session = Depends(M.get_db), current_user: models.User = Depends(M.get_current_user)):
+    """Look each confirmed stand's email up in GHL (read-only, exact match) and
+    remember the answer. Nothing is created or changed in GHL."""
+    _need(db, current_user, event_id, "exhibitor.write")
+    import biowell
+    s = _store()
+    out = {}
+    try:
+        n = 0
+        for ex in db.query(models.Exhibitor).filter(models.Exhibitor.event_id == event_id, models.Exhibitor.stage == "confirmed").all():
+            email = (ex.contact_email or "").strip().lower()
+            if not EMAIL_RE.match(email):
+                continue
+            n += 1
+            if n > 60:
+                break
+            status, cid = biowell._ghl_lookup(email)
+            status = {"found": "found", "none": "none", "several": "several", "dnd": "dnd"}.get(status, "error")
+            ec_store.save_contact_check(s.db, event_id, ex.id, email, status, cid, _who(current_user))
+            out[status] = out.get(status, 0) + 1
+        s.audit(_who(current_user), "email_center_exhibitor_contact_check", event_id, None, "", out)
+    finally:
+        s.close()
+    return {"ok": True, "checked": sum(out.values()), "results": out}
+
+
+@router.post(P + "/exhibitors/{ex_id}/create-contact")
+def ec_ex_create_contact(event_id: int, ex_id: int, body: dict, db: Session = Depends(M.get_db),
+                         current_user: models.User = Depends(M.get_current_user)):
+    """Create the stand's GHL contact -- only on a platform admin's explicit
+    confirmation that the address belongs to the stand's authorised
+    representative. Reuses the existing contact service: an existing contact is
+    used as it is, a new one gets no tags and the source 'Gaia Healers event -
+    Exhibitor'."""
+    M._get_event_or_404(event_id, db)
+    authz.require_admin(current_user)
+    ex = db.query(models.Exhibitor).filter(models.Exhibitor.id == ex_id, models.Exhibitor.event_id == event_id).first()
+    if not ex:
+        raise HTTPException(status_code=404, detail="Not found")
+    email = (ex.contact_email or "").strip().lower()
+    note = (body.get("note") or "").strip()
+    if not EMAIL_RE.match(email):
+        raise HTTPException(status_code=409, detail="Add the stand's contact email first")
+    if body.get("confirm_representative") is not True or len(note) < 5:
+        raise HTTPException(status_code=428, detail="Confirm this is the stand's authorised representative and say how you know")
+    import biowell
+    status, cid = biowell._ghl_lookup(email)
+    created = False
+    if status == "several":
+        raise HTTPException(status_code=409, detail="Several GHL contacts already use this address. Sort it out in GHL first.")
+    if status == "error":
+        raise HTTPException(status_code=503, detail="GHL could not be reached. Try again.")
+    if not cid:
+        cid, why = biowell._ghl_create(email, ex.contact_name or ex.company_name or "", "", source="Gaia Healers event - Exhibitor",
+                                       allow=True)
+        if not cid:
+            raise HTTPException(status_code=502, detail="The contact could not be created (%s)." % why)
+        created = True
+    s = _store()
+    try:
+        ec_store.save_contact_check(s.db, event_id, ex.id, email, "found", cid, _who(current_user), created=created)
+        s.audit(_who(current_user), "email_center_exhibitor_contact_" + ("created" if created else "found"), event_id,
+                "exhibitor:%d" % ex.id, note, {"existing": not created})
+    finally:
+        s.close()
+    return {"ok": True, "created": created, "status": "found"}
+
+
 @router.post(P + "/exhibitors/{ex_id}/manual")
 def ec_ex_manual(event_id: int, ex_id: int, body: dict, db: Session = Depends(M.get_db),
                  current_user: models.User = Depends(M.get_current_user)):
@@ -1662,28 +1789,36 @@ def ec_controls(event_id: int, db: Session = Depends(M.get_db), current_user: mo
     _need(db, current_user, event_id, CAP_READ)
     s = _store()
     try:
-        ss = sending_state(s)
+        out = {}
+        for ch in ("tickets", "exhibitors"):
+            ss = sending_state(s, ch)
+            out[ch] = {k: v for k, v in ss.items() if k != "changed_by"} | {"changed_by": ss["changed_by"][0], "changed_at": ss["changed_by"][1]}
     finally:
         s.close()
-    return {k: v for k, v in ss.items() if k != "changed_by"} | {"changed_by": ss["changed_by"][0], "changed_at": ss["changed_by"][1]}
+    # The ticket switch at the top level too, as before.
+    return dict(out["tickets"], **out)
 
 
 @router.post(P + "/controls")
 def ec_controls_set(event_id: int, body: dict, db: Session = Depends(M.get_db),
                     current_user: models.User = Depends(M.get_current_user)):
-    """The Email Center's own sending switch. Platform admins only. It never
-    touches the automatic sender's shadow lock or the global pause."""
+    """One switch at a time: 'tickets' or 'exhibitors'. Platform admins only.
+    It never touches the other switch, the automatic sender's shadow lock or
+    the global pause."""
     M._get_event_or_404(event_id, db)
     authz.require_admin(current_user)
     want = body.get("sending")
+    channel = body.get("channel") or "tickets"
     reason = (body.get("reason") or "").strip()
+    if channel not in SWITCH_KEYS:
+        raise HTTPException(status_code=400, detail="Choose tickets or exhibitors")
     if want not in ("on", "off") or not reason:
         raise HTTPException(status_code=400, detail="Choose on or off and give a reason")
     s = _store()
     try:
-        s.put("email_center_sending", want, by=_who(current_user))
-        s.audit(_who(current_user), "email_center_sending_" + want, event_id, None, reason)
-        ss = sending_state(s)
+        s.put(SWITCH_KEYS[channel], want, by=_who(current_user))
+        s.audit(_who(current_user), "email_center_%s_sending_%s" % (channel, want), event_id, None, reason)
+        ss = sending_state(s, channel)
     finally:
         s.close()
     return {k: v for k, v in ss.items() if k != "changed_by"}

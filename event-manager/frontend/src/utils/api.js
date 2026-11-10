@@ -472,6 +472,9 @@ export const ecExhibitorLink = (eventId, exId, kind) => api.post(`${ec(eventId)}
 export const ecExhibitorManual = (eventId, exId, body) => api.post(`${ec(eventId)}/exhibitors/${exId}/manual`, body);
 export const ecExhibitorOutcome = (eventId, exId, body) => api.post(`${ec(eventId)}/exhibitors/${exId}/outcome`, body);
 export const ecExhibitorContact = (eventId, exId, body) => api.patch(`${ec(eventId)}/exhibitors/${exId}/contact`, body);
+export const ecExhibitorCheckContacts = (eventId) => api.post(`${ec(eventId)}/exhibitors/check-contacts`, {});
+export const ecExhibitorCreateContact = (eventId, exId, body) => api.post(`${ec(eventId)}/exhibitors/${exId}/create-contact`, body);
+export const ecExhibitorActivity = (eventId, exId) => api.get(`${ec(eventId)}/exhibitors/${exId}/activity`);
 export const ecHistory = (eventId, params = {}) => api.get(`${ec(eventId)}/history`, { params });
 export const ecAttention = (eventId) => api.get(`${ec(eventId)}/attention`);
 export const ecAttentionMark = (eventId, itemKey, body) => api.post(`${ec(eventId)}/attention/${encodeURIComponent(itemKey)}`, body);

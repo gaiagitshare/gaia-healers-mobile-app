@@ -56,12 +56,48 @@ export default function EmailCenterOverview({ eventId, me, reloadMe, goTab }) {
         ecRefreshStatus(eventId).then((r) => { setNotice(`Asked GHL about ${r.data.checked} recent email(s).`); load(); })
             .catch((e) => setError(errText(e))).finally(() => setRefreshing(false));
     };
-    const on = me?.sending?.switch === 'on';
+    const CH = {
+        tickets: { title: 'Attendee ticket emails', st: me?.sending, by: me?.sending_changed_by, at: me?.sending_changed_at,
+            onText: 'Ticket emails can be sent from this screen (after two-admin approval).' },
+        exhibitors: { title: 'Exhibitor emails', st: me?.sending_exhibitors, by: me?.sending_exhibitors_changed_by, at: me?.sending_exhibitors_changed_at,
+            onText: 'Setup and scanner emails can be sent to stands from this screen.' },
+    };
+    const ch = switchAsk ? CH[switchAsk] : null;
+    const chOn = ch?.st?.switch === 'on';
     const flip = () => {
         setBusy(true);
-        ecSetControls(eventId, { sending: on ? 'off' : 'on', reason: reason.trim() })
-            .then(() => { setSwitchAsk(false); setReason(''); setNotice(`Email Center sending switched ${on ? 'OFF' : 'ON'}.`); reloadMe(); load(); })
+        ecSetControls(eventId, { channel: switchAsk, sending: chOn ? 'off' : 'on', reason: reason.trim() })
+            .then(() => { setNotice(`${ch.title}: sending switched ${chOn ? 'OFF' : 'ON'}.`); setSwitchAsk(false); setReason(''); reloadMe(); load(); })
             .catch((e) => setError(errText(e))).finally(() => setBusy(false));
+    };
+    const switchCard = (key) => {
+        const c = CH[key];
+        const on = c.st?.switch === 'on';
+        return (
+            <Grid item xs={12} md={6} key={key}>
+                <Card variant="outlined" sx={{ height: '100%', borderColor: on ? 'success.main' : 'error.main' }}>
+                    <CardContent>
+                        <Stack spacing={1}>
+                            <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
+                                <Typography variant="subtitle1" fontWeight={700}>{c.title}:</Typography>
+                                <Chip label={on ? 'ON' : 'OFF'} color={on ? 'success' : 'error'} sx={{ fontWeight: 700 }} />
+                            </Stack>
+                            <Typography variant="body2" color="text.secondary">
+                                {on ? (c.st?.enabled ? c.onText : `Switched on, but sending is still blocked: ${c.st?.reason || ''}`) : 'OFF — none of these emails can be sent.'}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">Last changed by {c.by || '—'} · {gst(c.at)}</Typography>
+                            {me?.platform_admin && (
+                                <Box>
+                                    <Button variant={on ? 'outlined' : 'contained'} color={on ? 'error' : 'success'} onClick={() => { setReason(''); setSwitchAsk(key); }}>
+                                        {on ? 'Switch OFF' : 'Switch ON'}
+                                    </Button>
+                                </Box>
+                            )}
+                        </Stack>
+                    </CardContent>
+                </Card>
+            </Grid>
+        );
     };
 
     if (!ov) return error ? <Alert severity="error">{error}</Alert> : <Box sx={{ p: 3, textAlign: 'center' }}><CircularProgress size={24} /></Box>;
@@ -89,30 +125,10 @@ export default function EmailCenterOverview({ eventId, me, reloadMe, goTab }) {
             {error && <Alert severity="error" onClose={() => setError('')} sx={{ mb: 1 }}>{error}</Alert>}
             {notice && <Alert severity="success" onClose={() => setNotice('')} sx={{ mb: 1 }}>{notice}</Alert>}
 
-            <Card variant="outlined" sx={{ mb: 2, borderColor: on ? 'success.main' : 'error.main' }}>
-                <CardContent>
-                    <Stack direction={narrow ? 'column' : 'row'} spacing={1.5} justifyContent="space-between" alignItems={narrow ? 'stretch' : 'center'}>
-                        <Box>
-                            <Stack direction="row" spacing={1} alignItems="center">
-                                <Typography variant="subtitle1" fontWeight={700}>Email Center sending:</Typography>
-                                <Chip label={on ? 'ON' : 'OFF'} color={on ? 'success' : 'error'} sx={{ fontWeight: 700 }} />
-                            </Stack>
-                            <Typography variant="body2" color="text.secondary">
-                                {on ? (me?.sending?.enabled ? 'Emails can be sent from this screen.' : `Switched on, but sending is still blocked: ${me?.sending?.reason || ''}`)
-                                    : 'OFF — no email can be sent.'}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                                Last changed by {me?.sending_changed_by || '—'} · {gst(me?.sending_changed_at)}
-                            </Typography>
-                        </Box>
-                        {me?.platform_admin && (
-                            <Button variant={on ? 'outlined' : 'contained'} color={on ? 'error' : 'success'} onClick={() => { setReason(''); setSwitchAsk(true); }}>
-                                {on ? 'Switch sending OFF' : 'Switch sending ON'}
-                            </Button>
-                        )}
-                    </Stack>
-                </CardContent>
-            </Card>
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+                {switchCard('tickets')}
+                {switchCard('exhibitors')}
+            </Grid>
 
             {batches.length > 0 && (
                 <Card variant="outlined" sx={{ mb: 2 }}>
@@ -198,20 +214,22 @@ export default function EmailCenterOverview({ eventId, me, reloadMe, goTab }) {
                 </CardContent>
             </Card>
 
-            <Dialog open={switchAsk} onClose={() => setSwitchAsk(false)} fullWidth maxWidth="sm" fullScreen={narrow}>
-                <DialogTitle>{on ? 'Switch Email Center sending OFF' : 'Switch Email Center sending ON'}</DialogTitle>
+            <Dialog open={Boolean(switchAsk)} onClose={() => setSwitchAsk(false)} fullWidth maxWidth="sm" fullScreen={narrow}>
+                <DialogTitle>{ch ? `${ch.title}: switch sending ${chOn ? 'OFF' : 'ON'}` : ''}</DialogTitle>
                 <DialogContent dividers>
                     <Typography variant="body2" sx={{ mb: 2 }}>
-                        {on ? 'No email can be sent from the Email Center while sending is off. Runs in progress stop at their next email.'
-                            : 'People with send permission will be able to send ticket and exhibitor emails from the Email Center.'}
+                        {chOn ? 'None of these emails can be sent while this is off. Runs in progress stop at their next email.'
+                            : switchAsk === 'exhibitors'
+                                ? 'People with send permission will be able to send setup and scanner emails to stands. Attendee ticket emails stay as they are.'
+                                : 'People with send permission will be able to send approved ticket emails. Exhibitor emails stay as they are.'}
                         {' '}This does not change the automatic ticket sender or the global pause.
                     </Typography>
                     <TextField autoFocus fullWidth multiline minRows={2} label="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setSwitchAsk(false)}>Cancel</Button>
-                    <Button variant="contained" color={on ? 'error' : 'success'} disabled={busy || !reason.trim()} onClick={flip}>
-                        {busy ? 'Saving…' : on ? 'Switch OFF' : 'Switch ON'}
+                    <Button variant="contained" color={chOn ? 'error' : 'success'} disabled={busy || !reason.trim()} onClick={flip}>
+                        {busy ? 'Saving…' : chOn ? 'Switch OFF' : 'Switch ON'}
                     </Button>
                 </DialogActions>
             </Dialog>

@@ -102,6 +102,8 @@ check(len(new) == 1, "two payments, one exhibitor", len(new))
 n = new[0]
 check(n["stage"] == "purchased" and n["is_published"] == 0 and n["can_scan_leads"] == 0 and n["payment_status"] == "paid",
       "stage purchased, unpublished, no scanner, paid", dict(n))
+check((n["access_token"] or "").startswith("EXH-") and len(n["access_token"]) == 20 and n["created_at"],
+      "the new stand has its own scanner link and a creation date (scanner still off)", (bool(n["access_token"]), n["created_at"]))
 check(n["package"] == "The Connector $5,000 + The Ambassador $3,500" and abs((n["amount_paid"] or 0) - 8500) < 0.01
       and "zz-pkg-2" in (n["payment_note"] or ""), "package, amount and the GHL references are carried", (n["package"], n["amount_paid"]))
 

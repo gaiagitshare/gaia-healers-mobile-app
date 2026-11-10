@@ -1098,6 +1098,7 @@ body{margin:0;background:#f4f6f3;color:#16231a;
 .wrap{max-width:560px;margin:0 auto;padding:28px 18px 64px}
 .top{display:flex;align-items:center;gap:9px;margin-bottom:22px;font-size:13px;color:#5c6f61}
 .top b{color:#16231a}
+.top svg{width:28px;height:28px;flex:none}
 .sheet{background:#fff;border:1px solid #e2e8e3;border-radius:16px;padding:22px 20px;
   box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .event{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:#6f8175;margin:0 0 4px}

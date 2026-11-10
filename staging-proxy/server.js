@@ -6912,6 +6912,33 @@ const server = http.createServer(async (req, res) => {
     // workflow when they add a product -- which is exactly how 88 of 339
     // buyers were never told the dates. So the system that KNOWS who holds a
     // ticket asks here to say so, and the credential stays on this side.
+    // Bio-Well station (10 Nov 2026): the Event Manager needs a GHL contact for
+    // a person's OWN email so a code can reach it. An existing contact is used
+    // as it is (never updated); only when none exists is one created, through
+    // the same upsert the "Join free" flow uses, with no tags so no tag-based
+    // workflow starts. Service token only; the EM decides whether to call it.
+    if (req.method === 'POST' && url.pathname === '/api/event/ensure-contact') {
+      const svc = (process.env.IDENTITY_SERVICE_TOKEN || '').trim();
+      const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+      if (!svc || auth !== svc) { sendJson(res, 401, { ok: false, error: 'unauthorized' }, origin); return; }
+      const body = await readJsonBody(req, 16 * 1024).catch(() => ({}));
+      const email = String(body.email || '').trim().toLowerCase();
+      if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { sendJson(res, 400, { ok: false, reason: 'email_invalid' }, origin); return; }
+      const cfg = ghlConfig();
+      if (!cfg.enabled) { sendJson(res, 503, { ok: false, reason: 'ghl_unconfigured' }, origin); return; }
+      let found = [];
+      try {
+        const d = await ghlGet('/contacts/', { locationId: cfg.locationId, query: email, limit: 10 });
+        found = (d?.contacts || []).filter((c) => String(c.email || '').trim().toLowerCase() === email);
+      } catch (_) { sendJson(res, 502, { ok: false, reason: 'ghl_unreachable' }, origin); return; }
+      if (found.length > 1) { sendJson(res, 409, { ok: false, reason: 'several_contacts' }, origin); return; }
+      if (found.length === 1) { sendJson(res, 200, { ok: true, contactId: found[0].id, created: false }, origin); return; }
+      const up = await ghlUpsertContact({ email, firstName: String(body.firstName || '').slice(0, 80), lastName: String(body.lastName || '').slice(0, 80),
+        source: 'Gaia Healers event - Bio-Well station' });
+      console.log('[Gaia Event] ensure-contact', { created: Boolean(up.ok && up.contactId), reason: up.reason });
+      sendJson(res, up.ok && up.contactId ? 200 : 502, up.ok && up.contactId ? { ok: true, contactId: up.contactId, created: true } : { ok: false, reason: up.reason || 'ghl_error' }, origin);
+      return;
+    }
     if (req.method === 'POST' && url.pathname === '/api/event/notify') {
       const svc = (process.env.IDENTITY_SERVICE_TOKEN || '').trim();
       const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();

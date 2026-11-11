@@ -62,7 +62,9 @@ def parse_guests(text):
         email = _clean(row.get("EMAIL")).lower()
         rec = {"row": n, "kind": "guest", "name": name, "first_name": first, "last_name": last,
                "email": email if EMAIL_RE.match(email) else "", "phone": _clean(row.get("PHONE")),
-               "role": "", "workshops": "", "dates": "", "forms": "", "issues": []}
+               "role": "", "workshops": "", "dates": "", "forms": "", "issues": [],
+               # "MEDIA?" on the guests tab: press/media guest (YES/NO), kept on the badge record.
+               "media": _clean(row.get("MEDIA?") or row.get("MEDIA")).upper()}
         if not rec["email"]:
             rec["issues"].append("no e-mail — a badge cannot be made without one")
         out.append(rec)
@@ -71,7 +73,9 @@ def parse_guests(text):
 
 def job_title(rec):
     if rec["kind"] == "guest":
-        return "Gaia Healers guest"
+        # The guests tab is the host's own list: every guest on it is a VIP
+        # guest of the host (11 Nov 2026).
+        return "VIP host guest" + (" · media" if rec.get("media") == "YES" else "")
     bits = ["Volunteer" if not rec["role"] else "Volunteer — " + rec["role"]]
     if rec["workshops"]:
         bits.append("runs " + rec["workshops"])

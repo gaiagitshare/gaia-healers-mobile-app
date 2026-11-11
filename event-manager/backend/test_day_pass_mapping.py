@@ -131,6 +131,9 @@ check("no attendee is missing a ticket type",
 # money is the whole point: the money went back, or the row was ruled a
 # duplicate and its payment followed the person who actually holds the badge.
 # That is a reason on the record, which is what this check asks for.
+# So is money taken outside GHL -- at our desk, or a ticket bought on another
+# site (11 Nov 2026: Natalie Lutz, external order) -- recorded as a collected
+# door payment with its amount and reference.
 check("no attendee lacks a settled payment without a reason on the record",
       n("""select count(*) from attendees a where a.event_id=? and not exists
              (select 1 from payment_events p where p.attendee_id=a.id and p.status='paid')
@@ -138,7 +141,8 @@ check("no attendee lacks a settled payment without a reason on the record",
            and coalesce(a.attendance_type,'paid') not in
                ('complimentary','staff','speaker','exhibitor')
            and lower(coalesce(a.registration_status,'active')) not in
-               ('refunded','cancelled','revoked')""") == 0,
+               ('refunded','cancelled','revoked')
+           and not (coalesce(a.door_payment_status,'') = 'collected' and coalesce(a.door_payment_amount,0) > 0)""") == 0,
       "; ".join("%s %s" % (r[0], r[1]) for r in c.execute(
           """select coalesce(first_name,'')||' '||coalesce(last_name,''), coalesce(attendance_type,'paid')
                from attendees a where a.event_id=? and not exists
@@ -146,7 +150,9 @@ check("no attendee lacks a settled payment without a reason on the record",
                and coalesce(a.attendance_type,'paid') not in
                    ('complimentary','staff','speaker','exhibitor')
                and lower(coalesce(a.registration_status,'active')) not in
-                   ('refunded','cancelled','revoked') limit 5""", (EVENT_ID,)).fetchall()))
+                   ('refunded','cancelled','revoked')
+               and not (coalesce(a.door_payment_status,'') = 'collected' and coalesce(a.door_payment_amount,0) > 0)
+               limit 5""", (EVENT_ID,)).fetchall()))
 check("and every unpaid badge says what it is",
       n("""select count(*) from attendees a where a.event_id=?
              and coalesce(a.attendance_type,'paid') in ('complimentary','staff','speaker','exhibitor')

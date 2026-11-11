@@ -11,9 +11,15 @@ staffing. Each becomes an attendee through the walk-in endpoint the desk
 itself uses -- same badge, same QR, same card -- stamped `staff` or
 `complimentary` so the money reports never count them as ticket sales.
 
+The guests tab is the host's own list, so a guest on it is a VIP HOST GUEST
+(11 Nov 2026): a complimentary badge on the event's own VIP pass -- the same
+access as a paid VIP, never counted as a sale. Volunteers keep their crew pass.
+
 The sheet decides who is on the list and what they do. It never decides
 anyone's TICKET: a volunteer who also bought a ticket keeps the one they
-bought, and this only fills in the job title and phone the sheet knows.
+bought, and this only fills in the job title and phone the sheet knows. A
+guest who already has a badge keeps it too; moving them up to VIP is a pass
+change, which goes through the second-admin approval like any other.
 Nobody is removed here — a name dropped from the sheet is reported, because
 a badge already printed is already in someone's hand.
 
@@ -44,6 +50,18 @@ TYPES = {
               "description": "Invited by Gaia Healers. Same access as the three-day pass."},
 }
 ATTENDANCE = {"volunteer": "staff", "guest": "complimentary"}
+# Guests are VIP host guests: they get the event's VIP pass, not a pass of
+# their own. Chosen by what it grants (is_vip), never by its name.
+GUEST_PASS = "vip"
+
+
+def vip_pass(types):
+    """The event's VIP pass: is_vip, conference and workshops, not a single day."""
+    c = [t for t in (types or []) if t.get("is_vip") and t.get("grants_conference")
+         and t.get("grants_workshops") and not (t.get("valid_day") or "").strip()
+         and (t.get("is_active", True) is not False)]
+    c.sort(key=lambda t: (0 if "vip" in (t.get("name") or "").lower() else 1, t.get("id") or 0))
+    return c[0] if c else None
 
 
 def token():
@@ -121,7 +139,8 @@ def main():
     if creates:
         L.append("## Given a badge")
         for p in creates:
-            L.append("- **%s** — %s · %s" % (p["name"], ps.job_title(p), TYPES[p["kind"]]["name"]))
+            L.append("- **%s** — %s · %s" % (p["name"], ps.job_title(p),
+                                             "VIP pass (host guest)" if p["kind"] == "guest" else TYPES[p["kind"]]["name"]))
         L.append("")
     if known:
         L.append("## Already on the list (ticket left exactly as it is)")
@@ -141,6 +160,12 @@ def main():
         have = {(t.get("code") or "").upper(): t for t in (tts or [])}
         ids = {}
         for kind, spec in TYPES.items():
+            if kind == "guest" and GUEST_PASS == "vip":
+                v = vip_pass(tts)
+                if v is None:
+                    raise SystemExit("refusing: this event has no VIP pass for host guests")
+                ids[kind] = v["id"]
+                continue
             t = have.get(spec["code"])
             if not t:
                 st, t = call("POST", "/events/%d/ticket-types" % EVENT, dict(spec))
@@ -154,7 +179,8 @@ def main():
                     "first_name": p["first_name"], "last_name": p["last_name"], "email": p["email"],
                     "phone": p["phone"] or "", "ticket_type_id": ids[p["kind"]],
                     "attendance_type": ATTENDANCE[p["kind"]], "confirm_new": True,
-                    "note": ("From the planning sheet: " + (ps.job_title(p) or p["kind"]))[:300]})
+                    "note": ("From the planning sheet: " + (ps.job_title(p) or p["kind"])
+                             + (" (media: %s)" % p["media"] if p.get("media") else ""))[:300]})
                 ok = st in (200, 201) and (out or {}).get("attendee")
                 if ok:
                     aid = out["attendee"]["id"]

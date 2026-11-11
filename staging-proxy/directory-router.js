@@ -11,6 +11,8 @@
  * (detail). The auth-gated /api/user and /api/profile/:id are never touched.
  */
 
+import * as booking from './booking-check.js';
+
 const SOURCE = 'https://gaiapractitioners.com';
 const FRESH_MS = 45 * 60 * 1000;              // considered fresh
 const RESILIENCE_MS = 24 * 60 * 60 * 1000;    // serve last real cache this long if upstream is down
@@ -82,6 +84,11 @@ function normalizeDetail(j, id, listItem) {
   });
 }
 
+// Whether each practitioner can really be booked online (booking-check.js).
+// Added at response time, so the cached list itself never goes stale on it.
+function withBooking(list) { return list.map((p) => Object.assign({}, p, { booking: booking.statusFor(p.id) })); }
+function detailWithBooking(d) { return d ? Object.assign({}, d, { booking: booking.statusFor(d.id), scanTeam: booking.scanTeamStatus() }) : d; }
+
 async function fetchUpstream(path, ms) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms || 8000);
@@ -98,7 +105,7 @@ async function fetchUpstream(path, ms) {
 async function handleList(res, sendJson, origin) {
   const now = Date.now();
   if (_listCache.list && (now - _listCache.at) < FRESH_MS) {
-    return sendJson(res, 200, { ok: true, source: 'gaiapractitioners.com', cached: true, count: _listCache.list.length, practitioners: _listCache.list }, origin);
+    return sendJson(res, 200, { ok: true, source: 'gaiapractitioners.com', cached: true, count: _listCache.list.length, scanTeam: booking.scanTeamStatus(), practitioners: withBooking(_listCache.list) }, origin);
   }
   try {
     const j = await fetchUpstream('/api/data');
@@ -108,10 +115,10 @@ async function handleList(res, sendJson, origin) {
       .map(normalizeListItem)
       .filter((p) => p.id != null && p.name);
     _listCache = { at: now, list };
-    return sendJson(res, 200, { ok: true, source: 'gaiapractitioners.com', cached: false, count: list.length, practitioners: list }, origin);
+    return sendJson(res, 200, { ok: true, source: 'gaiapractitioners.com', cached: false, count: list.length, scanTeam: booking.scanTeamStatus(), practitioners: withBooking(list) }, origin);
   } catch (e) {
     if (_listCache.list && (now - _listCache.at) < RESILIENCE_MS) {
-      return sendJson(res, 200, { ok: true, source: 'gaiapractitioners.com', cached: true, stale: true, count: _listCache.list.length, practitioners: _listCache.list }, origin);
+      return sendJson(res, 200, { ok: true, source: 'gaiapractitioners.com', cached: true, stale: true, count: _listCache.list.length, scanTeam: booking.scanTeamStatus(), practitioners: withBooking(_listCache.list) }, origin);
     }
     return sendJson(res, 503, { ok: false, unavailable: true, error: 'The practitioner directory is temporarily unavailable. Please try again shortly.' }, origin);
   }
@@ -122,21 +129,35 @@ async function handleDetail(res, sendJson, origin, id) {
   const now = Date.now();
   const cached = _detailCache.get(String(id));
   if (cached && (now - cached.at) < FRESH_MS) {
-    return sendJson(res, 200, { ok: true, cached: true, practitioner: cached.data }, origin);
+    return sendJson(res, 200, { ok: true, cached: true, practitioner: detailWithBooking(cached.data) }, origin);
   }
   const listItem = (_listCache.list || []).find((p) => String(p.id) === String(id)) || null;
   try {
     const j = await fetchUpstream('/api/practitioner/' + id);
     const data = normalizeDetail(j, id, listItem);
     _detailCache.set(String(id), { at: now, data });
-    return sendJson(res, 200, { ok: true, cached: false, practitioner: data }, origin);
+    return sendJson(res, 200, { ok: true, cached: false, practitioner: detailWithBooking(data) }, origin);
   } catch (e) {
     if (cached && (now - cached.at) < RESILIENCE_MS) {
-      return sendJson(res, 200, { ok: true, cached: true, stale: true, practitioner: cached.data }, origin);
+      return sendJson(res, 200, { ok: true, cached: true, stale: true, practitioner: detailWithBooking(cached.data) }, origin);
     }
-    if (listItem) return sendJson(res, 200, { ok: true, cached: false, partial: true, practitioner: listItem }, origin);
+    if (listItem) return sendJson(res, 200, { ok: true, cached: false, partial: true, practitioner: detailWithBooking(listItem) }, origin);
     return sendJson(res, 503, { ok: false, unavailable: true }, origin);
   }
+}
+
+/** Every active practitioner's booking link, for booking-check.js. Paced and
+ * read-only against gaiapractitioners.com's public API; null when unreachable. */
+export async function practitionerLinks(opts = {}) {
+  let raw;
+  try { const j = await fetchUpstream('/api/data', 15000); raw = (Array.isArray(j.practitioner) ? j.practitioner : []).filter((p) => String(p.status || '').toLowerCase() === 'active'); } catch (e) { return null; }
+  const out = []; const pace = opts.paceMs == null ? 150 : opts.paceMs;
+  for (const p of raw) {
+    try { const d = await fetchUpstream('/api/practitioner/' + encodeURIComponent(p.id), 10000); out.push({ id: p.id, meetingLink: safeHttpUrl(d && d.meetingLink) }); }
+    catch (e) { const prev = _detailCache.get(String(p.id)); out.push({ id: p.id, meetingLink: prev ? prev.data.meetingLink || '' : '' }); }
+    if (pace) await new Promise((r) => setTimeout(r, pace));
+  }
+  return out;
 }
 
 // Exported for the test; the router itself is the only runtime caller.
@@ -147,6 +168,7 @@ export async function handle(req, res, url, deps) {
   if (req.method !== 'GET') return sendJson(res, 405, { ok: false, error: 'Method not allowed.' }, origin);
   const p = url.pathname.replace(/\/+$/, '') || url.pathname;
   if (p === '/api/directory') return handleList(res, sendJson, origin);
+  if (p === '/api/directory/booking-status') return sendJson(res, 200, Object.assign({ ok: true }, booking.summary()), origin);
   const m = p.match(/^\/api\/directory\/([^/]+)$/);
   if (m) return handleDetail(res, sendJson, origin, m[1]);
   return sendJson(res, 404, { ok: false, error: 'Not found.' }, origin);

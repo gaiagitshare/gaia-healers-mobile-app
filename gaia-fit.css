@@ -2359,6 +2359,11 @@ body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized):not(.gaia-assist--welcome
 .g-dir__intent-x { flex: none; background: none; border: 0; color: var(--g-text-dim, #93A597); font-size: 20px; line-height: 1; cursor: pointer; padding: 4px 6px; }
 @media (max-width: 480px) { .g-dir__intent { flex-wrap: wrap; } .g-dir__intent div { flex-basis: calc(100% - 40px); } .g-dir__intent .g-btn { margin-left: 34px; } }
 
+.g-dir-card__badges { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 2px; }
+.g-dir-card__badges .g-dir-card__avail { margin-top: 0; }
+.g-dir-card__book { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--g-text-dim, #93A597); }
+.g-dir-card__book.is-online { color: #7FD4FF; }
+
 /* Directory location row (Nov 2026): city/zip box, location messages, and
    "Nearest to …" with distance chips. */
 .g-dir__locmsg { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 8px; padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.4;

@@ -2359,6 +2359,31 @@ body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized):not(.gaia-assist--welcome
 .g-dir__intent-x { flex: none; background: none; border: 0; color: var(--g-text-dim, #93A597); font-size: 20px; line-height: 1; cursor: pointer; padding: 4px 6px; }
 @media (max-width: 480px) { .g-dir__intent { flex-wrap: wrap; } .g-dir__intent div { flex-basis: calc(100% - 40px); } .g-dir__intent .g-btn { margin-left: 34px; } }
 
+/* Directory location row (Nov 2026): city/zip box, location messages, and
+   "Nearest to …" with distance chips. */
+.g-dir__locmsg { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 8px; padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.4;
+  background: rgba(255, 194, 75, 0.08); border: 1px solid rgba(255, 194, 75, 0.28); color: var(--g-text, #E7EFE6); }
+.g-dir__locmsg i { color: #FFC24B; font-size: 16px; flex: none; margin-top: 1px; }
+.g-dir__place { position: relative; display: flex; gap: 8px; align-items: center; margin: 0 0 8px; }
+.g-dir__place > i { position: absolute; left: 13px; color: var(--g-text-dim, #93A597); font-size: 18px; pointer-events: none; }
+.g-dir__place input { flex: 1 1 auto; min-width: 0; min-height: 44px; padding: 10px 12px 10px 38px; border-radius: 14px; font-size: 16px;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--g-line, rgba(190,240,170,0.16)); color: var(--g-text, #E7EFE6); }
+.g-dir__place input:focus { outline: 2px solid color-mix(in srgb, var(--g-accent, #A6E84B) 55%, transparent); outline-offset: 1px; }
+.g-dir__place .g-btn { flex: none; min-height: 44px; }
+.g-dir__near { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 4px; }
+.g-dir__near-label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--g-accent, #A6E84B); }
+.g-dir__radii { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; flex: 1 1 auto; min-width: 0; }
+.g-dir__radii::-webkit-scrollbar { display: none; }
+.g-dir-rchip { flex: 0 0 auto; min-height: 36px; padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  background: transparent; border: 1px solid var(--g-line, rgba(190,240,170,0.18)); color: var(--g-text-dim, #93A597); }
+.g-dir-rchip.is-on { background: color-mix(in srgb, var(--g-accent, #A6E84B) 18%, transparent); color: #F4F7F1; border-color: color-mix(in srgb, var(--g-accent, #A6E84B) 45%, transparent); }
+.g-dir__near-x { flex: none; min-height: 36px; padding: 5px 10px; background: none; border: 0; color: var(--g-text-dim, #93A597); font-size: 12.5px; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.g-dir__empty .g-btn { margin-top: 10px; }
+.g-dir__empty p { margin: 0; }
+.gaia-dirprofile__note { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.45;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--g-line, rgba(190,240,170,0.16)); color: var(--g-text-dim, #cfe0c8); }
+.gaia-dirprofile__note i { flex: none; margin-top: 2px; color: var(--g-accent, #A6E84B); }
+
 .gaia-tour__back { background: none; border: 1px solid var(--g-line-strong); border-radius: 999px; padding: 8px 12px; color: var(--g-text); cursor: pointer; }
 .gaia-tour__count { color: var(--g-text-muted); font-size: 12px; white-space: nowrap; }
 .gaia-tour__card { font-family: var(--g-font-body, sans-serif); }

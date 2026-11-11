@@ -1324,6 +1324,10 @@ body.gaia-v2 [data-screen="academy"] .g-access--link > .g-access__img--ph {
   box-shadow: 0 0 0 4px rgba(66, 219, 134, 0.35), 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 
+.g-dir-you { background: none; border: 0; }
+.g-dir-you span { display: block; width: 18px; height: 18px; border: 3px solid #fff; border-radius: 50%; background: #3B82F6;
+  box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.28), 0 2px 6px rgba(0, 0, 0, 0.35); }
+
 /* Ticket add-ons (gaia-myevents.js addonChip), in the events list and the
    ticket view: outlined cyan, beside the green pass and gold VIP chips. */
 .g-addon {

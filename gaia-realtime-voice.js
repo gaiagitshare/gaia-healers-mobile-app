@@ -748,6 +748,11 @@
       if (!item) {
         return { ok: false, message: 'I can book a 1:1 with Dr. Nima, a Bio-Well scan, a demo, a free discovery call, or wellness coaching. Which one?' };
       }
+      // A scan starts at the directory: Bio-Well practitioners near the member,
+      // the ones who book online marked — not one shared calendar.
+      if (key === 'scan' && window.GaiaDirectory && typeof window.GaiaDirectory.open === 'function') {
+        try { window.GaiaDirectory.open({ intent: 'scan' }); return { ok: true, message: 'Opening the Bio-Well practitioners. Tap Near me, then choose one marked Books online and pick a time.' }; } catch (e) { /* fall through to the calendar */ }
+      }
       try {
         // Open in-app (modal iframe) so the member never leaves the app.
         // Falls back to a new tab if GaiaInApp is unavailable.

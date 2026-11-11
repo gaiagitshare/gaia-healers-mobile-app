@@ -40,7 +40,7 @@ test('the scan list needs Bio-Well as a specialty, not just a tag', () => {
 test('a practitioner without a calendar is never booked under their name', () => {
   assert.doesNotMatch(SRC, /data-book-title="Bio-Well scan with ' \+ esc\(p\.name\)/);
   assert.match(SRC, /Book with the Gaia Healers scan team/);
-  assert.match(SRC, /doesn\\'t take online bookings yet/);
+  assert.match(SRC, /doesn\\'t take online bookings right now/);
 });
 
 test('location: asked only on tap, failures explained, a city or zip works too', () => {
@@ -58,4 +58,22 @@ test('profiles link to the public page on gaiapractitioners.com', () => {
 
 test('booking from a profile closes the profile so the calendar is on top', () => {
   assert.match(SRC, /closest\('\[data-book-inline\]'\)\) setTimeout\(close, 0\)/);
+});
+
+test('booking status: only a calendar with open times is promised', () => {
+  const t = load('en-US');
+  assert.ok(t.booksOnline({ booking: 'online' }));
+  assert.ok(!t.booksOnline({ booking: 'unavailable', meetingLink: 'https://x' }));
+  assert.ok(!t.booksOnline({ booking: 'none' }));
+  assert.ok(t.booksOnline({ meetingLink: 'https://x' }), 'an older server without the field still books');
+  assert.match(SRC, /var own = p\.meetingLink && bk !== 'unavailable'/, 'a dead calendar never gets a Book button');
+  assert.match(SRC, /intent === 'scan' && scanTeamOk\(\)/, 'the scan-team calendar is offered only when it works');
+  assert.match(SRC, /Books online/);
+});
+
+test('scan bookings from Bookings and the voice assistant start at the directory', () => {
+  const sa = fs.readFileSync(path.join(__dirname, '..', 'gaia-superapp.js'), 'utf8');
+  assert.match(sa, /item\.id === 'biowell-scan' \? 'data-dir-intent="scan"'/);
+  const voice = fs.readFileSync(path.join(__dirname, '..', 'gaia-realtime-voice.js'), 'utf8');
+  assert.match(voice, /key === 'scan' && window\.GaiaDirectory/);
 });

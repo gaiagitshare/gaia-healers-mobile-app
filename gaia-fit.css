@@ -2010,7 +2010,7 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .gaia-dirprofile__hero { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
 .gaia-dirprofile__img { width: 76px; height: 76px; border-radius: 16px; object-fit: cover; }
 .gaia-dirprofile__hero h2 { font-family: var(--g-font-serif, "Cormorant Garamond", serif); font-weight: 600; font-size: 24px; line-height: 1.05; margin: 0 0 4px; }
-.gaia-dirprofile__loc { font-size: 13px; color: var(--g-text-dim, #93A597); margin: 0 0 6px; display: inline-flex; align-items: center; gap: 4px; }
+.gaia-dirprofile__loc { font-size: 13px; color: var(--g-text-dim, #93A597); margin: 0 0 6px; display: flex; align-items: center; gap: 4px; }
 .gaia-dirprofile__specs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
 .gaia-dirprofile__actions { display: flex; flex-direction: column; gap: 8px; }
 .gaia-dirprofile__actions .g-btn { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
@@ -2358,6 +2358,11 @@ body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized):not(.gaia-assist--welcome
 .g-dir__intent .g-btn { flex: none; }
 .g-dir__intent-x { flex: none; background: none; border: 0; color: var(--g-text-dim, #93A597); font-size: 20px; line-height: 1; cursor: pointer; padding: 4px 6px; }
 @media (max-width: 480px) { .g-dir__intent { flex-wrap: wrap; } .g-dir__intent div { flex-basis: calc(100% - 40px); } .g-dir__intent .g-btn { margin-left: 34px; } }
+
+.g-dir-card__badges { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 2px; }
+.g-dir-card__badges .g-dir-card__avail { margin-top: 0; }
+.g-dir-card__book { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--g-text-dim, #93A597); }
+.g-dir-card__book.is-online { color: #7FD4FF; }
 
 /* Directory location row (Nov 2026): city/zip box, location messages, and
    "Nearest to …" with distance chips. */

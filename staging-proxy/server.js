@@ -13,6 +13,7 @@ import * as adminRouter from './admin-router.js';
 import { createCheckoutLinkResolver, fetchPageText } from './checkout-links.js';
 import * as wellnessRouter from './wellness-router.js';
 import * as directoryRouter from './directory-router.js';
+import * as bookingCheck from './booking-check.js';
 import * as eventIdentity from './membership/event-identity.js';
 import { createActivation } from './membership/member-activation.js';
 import * as reader from './membership/reader.js';
@@ -7864,6 +7865,39 @@ server.listen(PORT, HOST, () => {
   if (process.env.CONTACT_MERGE_SCAN !== 'false' && !process.env.MEMBER_ENTITLEMENTS_FILE?.includes('tmp')) {
     setTimeout(() => { runContactMergeScan(); }, 5 * 60_000).unref();
     setInterval(() => { runContactMergeScan(); }, CONTACT_MERGE_SCAN_INTERVAL_MS).unref();
+  }
+
+  // Directory booking check (booking-check.js): every hour, read-only, which
+  // practitioners' calendars can really take a booking. Official GHL API with
+  // the app's key (one calendar list + one free-slots call per calendar, paced),
+  // plus gaiapractitioners.com's public API every 6 h for the links. No paid model.
+  if (process.env.DIRECTORY_BOOKING_CHECK !== 'false' && ghlConfig().enabled && !process.env.MEMBER_ENTITLEMENTS_FILE?.includes('tmp')) {
+    bookingCheck.load(path.join(process.cwd(), 'data', 'directory-booking.json'));
+    const ghlRequest = async (p, params = {}) => {
+      const cfg = ghlConfig();
+      const q = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString();
+      try {
+        const r = await fetch(`${cfg.base}${p}${q ? '?' + q : ''}`, { headers: ghlHeaders(cfg.token, cfg.version), signal: AbortSignal.timeout(15000) });
+        let json = null; try { json = await r.json(); } catch (e) { /* not json */ }
+        return { status: r.status, json };
+      } catch (e) { return { status: 0, json: null }; }
+    };
+    const runBookingCheck = async () => {
+      try {
+        const out = await bookingCheck.runOnce({
+          ghlRequest,
+          listCalendars: async () => { const r = await ghlRequest('/calendars/', { locationId: ghlConfig().locationId }); return r.status === 200 && r.json && Array.isArray(r.json.calendars) ? r.json.calendars : null; },
+          practitionerLinks: () => directoryRouter.practitionerLinks(),
+          pageStatus: async (u) => { try { const r = await fetch(u, { redirect: 'follow', signal: AbortSignal.timeout(15000) }); return r.status; } catch (e) { return 0; } },
+          scanTeamSlug: 'scans',
+        });
+        console.log('[Gaia Directory] booking check', JSON.stringify(out));
+      } catch (e) {
+        console.warn('[Gaia Directory] booking check failed', String((e && e.message) || e).slice(0, 160));
+      }
+    };
+    setTimeout(runBookingCheck, 2 * 60_000).unref();
+    setInterval(runBookingCheck, 60 * 60_000).unref();
   }
 
   // Daily store sync. Disabled under test so the suite never reaches out to a

@@ -2211,7 +2211,9 @@
   function bookingCatalog() {
     const verified = bookingSet();
     return '<section class="g-super-list"><div class="g-super-section-head"><div><p class="g-super-kicker">Schedule</p><h2>Book a session</h2></div></div>'
-      + verified.map((item) => '<button type="button" class="g-super-row" data-book-inline="' + esc(item.openUrl || '') + '" data-book-title="' + esc(item.name || 'Book a session') + '"><span class="g-super-row__icon">' + icon('calendar-plus') + '</span><span><strong>' + esc(item.name || 'Book a session') + '</strong><em>Choose a time</em></span>' + icon('caret-right') + '</button>').join('') + '</section>';
+      // The scan starts at the directory (as on Home): a practitioner who books
+      // online, never straight into one calendar that may have no one on it.
+      + verified.map((item) => '<button type="button" class="g-super-row" ' + (item.id === 'biowell-scan' ? 'data-dir-intent="scan"' : 'data-book-inline="' + esc(item.openUrl || '') + '" data-book-title="' + esc(item.name || 'Book a session') + '"') + '><span class="g-super-row__icon">' + icon('calendar-plus') + '</span><span><strong>' + esc(item.name || 'Book a session') + '</strong><em>Choose a time</em></span>' + icon('caret-right') + '</button>').join('') + '</section>';
   }
 
   function renderInbox() {

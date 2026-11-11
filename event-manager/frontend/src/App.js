@@ -78,6 +78,10 @@ const theme = createTheme({
                 },
                 containedPrimary: {
                     background: 'linear-gradient(135deg, #2d5a3d 0%, #4a7c59 100%)',
+                    // White on the dark green gradient (11 Nov 2026): the theme's
+                    // dark contrast text made every main button hard to read.
+                    color: '#ffffff',
+                    '&.Mui-disabled': { color: 'rgba(255,255,255,0.45)' },
                 },
             },
         },

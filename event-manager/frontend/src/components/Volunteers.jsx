@@ -10,6 +10,7 @@ import {
     sendVolunteerInvites, refreshVolunteerInvites, addVolunteerAnnouncement, updateVolunteerAnnouncement,
 } from '../utils/api';
 import { byDay, dayLabel, shiftTime } from '../utils/volunteerTime';
+import VolunteerBoard from './VolunteerBoard';
 
 /**
  * Volunteers — the event's volunteer team and schedule, for the people who run
@@ -47,6 +48,7 @@ export default function Volunteers() {
     const [sel, setSel] = useState([]);
     const [vfilter, setVfilter] = useState('all');
     const [preview, setPreview] = useState(null);   // { ids, resend, data }
+    const [scheduleView, setScheduleView] = useState('board');   // board | list
 
     const load = useCallback(() => getVolunteerOverview(id).then((r) => { setData(r.data); })
         .catch((e) => setError(err(e))), [id]);
@@ -220,11 +222,15 @@ export default function Volunteers() {
 
             {tab === 'schedule' && (
                 <Box>
-                    <Stack direction="row" spacing={1} sx={{ mb: 1 }} className="no-print">
+                    <Stack direction="row" spacing={1} sx={{ mb: 1.5 }} className="no-print" alignItems="center">
+                        <Button size="small" variant={scheduleView === 'board' ? 'contained' : 'outlined'} onClick={() => setScheduleView('board')}>Board</Button>
+                        <Button size="small" variant={scheduleView === 'list' ? 'contained' : 'outlined'} onClick={() => setScheduleView('list')}>List</Button>
+                        <Box sx={{ flex: 1 }} />
                         <Button size="small" variant="outlined" onClick={() => { setDlg({ kind: 'shift' }); setForm({ ...EMPTY_SHIFT }); }}>Add shift</Button>
                     </Stack>
                     <Typography className="print-only" variant="h5" sx={{ display: 'none', mb: 1 }}>{data.program.title} — schedule</Typography>
-                    {days.map((g) => (
+                    {scheduleView === 'board' && <VolunteerBoard days={days} renderShift={shiftCard} />}
+                    {scheduleView === 'list' && days.map((g) => (
                         <Box key={g.day} sx={{ mb: 3 }}>
                             <Typography variant="h6" sx={{ mb: 1 }}>{dayLabel(g.day)}</Typography>
                             <Box sx={{ columnCount: narrow ? 1 : 2, columnGap: 2 }}>{g.shifts.map(shiftCard)}</Box>

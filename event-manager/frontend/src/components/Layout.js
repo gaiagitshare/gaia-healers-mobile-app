@@ -23,6 +23,7 @@ import {
     Button,
     Alert,
     Stack,
+    Tooltip,
     useMediaQuery,
     useTheme,
 } from '@mui/material';
@@ -40,6 +41,10 @@ import {
 import { changePassword, isPlatformAdmin, getEvents, getMyCapabilities } from '../utils/api';
 
 const drawerWidth = 240;
+// iPad and smaller windows (900-1279 px): a slim icon strip instead of the full
+// menu, so the page gets the width (11 Nov 2026). Below 900 px the menu opens
+// from the top-left button as before.
+const railWidth = 72;
 
 // App-wide pages only platform admins can use (the server refuses the rest).
 const ADMIN_ONLY_PATHS = ['/dashboard', '/payments', '/entitlement-review'];
@@ -49,6 +54,8 @@ function Layout({ children, user, onLogout }) {
     const location = useLocation();
     const theme = useTheme();
     const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
+    const isWide = useMediaQuery('(min-width:1280px)');
+    const navWidth = isWide ? drawerWidth : railWidth;
     const [anchorEl, setAnchorEl] = React.useState(null);
     const [pwOpen, setPwOpen] = React.useState(false);
     const [curPw, setCurPw] = React.useState('');
@@ -114,6 +121,28 @@ function Layout({ children, user, onLogout }) {
         setMobileOpen(false);
     };
 
+    const railContent = (
+        <>
+            <Toolbar />
+            <List sx={{ px: 0.5 }}>
+                {menuItems.map((item) => (
+                    <ListItem key={item.text} disablePadding sx={{ display: 'block' }}>
+                        <Tooltip title={item.text} placement="right">
+                            <ListItemButton selected={isSelected(item.path)} onClick={() => handleNavigate(item.path)}
+                                aria-label={item.text}
+                                sx={{ minHeight: 52, flexDirection: 'column', justifyContent: 'center', borderRadius: 2, px: 0.5 }}>
+                                <ListItemIcon sx={{ minWidth: 0, justifyContent: 'center' }}>{item.icon}</ListItemIcon>
+                                <Typography variant="caption" sx={{ fontSize: 10, lineHeight: 1.1, mt: 0.25, textAlign: 'center' }} noWrap>
+                                    {item.text.split(' ')[0]}
+                                </Typography>
+                            </ListItemButton>
+                        </Tooltip>
+                    </ListItem>
+                ))}
+            </List>
+        </>
+    );
+
     const drawerContent = (
         <>
             <Toolbar />
@@ -142,8 +171,8 @@ function Layout({ children, user, onLogout }) {
                 position="fixed"
                 sx={{
                     zIndex: (theme) => theme.zIndex.drawer + 1,
-                    width: { md: `calc(100% - ${drawerWidth}px)` },
-                    ml: { md: `${drawerWidth}px` },
+                    width: { md: `calc(100% - ${navWidth}px)` },
+                    ml: { md: `${navWidth}px` },
                 }}
             >
                 <Toolbar>
@@ -223,18 +252,18 @@ function Layout({ children, user, onLogout }) {
                 variant="permanent"
                 sx={{
                     display: { xs: 'none', md: 'block' },
-                    width: drawerWidth,
+                    width: navWidth,
                     flexShrink: 0,
-                    [`& .MuiDrawer-paper`]: { width: drawerWidth, boxSizing: 'border-box' },
+                    [`& .MuiDrawer-paper`]: { width: navWidth, boxSizing: 'border-box', overflowX: 'hidden' },
                 }}
             >
-                {drawerContent}
+                {isWide ? drawerContent : railContent}
             </Drawer>
             <Box
                 component="main"
                 sx={{
                     flexGrow: 1,
-                    width: { xs: '100%', md: `calc(100% - ${drawerWidth}px)` },
+                    width: { xs: '100%', md: `calc(100% - ${navWidth}px)` },
                     minWidth: 0,
                     p: { xs: 2, sm: 3 },
                 }}

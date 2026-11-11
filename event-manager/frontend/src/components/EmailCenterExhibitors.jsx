@@ -59,7 +59,60 @@ const FILTERS = [
     ['manual', 'Manually sent', (r) => kinds(r).includes('sent_manually')],
     ['review', 'Needs admin review', (r) => (r.flags || []).some((f) => FLAG[f] && f !== 'email_changed_by_stand')],
 ];
+// The filters people use every day; the rest sit behind "More filters".
+const MAIN_FILTERS = ['', 'action', 'ready', 'setup_pending', 'remind', 'on_hold'];
 const reasonText = (r) => REFUSED[r] || (r ? String(r).replace(/_/g, ' ') : '');
+
+// One stand as a card (iPad / narrow windows): what it is, what to do next,
+// and the three emails' states -- everything the wide table shows that matters
+// at a glance, with full-size touch targets.
+function StandCard({ r, picked, focused, onToggle, onMenu, onEdit }) {
+    const [sl, sc] = SETUP_LINK[r.setup_link] || [r.setup_link || '—', 'default'];
+    const [rl, rc] = READY[r.readiness] || [r.readiness || '—', 'default'];
+    return (
+        <Card variant="outlined" id={`ec-ex-${r.id}`} sx={{ p: 1.25, borderColor: picked || focused ? 'primary.main' : undefined }}>
+            <Stack direction="row" spacing={1} alignItems="flex-start">
+                <Checkbox checked={picked} onChange={onToggle} inputProps={{ 'aria-label': `Select ${r.company_name}` }} sx={{ mt: -0.5 }} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap', gap: 0.75 }}>
+                        <Typography sx={{ fontWeight: 700 }}>{r.company_name}</Typography>
+                        {r.booth_number && <Typography variant="body2" color="text.secondary">Booth {r.booth_number}</Typography>}
+                        <Box sx={{ flex: 1 }} />
+                        {/* Looks like a button on a tablet, so it acts like one: it opens this stand's actions. */}
+                        <Chip label={r.next_action?.label || '—'} color={NEXT_COLOR[r.next_action?.key] || 'default'} clickable onClick={onMenu}
+                              variant={['wait_setup', 'done', 'on_hold'].includes(r.next_action?.key) ? 'outlined' : 'filled'} />
+                    </Stack>
+                    {r.hold && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>On hold: {r.hold.reason} · {r.hold.by}</Typography>}
+                    <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.5, mt: 0.75 }}>
+                        <Chip size="small" label={rl} color={rc} />
+                        {(r.flags || []).filter((f) => FLAG[f]).map((f) => <Chip key={f} size="small" variant="outlined" label={FLAG[f][0]} color={FLAG[f][1]} />)}
+                    </Stack>
+                    {r.possible_duplicate && <Typography variant="caption" color="warning.main" sx={{ display: 'block' }}>Pending online purchase: {r.possible_duplicate.name}</Typography>}
+                    {r.stand_email_change && <Typography variant="caption" color="info.main" sx={{ display: 'block' }}>Email changed by the stand{r.stand_email_change.old ? ` (was ${r.stand_email_change.old})` : ''}</Typography>}
+                    <Stack direction="row" alignItems="center" sx={{ flexWrap: 'wrap', gap: 0.5, mt: 0.75 }}>
+                        <Typography variant="body2" sx={{ mr: 0.5 }}>{r.contact_name || '—'}</Typography>
+                        <Typography variant="body2" color={r.email_valid ? 'text.secondary' : 'error.main'} sx={{ wordBreak: 'break-all' }}>
+                            {r.email_valid ? r.contact_email : 'Missing contact email'}
+                        </Typography>
+                        <Button size="small" onClick={onEdit}>Edit</Button>
+                    </Stack>
+                    <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1.5, mt: 0.75 }}>
+                        <Box><Typography variant="caption" color="text.secondary" display="block">Setup email</Typography><DeliveryChip s={r.setup?.status} /></Box>
+                        <Box><Typography variant="caption" color="text.secondary" display="block">Reminder</Typography><DeliveryChip s={r.reminder?.status} /></Box>
+                        <Box><Typography variant="caption" color="text.secondary" display="block">Scanner email</Typography><DeliveryChip s={r.scanner?.status} /></Box>
+                        <Box><Typography variant="caption" color="text.secondary" display="block">Profile</Typography><Chip size="small" variant="outlined" label={sl} color={sc} /></Box>
+                        <Box><Typography variant="caption" color="text.secondary" display="block">Scanning</Typography><Chip size="small" label={r.scanning_enabled ? 'On' : 'Off'} color={r.scanning_enabled ? 'success' : 'default'} /></Box>
+                        {r.amount_mismatch && <Box><Typography variant="caption" color="text.secondary" display="block">Payment</Typography><Typography variant="body2" color="warning.main">Paid {money(r.amount_paid)} of {money(r.amount_due)}</Typography></Box>}
+                    </Stack>
+                    {(r.setup?.last_error || r.scanner?.last_error) && (
+                        <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>{reasonText(r.setup?.last_error || r.scanner?.last_error)}</Typography>
+                    )}
+                </Box>
+                <IconButton aria-label={`Actions for ${r.company_name}`} onClick={onMenu}><MoreVertIcon /></IconButton>
+            </Stack>
+        </Card>
+    );
+}
 
 export default function EmailCenterExhibitors({ eventId, me: meIn, focusId }) {
     // Every send control here follows the EXHIBITOR switch, never the ticket one.
@@ -70,6 +123,10 @@ export default function EmailCenterExhibitors({ eventId, me: meIn, focusId }) {
     const [activity, setActivity] = useState(null); // {row, items}
     const [holdAsk, setHoldAsk] = useState(null); // {row, hold, reason}
     const narrow = useMediaQuery('(max-width:700px)');
+    // iPad and smaller laptop windows: cards instead of an 18-column table that
+    // scrolled sideways and hid the email and actions (11 Nov 2026).
+    const compact = useMediaQuery('(max-width:1279px)');
+    const [moreFilters, setMoreFilters] = useState(false);
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -176,6 +233,24 @@ export default function EmailCenterExhibitors({ eventId, me: meIn, focusId }) {
     const counts = Object.fromEntries(FILTERS.map(([k, , t]) => [k, rows.filter(t).length]));
 
     const m = menu?.row;
+    const sendButtons = (
+                    <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
+                        <GatedButton variant="contained" reason={sBlock || (!picked.size ? 'Select stands first.' : '')}
+                                     onClick={() => setBatchAsk({ selector: { exhibitor_kind: 'setup', ids: [...picked] }, title: `Send setup email to ${picked.size} stand(s)` })}>
+                            Send setup to selected
+                        </GatedButton>
+                        <GatedButton variant="outlined" reason={sBlock || (!picked.size ? 'Select stands first.' : '')}
+                                     onClick={() => setBatchAsk({ selector: { exhibitor_kind: 'reminder', ids: [...picked] }, title: `Send setup reminder to ${picked.size} stand(s)` })}>
+                            Send reminder to selected
+                        </GatedButton>
+                        {me?.scanner_links && (
+                            <GatedButton variant="outlined" reason={sBlock || (!picked.size ? 'Select stands first.' : '')}
+                                         onClick={() => setBatchAsk({ selector: { exhibitor_kind: 'scanner', ids: [...picked] }, title: `Send scanner email to ${picked.size} stand(s)` })}>
+                                Send scanner to selected
+                            </GatedButton>
+                        )}
+                    </Stack>
+    );
     const unknownKinds = (r) => ['setup', 'scanner'].filter((k) => r?.[k]?.status === 'unknown');
 
     return (
@@ -198,36 +273,34 @@ export default function EmailCenterExhibitors({ eventId, me: meIn, focusId }) {
                     <Button variant="outlined" disabled={checking} onClick={checkContacts}>{checking ? 'Checking GHL…' : 'Check GHL contacts'}</Button>
                 )}
                 <TextField size="small" label="Search company, booth or contact" value={q} onChange={(e) => setQ(e.target.value)} sx={{ flex: 1, minWidth: 220 }} />
-                {me?.send && (
-                    <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
-                        <GatedButton variant="contained" reason={sBlock || (!picked.size ? 'Select stands first.' : '')}
-                                     onClick={() => setBatchAsk({ selector: { exhibitor_kind: 'setup', ids: [...picked] }, title: `Send setup email to ${picked.size} stand(s)` })}>
-                            Send setup to selected
-                        </GatedButton>
-                        <GatedButton variant="outlined" reason={sBlock || (!picked.size ? 'Select stands first.' : '')}
-                                     onClick={() => setBatchAsk({ selector: { exhibitor_kind: 'reminder', ids: [...picked] }, title: `Send setup reminder to ${picked.size} stand(s)` })}>
-                            Send reminder to selected
-                        </GatedButton>
-                        {me?.scanner_links && (
-                            <GatedButton variant="outlined" reason={sBlock || (!picked.size ? 'Select stands first.' : '')}
-                                         onClick={() => setBatchAsk({ selector: { exhibitor_kind: 'scanner', ids: [...picked] }, title: `Send scanner email to ${picked.size} stand(s)` })}>
-                                Send scanner to selected
-                            </GatedButton>
-                        )}
-                    </Stack>
-                )}
+                {me?.send && sendButtons}
             </Stack>
 
-            <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
-                {FILTERS.map(([k, l]) => (
+            <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, mb: 1.5 }} alignItems="center">
+                {FILTERS.filter(([k]) => moreFilters || MAIN_FILTERS.includes(k) || filter === k).map(([k, l]) => (
                     <Chip key={k || 'all'} label={`${l} ${counts[k] ?? 0}`} clickable onClick={() => setFilter(k)}
                           color={filter === k ? 'primary' : 'default'} variant={filter === k ? 'filled' : 'outlined'} />
                 ))}
+                <Button size="small" onClick={() => setMoreFilters(!moreFilters)}>
+                    {moreFilters ? 'Fewer filters' : `More filters (${FILTERS.length - MAIN_FILTERS.length})`}
+                </Button>
             </Stack>
 
             <Card variant="outlined">
                 <Box sx={{ overflowX: 'auto' }}>
-                    {loading ? <Box sx={{ p: 3, textAlign: 'center' }}><CircularProgress size={24} /></Box> : (
+                    {loading ? <Box sx={{ p: 3, textAlign: 'center' }}><CircularProgress size={24} /></Box> : compact ? (
+                        <Stack spacing={1} sx={{ p: 1 }}>
+                            <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 0.5 }}>
+                                <Checkbox checked={allPicked} indeterminate={picked.size > 0 && !allPicked} inputProps={{ 'aria-label': 'Select all shown' }}
+                                          onChange={() => setPicked(allPicked ? new Set() : new Set(shown.map((r) => r.id)))} />
+                                <Typography variant="body2" color="text.secondary">Select all shown</Typography>
+                            </Stack>
+                            {shown.map((r) => <StandCard key={r.id} r={r} picked={picked.has(r.id)} focused={String(focusId) === String(r.id)}
+                                                         onToggle={() => toggle(r.id)} onMenu={(e) => setMenu({ anchor: e.currentTarget, row: r })}
+                                                         onEdit={() => setContact({ row: r, name: r.contact_name || '', email: r.contact_email || '' })} />)}
+                            {!shown.length && <Typography sx={{ p: 2 }} color="text.secondary">No stands match.</Typography>}
+                        </Stack>
+                    ) : (
                         <Table size="small" sx={{ minWidth: 1400 }}>
                             <TableHead><TableRow>
                                 <TableCell padding="checkbox">
@@ -306,6 +379,15 @@ export default function EmailCenterExhibitors({ eventId, me: meIn, focusId }) {
                     {shown.length} stand(s){picked.size ? ` · ${picked.size} selected` : ''}. Scanning is switched on/off in Exhibitors, not here.
                 </Typography>
             </Card>
+            {compact && me?.send && picked.size > 0 && (
+                <Card elevation={6} sx={{ position: 'sticky', bottom: 8, mt: 1, p: 1, zIndex: 5 }}>
+                    <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{picked.size} selected</Typography>
+                        {sendButtons}
+                        <Button onClick={() => setPicked(new Set())}>Clear</Button>
+                    </Stack>
+                </Card>
+            )}
 
             <Menu anchorEl={menu?.anchor} open={Boolean(menu)} onClose={closeMenu}>
                 {m && [

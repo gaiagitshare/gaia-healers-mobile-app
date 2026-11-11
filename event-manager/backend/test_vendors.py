@@ -177,10 +177,10 @@ real = sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 AND stage='confirme
 # ...unless the sheet has since listed it too: then it IS a sheet row.
 _page_added_on_sheet = [r[0] for r in sql("SELECT company_name FROM exhibitors WHERE event_id=1 AND stage='confirmed' AND NOT ("
                                            + _ON_SHEET + ")")
-                        if any(_vs.norm_name(x["company"]) == _vs.norm_name(r[0]) for x in _sheet_conf)]
+                        if any(_vs.norm_name(x["company"]) == _vs.norm_name(_vs.split_staff_note(r[0])[0]) for x in _sheet_conf)]
 real = (real[0] + len(_page_added_on_sheet),) + tuple(real[1:])
 _names = {r[0] for r in sql("SELECT company_name FROM exhibitors WHERE event_id=1 AND stage='confirmed'")}
-_missing = [r["company"] for r in _sheet_conf if not any(_vs.norm_name(r["company"]) == _vs.norm_name(n) for n in _names)]
+_missing = [r["company"] for r in _sheet_conf if not any(_vs.norm_name(r["company"]) == _vs.norm_name(_vs.split_staff_note(n)[0]) for n in _names)]
 check(real[0] == len(_sheet_conf) and not _missing,
       "every confirmed exhibitor in the sheet is in the system, confirmed (%d)" % len(_sheet_conf), (real[0], _missing))
 # A booth the sheet has not decided ("?") is stored as no booth, on purpose:
@@ -189,7 +189,7 @@ check(real[0] == len(_sheet_conf) and not _missing,
 # placed here too, and that nothing nonsensical reached the floor plan.
 _want_booth = {r["company"]: _vs.booth_label(r) for r in _sheet_conf if _vs.booth_label(r)}
 _have = {r[0]: (r[1] or "") for r in sql("SELECT company_name, booth_number FROM exhibitors WHERE event_id=1 AND stage='confirmed'")}
-_missing = [n for n, b in _want_booth.items() if not any(_vs.norm_name(n) == _vs.norm_name(h) and v for h, v in _have.items())]
+_missing = [n for n, b in _want_booth.items() if not any(_vs.norm_name(n) == _vs.norm_name(_vs.split_staff_note(h)[0]) and v for h, v in _have.items())]
 check(not _missing, "every confirmed exhibitor the sheet has placed has that booth here", _missing)
 import re as _re
 _junk = [ (n, b) for n, b in _have.items() if b and not _re.search(r"\d", b) ]
@@ -267,7 +267,10 @@ check(mine["package"] == "The Connector $5000" and mine["booth_number"] == "12",
 check(mine["description"] == "still theirs", "but their own words did save")
 
 # ── 10. a new link retires the old one ────────────────────────────────────
-st, link2 = call("POST", "/exhibitors/%d/activation-link" % VID, None, ADMIN)
+# The button shows the CURRENT link (11 Nov 2026); replacing it is rotate=1.
+st, same = call("POST", "/exhibitors/%d/activation-link" % VID, None, ADMIN)
+check(same["url"].rsplit("/", 1)[-1] == T, "the Setup link button shows the link the stand already has")
+st, link2 = call("POST", "/exhibitors/%d/activation-link?rotate=1" % VID, None, ADMIN)
 T2 = link2["url"].rsplit("/", 1)[-1]
 check(T2 != T, "a fresh link is a different token")
 st, _ = call("GET", "/vendor-setup/%s" % T)
@@ -391,7 +394,9 @@ check(enriched >= 14, "most confirmed stands have a logo and a description", enr
 # therealframework.org and is also what booked the booth -- a one-person
 # operation has one address. Read off their site before it was written here,
 # not copied from the sheet, which is the distinction this guard exists for.
-SAME_ON_PURPOSE = {"Hair By Mermaid", "Medi Air Purifier", "The Real Framework/BOOK"}
+# (Names as the directory shows them: the sheet's "/BOOK" staff note is not part
+# of a name since 11 Nov 2026.)
+SAME_ON_PURPOSE = {"Hair By Mermaid", "Medi Air Purifier", "The Real Framework", "The Real Framework/BOOK"}
 # A stand that typed its own contact email on its setup page (vendor_fields
 # lists contact_email) chose that address itself -- e.g. Vibra Tec on 10 Nov
 # switched its contact to the info@ address on its own website. Not a leak.

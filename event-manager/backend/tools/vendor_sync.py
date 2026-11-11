@@ -143,7 +143,11 @@ def main():
                      ("sheet_row", "INTEGER")):
         if col not in cols: db.execute("ALTER TABLE exhibitors ADD COLUMN %s %s" % (col, ddl))
     rows = db.execute("SELECT * FROM exhibitors WHERE event_id=?", (EVENT,)).fetchall()
-    by_name = {vs.norm_name(r["company_name"]): r for r in rows}
+    # A name stored with a staff note on it ("…/BOOK", read in before the
+    # parser knew about such notes) is still the same stand.
+    def stand_key(r):
+        return vs.norm_name(vs.split_staff_note(r["company_name"])[0])
+    by_name = {stand_key(r): r for r in rows}
     # An exhibitor package bought online arrives before the sheet knows the
     # company (tools/exhibitor_package_sync.py files it as stage "purchased",
     # named after the buyer). When the sheet lists that buyer's email, the sheet
@@ -184,6 +188,10 @@ def main():
             diff.pop(f, None)
         if adopted:
             diff["company_name"] = rec["company"]
+        # Take a staff note back off a stand's stored name -- and only the note:
+        # any other rename an organiser made is theirs and is left alone.
+        elif vs.split_staff_note(r["company_name"] or "")[1]:
+            diff["company_name"] = vs.split_staff_note(r["company_name"])[0]
         # One deliberate exception to "a blank cell never blanks a value": a
         # booth cell the sheet has emptied or filled with a placeholder means
         # this stand has no booth yet, and a stale number on the floor plan is
@@ -201,7 +209,7 @@ def main():
         if off:
             offs.append((r, diff, off))
 
-    gone = [r for r in rows if vs.norm_name(r["company_name"]) not in seen and r["id"] not in adopted_ids]
+    gone = [r for r in rows if stand_key(r) not in seen and r["id"] not in adopted_ids]
 
     lines = ["# Exhibitor sheet sync — %s (%s)" % (started.strftime("%Y-%m-%d %H:%M UTC"), "APPLIED" if APPLY else "dry run"), ""]
     lines.append("Sheet rows: %d · matched: %d · to create: %d · to update: %d · switched off: %d · in Event Manager but not in sheet: %d" % (

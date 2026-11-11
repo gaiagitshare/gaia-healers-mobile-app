@@ -1433,7 +1433,7 @@ function CheckIn({ timezone: timezoneProp }) {
                                             : 'Real check-in is locked. Practise now rather than in front of a queue.'}
                                     </Typography>
                                 </Box>
-                                <Button size="small" variant={rehearsal ? 'contained' : 'outlined'}
+                                {(!may || may.door_settings !== false) ? (<Button size="small" variant={rehearsal ? 'contained' : 'outlined'}
                                     color={rehearsal ? 'warning' : 'inherit'} disabled={rehearsalBusy}
                                     onClick={async () => {
                                         setRehearsalBusy(true);
@@ -1461,6 +1461,7 @@ function CheckIn({ timezone: timezoneProp }) {
                                     }}>
                                     {rehearsalBusy ? 'Working…' : (rehearsal ? 'End rehearsal' : 'Start rehearsal')}
                                 </Button>
+                                ) : (<Typography variant="caption" color="text.secondary">An organiser changes this.</Typography>)}
                             </Stack>
                         </Paper>
                     )}
@@ -1486,7 +1487,7 @@ function CheckIn({ timezone: timezoneProp }) {
                                             : 'Everybody who checked in on a previous day will be refused when they scan again. For a three-day conference, turn this on.'}
                                     </Typography>
                                 </Box>
-                                <Button size="small" variant={reEntry ? 'outlined' : 'contained'}
+                                {(!may || may.door_settings !== false) ? (<Button size="small" variant={reEntry ? 'outlined' : 'contained'}
                                     color={reEntry ? 'inherit' : 'warning'} disabled={reEntryBusy}
                                     onClick={async () => {
                                         setReEntryBusy(true);
@@ -1503,6 +1504,7 @@ function CheckIn({ timezone: timezoneProp }) {
                                     }}>
                                     {reEntryBusy ? 'Working…' : (reEntry ? 'Turn off' : 'Turn on re-entry')}
                                 </Button>
+                                ) : (<Typography variant="caption" color="text.secondary">An organiser changes this.</Typography>)}
                             </Stack>
                         </Paper>
                     )}
@@ -1997,7 +1999,7 @@ function CheckIn({ timezone: timezoneProp }) {
                         </Button>
                     ) : (
                         <Button variant="contained" onClick={() => submitVisitor()}
-                            disabled={visitorBusy || !visitor?.reason || !visitor?.first_name?.trim() || !visitor?.email?.trim() || !visitor?.phone?.trim()
+                            disabled={visitorBusy || !visitor?.reason || !visitor?.ticket_type_id || !visitor?.first_name?.trim() || !visitor?.email?.trim() || !visitor?.phone?.trim()
                                 || (visitor?.reason === 'pay_at_door' && !(Number(visitor?.door_payment_amount) > 0))
                                 || (visitor?.reason === 'complimentary' && !visitor?.note?.trim())}>
                             {visitorBusy ? 'Checking…' : 'Register'}

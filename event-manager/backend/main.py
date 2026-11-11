@@ -1246,11 +1246,14 @@ def get_next_public_event(db: Session = Depends(get_db)):
 
     Published matters: without it a draft with a nearer date becomes the app's
     featured event the moment it is created."""
-    event = db.query(models.Event).filter(
+    # end_date is venue wall-clock time; compared with UTC an Orlando event
+    # "ended" at 1 pm on its last day (11 Nov 2026). Narrow by a day of slack in
+    # SQL, then decide with each event's own clock.
+    event = next((e for e in db.query(models.Event).filter(
         models.Event.is_active == True,
         models.Event.is_published == True,
-        models.Event.end_date >= datetime.utcnow(),
-    ).order_by(models.Event.start_date.asc()).first()
+        models.Event.end_date >= datetime.utcnow() - timedelta(days=1),
+    ).order_by(models.Event.start_date.asc()).all() if _not_ended(e)), None)
     if not event:
         raise HTTPException(status_code=404, detail="No upcoming active event")
 
@@ -2108,10 +2111,20 @@ def get_scan_logs(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """Reviewable access-control trail for organisers and platform admins."""
+    """Reviewable access-control trail for organisers and platform admins.
+
+    Door staff see their OWN recent scans (11 Nov 2026): the check-in screen's
+    "Recent activity" was always empty for them, so the door could not look
+    back at the refusal it had just given. They never see the codes."""
     _get_event_or_404(event_id, db)
-    authz.require_cap(db, current_user, event_id, "analytics.read")
+    _door_only = False
+    if not authz.can(db, current_user, event_id, "analytics.read"):
+        authz.require_cap(db, current_user, event_id, "checkin.perform")
+        _door_only = True
+        limit = min(limit, 100)
     query = db.query(models.ScanLog).filter(models.ScanLog.event_id == event_id)
+    if _door_only:
+        query = query.filter(models.ScanLog.staff_user_id == current_user.id)
     if result:
         query = query.filter(models.ScanLog.result == result.strip().upper())
     if access_type:
@@ -2134,7 +2147,7 @@ def get_scan_logs(
             "id": row.id,
             "attendee_id": row.attendee_id,
             "attendee_name": names.get(row.attendee_id),
-            "qr_code": row.qr_code,
+            "qr_code": (None if _door_only else row.qr_code),
             "access_type": row.access_type,
             "result": row.result,
             "reason": row.reason,
@@ -2760,9 +2773,14 @@ def _effective_access(db, attendee):
     paid = [e for e in ents if e.get("status") == "paid"]
     # base tier = highest-rank paid entitlement that is NOT an add-on
     base_ents = _capped_base_ents(cd, [e for e in paid if not e.get("addon_code") and e.get("ticket_type_id")])
+    # A row parked for identity review holds an upgrade or add-on with no ticket
+    # under it: an upgrade alone is not admission (11 Nov 2026).
+    if cd.get("needs_identity_review"):
+        base_ents = [e for e in base_ents if not e.get("is_upgrade")]
     base_tt = None
     if base_ents:
         base_tt = max(base_ents, key=lambda e: _tt_rank(db, e.get("ticket_type_id"))).get("ticket_type_id")
+    admin_won = False
     if cd.get("admin_tier"):
         # An admin-set tier is a FLOOR, not a ceiling. It exists so a comp or a
         # correction cannot be quietly undone by the payment ledger -- not so it
@@ -2771,6 +2789,7 @@ def _effective_access(db, attendee):
         # charged for it, and still be refused at the VIP door.
         if base_tt is None or _tt_rank(db, cd["admin_tier"]) >= _tt_rank(db, base_tt):
             base_tt = cd.get("admin_tier")
+            admin_won = True
     if base_tt is None:
         base_tt = attendee.ticket_type_id
     base = db.query(models.TicketType).filter(models.TicketType.id == base_tt).first() if base_tt else None
@@ -2825,7 +2844,22 @@ def _effective_access(db, attendee):
     # admits on any event day -- recorded separately so it can never be mistaken
     # for "no days purchased".
     day_dates, unrestricted = set(), False
-    for e in base_ents:
+    # A pass set by hand (desk upgrade, organiser correction) decides the days
+    # as well as the tier (11 Nov 2026). Reading days only from what was paid
+    # left a Friday buyer upgraded to the Three Day pass at the desk refused on
+    # Saturday and Sunday, and a Friday corrected to Saturday admitted on the
+    # wrong day -- with the badge saying "Friday only" either way. Paid day
+    # passes the hand-set pass outranks no longer count; anything paid that
+    # ranks higher would have won the tier above and is not superseded.
+    day_source = base_ents
+    if admin_won and base is not None:
+        _admin_rank = _tt_rank(db, base.id)
+        day_source = [e for e in base_ents if _tt_rank(db, e.get("ticket_type_id")) > _admin_rank]
+        if getattr(base, "valid_day", None):
+            day_dates.add(str(base.valid_day)[:10])
+        else:
+            unrestricted = True
+    for e in day_source:
         _tt = db.query(models.TicketType).filter(models.TicketType.id == e.get("ticket_type_id")).first()
         if not _tt:
             continue
@@ -2843,7 +2877,9 @@ def _effective_access(db, attendee):
     # or on the badge as though they hold one.
     if len(day_list) > 1 and not unrestricted:
         _names = []
-        for e in base_ents:
+        if admin_won and base is not None and getattr(base, "valid_day", None):
+            _names.append(base.name or base.code)
+        for e in day_source:
             _tt = db.query(models.TicketType).filter(models.TicketType.id == e.get("ticket_type_id")).first()
             if _tt is not None and getattr(_tt, "valid_day", None) and (_tt.name or _tt.code) not in _names:
                 _names.append(_tt.name or _tt.code)
@@ -4937,9 +4973,11 @@ def list_public_events(
     )
     if not include_past:
         query = query.filter(
-            (models.Event.end_date == None) | (models.Event.end_date >= datetime.utcnow())
+            (models.Event.end_date == None) | (models.Event.end_date >= datetime.utcnow() - timedelta(days=1))
         )
     events = query.order_by(models.Event.start_date.asc()).all()
+    if not include_past:
+        events = [e for e in events if _not_ended(e)]
     for event in events:
         attach_event_counts(event, db)
     return events
@@ -5048,9 +5086,9 @@ def _vendor_for_setup_token(db, token):
 
 
 @app.post("/exhibitors/{exhibitor_id}/activation-link")
-def vendor_activation_link(exhibitor_id: int, db: Session = Depends(get_db),
+def vendor_activation_link(exhibitor_id: int, rotate: bool = False, db: Session = Depends(get_db),
                            current_user: models.User = Depends(get_current_user)):
-    """Mint a fresh setup link for one stand.
+    """The stand's setup link (a new one only with rotate=1).
 
     Returns the URL so an organiser can send it however they actually reach this
     vendor -- most of these relationships live in email threads and WhatsApp, not
@@ -5060,17 +5098,15 @@ def vendor_activation_link(exhibitor_id: int, db: Session = Depends(get_db),
     if not ex:
         raise HTTPException(status_code=404, detail="Vendor not found")
     authz.require_cap(db, current_user, ex.event_id, "exhibitor.write")
-    token = secrets.token_urlsafe(24)
-    ex.setup_token_hash = _vendor_token_hash(token)
-    ex.setup_sent_at = datetime.utcnow()
-    ex.setup_expires_at = datetime.utcnow() + timedelta(days=VENDOR_SETUP_TTL_DAYS)
-    db.commit()
-    base = (os.environ.get("CARD_PUBLIC_BASE") or "").rstrip("/")
-    app_base = base.replace("//card.", "//api.") if base else ""
+    # The stand's CURRENT link, kept in step with the Email Center (11 Nov
+    # 2026): minting a new one here on every click retired the link a stand had
+    # already been emailed, and the Email Center went on sending the dead one.
+    # A new link only when an organiser asks to replace it (?rotate=1).
+    url, exp, minted = _email_center.setup_link_for_panel(db, ex, rotate=bool(rotate))
     return {"ok": True, "exhibitor_id": ex.id, "company_name": ex.company_name,
             "email": ex.contact_email or None,
-            "url": "%s/vendor/%s" % (app_base or "", token),
-            "expires_at": ex.setup_expires_at.isoformat(),
+            "url": url, "new_link": bool(minted),
+            "expires_at": exp,
             "expires_in_days": VENDOR_SETUP_TTL_DAYS}
 
 
@@ -5848,6 +5884,8 @@ def my_capabilities(event_id: int, db: Session = Depends(get_db),
             "revoke": organiser,
             "change_email": organiser,
             "register_free_badge": organiser,
+            # Door settings (rehearsal, re-entry) are the event's, not the desk's.
+            "door_settings": "event.write" in caps,
         },
     }
 
@@ -5965,6 +6003,33 @@ def walk_in_create(event_id: int, payload: schemas.WalkInCreate,
         raise HTTPException(status_code=400, detail="Record how much was taken at the door")
     if at != "paid" and dps == "collected":
         raise HTTPException(status_code=400, detail="A complimentary or staff badge cannot also be a door sale")
+    # The pass must be one of THIS event's (11 Nov 2026): an unchecked id let a
+    # walk-in carry another year's VIP pass, or none at all.
+    _wi_tt = None
+    if payload.ticket_type_id is not None:
+        _wi_tt = db.query(models.TicketType).filter(models.TicketType.id == payload.ticket_type_id,
+                                                    models.TicketType.event_id == event_id).first()
+        if _wi_tt is None:
+            raise HTTPException(status_code=400, detail="That pass does not belong to this event")
+    else:
+        # No pass chosen: the event's basic exhibit-hall pass, never "no pass"
+        # (a walk-in without one was refused at the door it was made for).
+        try:
+            _wi_tt = _exhibit_only_pass(db, event_id)
+            payload.ticket_type_id = _wi_tt.id
+        except HTTPException:
+            _wi_tt = None
+    # The desk may record "already paid online" without taking money, but not
+    # for more than the exhibit hall: a VIP, conference or workshop pass given
+    # on someone's word is a comp, and a comp is the organiser's call -- the
+    # same line drawn for upgrades at the desk.
+    if not authz.can(db, current_user, event_id, "attendee.write") and dps != "collected" \
+            and (getattr(_wi_tt, "is_vip", False) or getattr(_wi_tt, "grants_conference", False)
+                 or getattr(_wi_tt, "grants_workshops", False)):
+        raise HTTPException(status_code=403,
+                            detail="At the desk, a pass beyond the exhibit hall needs payment taken now. "
+                                   "For someone who says they already paid, register the exhibit-hall pass "
+                                   "and ask an organiser to correct it.")
 
     attendee = models.Attendee(
         event_id=event_id, email=email,
@@ -6453,10 +6518,10 @@ def _resolve_registration_event(payload: dict, db: Session) -> Optional[models.E
             return event
     # Otherwise the next active event that has not finished — the only sensible
     # default when a funnel posts without naming one.
-    return db.query(models.Event).filter(
+    return next((e for e in db.query(models.Event).filter(
         models.Event.is_active == True,
-        (models.Event.end_date == None) | (models.Event.end_date >= datetime.utcnow()),
-    ).order_by(models.Event.start_date.asc()).first()
+        (models.Event.end_date == None) | (models.Event.end_date >= datetime.utcnow() - timedelta(days=1)),
+    ).order_by(models.Event.start_date.asc()).all() if _not_ended(e)), None)
 
 
 def _match_ticket_type(db, event_id, pass_type):
@@ -8189,8 +8254,9 @@ def _review_queue(db, event_id: int, with_money: bool) -> dict:
         if ("ident-%d" % a.id) in _review_resolved_refs(a):
             continue
         add("identity_review", "Who is this record?",
-            "An add-on arrived for an address with no matching badge, so it was "
-            "parked here rather than attached to a guess.",
+            "An add-on or upgrade arrived for an address with no matching badge, so it "
+            "was parked here rather than attached to a guess. It gives no access until "
+            "it is attached to the right ticket.",
             severity="error", attendee=a, ref="ident-%d" % a.id)
 
     if not with_money:
@@ -9811,33 +9877,55 @@ def reconcile_invoice(payload: schemas.ReconcileInvoice, db: Session = Depends(g
             email = _by_contact.email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status_code=400, detail="A contact email is required")
-    mapping = db.query(models.TicketMapping).filter(
+    # Choose the mapping the way the order path does (11 Nov 2026). Taking the
+    # first mapping on the product id gave an invoiced One-Day add-on a full
+    # three-day upgrade, and always picked one storefront variant of a product
+    # that has several.
+    _cands = db.query(models.TicketMapping).filter(
         models.TicketMapping.event_id == event.id,
         models.TicketMapping.external_product_id == (payload.product_id or ""),
-        models.TicketMapping.is_active == True).first()
+        models.TicketMapping.is_active == True).all()
+    mapping = _pick_mapping(_cands, payload.product_name, payload.issued_at) if _cands else None
     if not mapping:
         # Deliberate: an unmapped product is surfaced for review, never guessed
         # into a ticket from its name.
         return {"ok": False, "reason": "product_not_mapped_to_this_event",
                 "product_id": payload.product_id}
-    tt_id = mapping.ticket_type_id
-    existing = _ticket_for_email(db, event.id, email, payload.invoice_id, bool(mapping.is_upgrade))
+    _addon = (getattr(mapping, "addon_code", None) or "").strip()
+    _lifts = bool(mapping.is_upgrade) or bool(_addon)
+    tt_id = None if _addon else mapping.ticket_type_id
+    existing = _ticket_for_email(db, event.id, email, payload.invoice_id, _lifts)
+    # An upgrade or add-on belongs to whoever holds the ticket: try the contact.
+    if existing is None and _lifts and payload.contact_id:
+        existing = _attendee_for_contact(db, event.id, payload.contact_id)
     created = False
     if existing is None:
+        _orphan = _lifts
         existing = models.Attendee(
             event_id=event.id, email=email,
             first_name=payload.first_name or "", last_name=payload.last_name or "",
-            phone=payload.phone, ticket_type_id=tt_id,
-            custom_data={"contact_id": payload.contact_id, "source": "ghl_invoice"},
+            phone=payload.phone, ticket_type_id=(None if _orphan else tt_id),
+            custom_data=dict({"contact_id": payload.contact_id, "source": "ghl_invoice"},
+                             **({"needs_identity_review": True} if _orphan else {})),
             qr_code="ATT-%s" % uuid.uuid4().hex[:12].upper())
         db.add(existing); db.flush()
         stamp_registration(existing, "ghl_invoice", "paid")
         created = True
     custom = dict(existing.custom_data or {})
+    _refunded_refs = set(custom.get("refunded_order_ids") or [])
+    _this_refunded = payload.invoice_id in _refunded_refs
+    if not created and not _ticket_active(existing) and not _this_refunded \
+            and _ticket_status(existing) == "refunded" and not _addon:
+        # A NEW paid invoice from somebody refunded earlier reactivates them,
+        # as a new paid order does; the same invoice replayed never does.
+        existing.registration_status = "active"
+        _lifecycle_append(existing, "reactivated", actor="reconcile", invoice_id=payload.invoice_id)
+        custom = dict(existing.custom_data or {})
     if payload.contact_id:
         custom["contact_id"] = payload.contact_id
     already = any((e.get("invoice_id") == payload.invoice_id) for e in (custom.get("entitlements") or []))
-    _ent_record(custom, None, payload.transaction_id, tt_id, bool(mapping.is_upgrade),
+    _ent_record(custom, None, payload.transaction_id, tt_id, bool(mapping.is_upgrade) and not _addon,
+                addon_code=(_addon or None),
                 event_id=event.id, invoice_id=payload.invoice_id,
                 amount=payload.amount, source="ghl_invoice",
                 product_id=payload.product_id, quantity=payload.quantity,
@@ -9851,9 +9939,13 @@ def reconcile_invoice(payload: schemas.ReconcileInvoice, db: Session = Depends(g
     old_tt = existing.ticket_type_id
     # Tier behaviour matches the order path: a base sets it when unset, an
     # upgrade only ever lifts.
-    if tt_id and not mapping.is_upgrade and not existing.ticket_type_id:
+    # A refunded invoice replayed (the mirror re-reads 14 days) never lifts the
+    # tier again; an add-on never sets the tier at all.
+    if tt_id and not _this_refunded and not mapping.is_upgrade and not existing.ticket_type_id \
+            and not custom.get("needs_identity_review"):
         existing.ticket_type_id = tt_id
-    if tt_id and mapping.is_upgrade and _tt_rank(db, tt_id) >= _tt_rank(db, existing.ticket_type_id):
+    if tt_id and not _this_refunded and mapping.is_upgrade and not custom.get("needs_identity_review") \
+            and _tt_rank(db, tt_id) >= _tt_rank(db, existing.ticket_type_id):
         existing.ticket_type_id = tt_id
     # The admin tier holds the line underneath, and only underneath.
     _floor = custom.get("admin_tier")
@@ -9928,6 +10020,13 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
     # NEW order from the original buyer is theirs and gets its own ticket.
     if existing is None and payload.order_id:
         existing = _ticket_transferred_from(db, event.id, email, payload.order_id)
+
+    # An UPGRADE belongs to whoever holds the ticket it upgrades (11 Nov 2026).
+    # Bought under another address, it found no ticket by email and became a
+    # brand-new attendee holding the upgraded tier -- a full VIP badge with no
+    # base ticket under it. The GHL contact is tried first, as add-ons do.
+    if existing is None and payload.is_upgrade and payload.contact_id and not (payload.addon_code or "").strip():
+        existing = _attendee_for_contact(db, event.id, payload.contact_id)
 
     # A row that was ruled a duplicate keeps its email, so orders keep arriving
     # at it -- and every sync re-grants the purchase to somebody who is revoked
@@ -10284,6 +10383,11 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
         return {"ok": True, "created": False, "upgraded": upgraded,
                 "attendee_id": existing.id, "qr_code": existing.qr_code}
     _cd_new = {"contact_id": payload.contact_id, "order_id": payload.order_id, "source": "ghl_reconcile"}
+    # Still nobody to upgrade: the money is real and is kept, but an upgrade
+    # with no ticket under it is a question for a person, not a badge.
+    _orphan_upgrade = bool(payload.is_upgrade)
+    if _orphan_upgrade:
+        _cd_new["needs_identity_review"] = True
     _ent_record(_cd_new, payload.order_id, None, payload.ticket_type_id, payload.is_upgrade,
                 event_id=event.id, product_id=payload.product_id,
                 quantity=payload.quantity, amount=payload.amount,
@@ -10291,7 +10395,7 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
     attendee = models.Attendee(
         event_id=event.id, email=email,
         first_name=payload.first_name or "", last_name=payload.last_name or "",
-        phone=payload.phone, ticket_type_id=payload.ticket_type_id,
+        phone=payload.phone, ticket_type_id=(None if _orphan_upgrade else payload.ticket_type_id),
         custom_data=_cd_new,
         qr_code=f"ATT-{uuid.uuid4().hex[:12].upper()}")
     db.add(attendee); db.flush()
@@ -10796,8 +10900,10 @@ def get_public_announcements(event_id: int, db: Session = Depends(get_db)):
     """Organiser updates, newest first. Available whether or not live mode is on:
     the useful ones (travel, hotel block, schedule published) go out weeks before
     anyone is standing in the venue."""
-    _published_event_or_404(event_id, db)
-    now = datetime.utcnow()
+    _ev = _published_event_or_404(event_id, db)
+    # Scheduled times are typed as venue wall-clock time (Agenda.js); compare
+    # them with the venue's clock, not UTC (11 Nov 2026: 5 hours early).
+    now = venue_now(_ev) if _ev is not None else datetime.utcnow()
     rows = db.query(models.Announcement).filter(
         models.Announcement.event_id == event_id,
         models.Announcement.is_published == True,
@@ -10839,7 +10945,8 @@ def identity_announcements(event_id: int, payload: schemas.IdentityLookup,
     ticket_type_id = attendee.ticket_type_id if attendee else None
     is_vip = bool(attendee and attendee.ticket_type and attendee.ticket_type.is_vip)
     is_checked_in = bool(attendee and attendee.is_checked_in)
-    now = datetime.utcnow()
+    _ev = db.query(models.Event).filter(models.Event.id == event_id).first()
+    now = venue_now(_ev) if _ev is not None else datetime.utcnow()
     rows = db.query(models.Announcement).filter(
         models.Announcement.event_id == event_id,
         models.Announcement.is_published == True,
@@ -10903,6 +11010,11 @@ def _published_sponsors(event_id: int, db: Session):
         models.Sponsor.is_published == True,
     ).all()
     return sorted(sponsors, key=lambda s: (TIER_ORDER.get((s.tier or "partner").lower(), 9), s.sort_order or 0, s.name or ""))
+
+
+def _not_ended(event) -> bool:
+    """Has this event not finished yet, by the clock at its venue?"""
+    return event.end_date is None or event.end_date >= venue_now(event)
 
 
 def venue_now(event: models.Event) -> datetime:

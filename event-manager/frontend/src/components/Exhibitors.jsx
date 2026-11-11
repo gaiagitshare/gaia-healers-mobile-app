@@ -197,10 +197,13 @@ export default function Exhibitors({ eventId, onCountChange }) {
         } catch (e) { setError(e?.response?.status === 403 ? 'Only an organiser can issue scanner links.' : 'Could not issue a new link.'); }
     };
 
-    const setupLink = async (row) => {
+    // Shows the stand's CURRENT link, so a link already emailed keeps working.
+    // Replacing it is a separate, confirmed step.
+    const setupLink = async (row, rotate = false) => {
+        if (rotate && !window.confirm(`Replace ${row.company_name}'s setup link? The link they already have stops working.`)) return;
         try {
-            const l = await vendorActivationLink(row.id);
-            setInvite(l.data);
+            const l = await vendorActivationLink(row.id, rotate);
+            setInvite({ ...l.data, id: row.id });
         } catch (e) {
             setError(e?.response?.data?.detail || 'Could not make a setup link.');
         }
@@ -572,10 +575,18 @@ export default function Exhibitors({ eventId, onCountChange }) {
                         )}
                     </Stack>
                     <Alert severity="info" sx={{ mt: 2 }} icon={false}>
-                        Expires in {invite?.expires_in_days} days. Making a new link stops the old one working.
+                        {invite?.new_link
+                            ? 'This is a new link. Any link sent earlier no longer works.'
+                            : 'This is the link the stand already has — sending it again is safe.'}
+                        {invite?.expires_at ? ` Valid until ${String(invite.expires_at).slice(0, 10)}.` : ''}
                     </Alert>
                 </DialogContent>
-                <DialogActions><Button onClick={() => setInvite(null)}>Close</Button></DialogActions>
+                <DialogActions>
+                    <Button color="warning" onClick={() => invite && setupLink({ id: invite.id, company_name: invite.company_name }, true)}>
+                        Replace link…
+                    </Button>
+                    <Button onClick={() => setInvite(null)}>Close</Button>
+                </DialogActions>
             </Dialog>
 
             <Dialog open={Boolean(leads)} onClose={() => setLeads(null)} maxWidth="sm" fullWidth>

@@ -1077,6 +1077,9 @@ class ReconcileInvoice(BaseModel):
     transaction_id: Optional[str] = None
     contact_id: Optional[str] = None
     product_id: Optional[str] = None
+    # The line's own name, when the sender has it: one GHL product can carry
+    # several storefront variants, and only the name tells them apart.
+    product_name: Optional[str] = None
     price_id: Optional[str] = None
     amount: Optional[float] = None
     quantity: Optional[int] = 1

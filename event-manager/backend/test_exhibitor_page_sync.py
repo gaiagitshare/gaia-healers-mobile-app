@@ -79,8 +79,10 @@ e1 = exhibitors()
 check(r.returncode == 0 and len(e1) == len(e0), "no exhibitor was created for the 21 on the page", (r.returncode, len(e0), len(e1), r.stdout[-400:]))
 by_co = {v["company_name"]: v for v in e1.values()}
 check(by_co["Rapids Release Therapy"]["site_name"] == "Rapid Release", "\"Rapids Release Therapy\" shows as the page's \"Rapid Release\"")
-check(by_co["ELUMIIS"]["site_name"] == "Eluumis" and by_co["Biohacking Cancer/BOOK"]["site_name"] == "Root Causes",
-      "matched by logo file: ELUMIIS → Eluumis, Biohacking Cancer/BOOK → Root Causes")
+# The sheet's "/BOOK" staff note left the stand's name on 11 Nov 2026.
+_bc = by_co.get("Biohacking Cancer") or by_co.get("Biohacking Cancer/BOOK") or {}
+check(by_co["ELUMIIS"]["site_name"] == "Eluumis" and _bc.get("site_name") == "Root Causes",
+      "matched by logo file: ELUMIIS → Eluumis, Biohacking Cancer → Root Causes")
 check(by_co["HEALEEX"]["site_name"] == "Healeex" and by_co["encompass Life"]["site_name"] == "Encompass Life",
       "matched by name where the logo differs: HEALEEX, encompass Life")
 check(all(v["company_name"] == e0[k]["company_name"] for k, v in e1.items()), "every sheet company_name is unchanged")

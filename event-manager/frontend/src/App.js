@@ -74,7 +74,7 @@ const theme = createTheme({
                     '&:hover': {
                         boxShadow: '0 4px 12px rgba(45, 90, 61, 0.25)',
                     },
-                    '@media (pointer: coarse)': { minHeight: 40 },
+                    '@media (pointer: coarse)': { minHeight: 44 },
                 },
                 containedPrimary: {
                     background: 'linear-gradient(135deg, #2d5a3d 0%, #4a7c59 100%)',
@@ -92,7 +92,27 @@ const theme = createTheme({
         MuiIconButton: { styleOverrides: { root: { '@media (pointer: coarse)': { minWidth: 44, minHeight: 44 } } } },
         MuiMenuItem: { styleOverrides: { root: { '@media (pointer: coarse)': { minHeight: 44 } } } },
         MuiListItemButton: { styleOverrides: { root: { '@media (pointer: coarse)': { minHeight: 48 } } } },
-        MuiChip: { styleOverrides: { clickable: { '@media (pointer: coarse)': { minHeight: 32 } } } },
+        MuiChip: { styleOverrides: { clickable: { '@media (pointer: coarse)': { minHeight: 36 } } } },
+        // iPad (11 Nov 2026): checkboxes and tabs were the smallest targets left.
+        MuiCheckbox: { styleOverrides: { root: { '@media (pointer: coarse)': { padding: 11 } } } },
+        MuiTab: { styleOverrides: { root: { '@media (pointer: coarse)': { minHeight: 48 } } } },
+        // Look (11 Nov 2026): one quiet, consistent style for every table, card
+        // and notice, so pages read alike and the data stands out from the frame.
+        MuiPaper: { styleOverrides: { outlined: { borderColor: '#243026' } } },
+        MuiTableCell: {
+            styleOverrides: {
+                root: { borderColor: '#1e2820' },
+                head: {
+                    fontSize: 12, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase',
+                    color: '#9fb29a', backgroundColor: '#152018', whiteSpace: 'nowrap',
+                },
+            },
+        },
+        MuiTableRow: { styleOverrides: { root: { '&.MuiTableRow-hover:hover': { backgroundColor: 'rgba(124,194,63,0.06)' } } } },
+        MuiAlert: { styleOverrides: { root: { borderRadius: 10, alignItems: 'center' } } },
+        MuiTabs: { styleOverrides: { indicator: { height: 3, borderRadius: 3 } } },
+        MuiTooltip: { styleOverrides: { tooltip: { fontSize: 13 } } },
+        MuiOutlinedInput: { styleOverrides: { root: { borderRadius: 10 } } },
     },
 });
 

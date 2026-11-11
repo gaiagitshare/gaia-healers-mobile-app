@@ -92,10 +92,11 @@ def parse(csv_text):
         if first in SECTIONS and not cells[col["company"]]:
             section, stage = cells[status_col], SECTIONS[first]
             continue
-        company = cells[col["company"]]
+        company, name_note = split_staff_note(cells[col["company"]])
         if not company:
             continue
         rec = {"row": n, "section": section, "stage": stage, "company": company,
+               "name_note": name_note,
                "status_text": cells[status_col],
                "booth": cells[col["booth"]] if "booth" in col else "",
                "booth_old": _num(cells[col["booth_old"]]) if "booth_old" in col else "",
@@ -121,6 +122,8 @@ def parse(csv_text):
             rec["issues"].append("booth is not a plain number: %r" % rec["booth"])
         if rec["contact"] and rec["company"] and EMAIL_RE.match(rec["company"]):
             rec["issues"].append("company column holds an email")
+        if name_note:
+            rec["issues"].append("company cell carries a staff note %r (kept off the stand's name)" % ("/" + name_note))
         rec["payment_status"] = _payment_status(rec["status_text"], rec["package"])
         out.append(rec)
     return out
@@ -154,6 +157,27 @@ def booth_note(rec, prefer="booth"):
     if not raw or re.sub(r"[#\s]", "", raw) == re.sub(r"\s", "", shown):
         return ""
     return "booth cell reads %r; attendees are shown %s" % (raw, ("%r" % shown) if shown else "no booth")
+
+
+# The team writes short notes for each other into the company cell itself:
+# "Transform and RISE /BOOK" means "Bita: book this one" (11 Nov 2026). The
+# note is not part of the name -- it was reaching the public directory, the
+# map and the stand's own emails. A trailing "/WORD" in capitals is read as
+# such a note when the name before it is not itself all capitals, so a real
+# name like "AC/DC" or "HEALEEX/USA" is left alone.
+_STAFF_NOTE = re.compile(r"^(.*?[^\s/])\s*/\s*([A-Z]{2,12})\s*$")
+
+
+def split_staff_note(company):
+    """-> (name, note) with a trailing staff note like "/BOOK" taken off the name."""
+    s = (company or "").strip()
+    m = _STAFF_NOTE.match(s)
+    if not m:
+        return s, ""
+    name, note = m.group(1).strip(), m.group(2)
+    if not re.search(r"[a-z]", name):
+        return s, ""
+    return name, note
 
 
 def norm_name(s):

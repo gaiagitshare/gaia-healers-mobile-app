@@ -129,7 +129,7 @@ function EventWorkspace() {
     return (
         <Box>
             <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" sx={{ mb: 1 }}>
-                <Typography variant="h4" sx={{ fontSize: { xs: '1.4rem', sm: '2rem' } }}>
+                <Typography variant="h4" sx={{ fontSize: { xs: '1.3rem', sm: '1.6rem' }, fontWeight: 700 }}>
                     {event ? event.name : 'Loading event…'}
                 </Typography>
                 {event && (

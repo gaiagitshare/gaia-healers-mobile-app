@@ -779,8 +779,23 @@ def _app_base():
     return base.replace("//card.", "//api.") if base else ""
 
 
-def _setup_link(db, s, ex, mint_if_missing=True):
+def _current_link(s, ex):
+    """The stored setup link, only while it is still THIS stand's live link.
+
+    A link can be replaced outside the Email Center (the Exhibitors page's
+    "Setup link" button, 11 Nov 2026). Trusting the stored URL until its date
+    ran out sent stands reminders with a link that no longer opened."""
     url, exp = ec_store.exhibitor_link(s.db, ex.event_id, ex.id)
+    if not url:
+        return None, None
+    tok = url.rstrip("/").rsplit("/", 1)[-1]
+    if not ex.setup_token_hash or M._vendor_token_hash(tok) != ex.setup_token_hash:
+        return None, None
+    return url, exp
+
+
+def _setup_link(db, s, ex, mint_if_missing=True):
+    url, exp = _current_link(s, ex)
     if url:
         return url, exp, False
     if not mint_if_missing:
@@ -817,7 +832,7 @@ def exhibitor_rows(db, event_id, s):
     for ex in db.query(models.Exhibitor).filter(models.Exhibitor.event_id == event_id,
                                                 models.Exhibitor.stage == "confirmed").all():
         email = (ex.contact_email or "").strip().lower()
-        own_link, own_exp = ec_store.exhibitor_link(s.db, event_id, ex.id)
+        own_link, own_exp = _current_link(s, ex)
         expires = _iso(ex.setup_expires_at)
         row = {"id": ex.id, "company_name": ex.company_name, "booth_number": ex.booth_number,
                "contact_name": ex.contact_name, "contact_email": email or None,
@@ -950,6 +965,20 @@ def _possible_duplicate(ex, pending):
         if same or (mine & theirs):
             return {"id": p.id, "name": p.company_name, "package": p.package}
     return None
+
+
+def setup_link_for_panel(db, ex, rotate=False):
+    """The Exhibitors page's "Setup link" button: the stand's current link, so
+    a link already emailed keeps working; a new one only when asked to rotate,
+    and then recorded here so reminders and resends use the new one."""
+    s = _store()
+    try:
+        if rotate:
+            ec_store.store_link(s.db, ex.event_id, ex.id, None, None)
+        url, exp, minted = _setup_link(db, s, ex, mint_if_missing=True)
+        return url, exp, minted
+    finally:
+        s.close()
 
 
 def note_stand_email_change(ex, change):

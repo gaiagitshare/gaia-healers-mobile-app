@@ -112,8 +112,9 @@
 
   function shell() {
     function item(id, label, icon, ext) {
-      if (ext) return '<a class="nav__item" href="' + ext + '" target="_blank" rel="noopener">' + svg(icon, 'nav__ico') + label + '<span class="nav__ext">' + svg('ext') + '</span></a>';
-      return '<div class="nav__item ' + (view === id ? 'is-active' : '') + '" data-nav="' + id + '">' + svg(icon, 'nav__ico') + label + '</div>';
+      // Labels in their own span so the iPad icon strip can shorten them.
+      if (ext) return '<a class="nav__item" title="' + label + '" href="' + ext + '" target="_blank" rel="noopener">' + svg(icon, 'nav__ico') + '<span class="nav__lbl">' + label + '</span><span class="nav__ext">' + svg('ext') + '</span></a>';
+      return '<div class="nav__item ' + (view === id ? 'is-active' : '') + '" title="' + label + '" data-nav="' + id + '">' + svg(icon, 'nav__ico') + '<span class="nav__lbl">' + label + '</span></div>';
     }
     var titles = {
       contacts: ['Contacts', 'Search, filter by tag, and edit any contact’s tags & survey answers'],
@@ -137,12 +138,12 @@
       + item('surveys', 'Surveys', 'survey')
       + item('membership', 'Membership', 'member')
       + item('events', 'Events', 'event')
-      + item('system', 'System Map', 'system')
+      + item('system', 'System Map', 'system').replace('System Map</span>', 'System Map</span><span class="nav__short">Map</span>')
       + '    <div class="nav__sp"></div>'
-      + '    <button class="nav__item alertbtn" id="alertbtn">' + svg('lock', 'nav__ico')
-      + '<span>System Alerts</span><span class="alertbtn__n" id="alertn"></span></button>'
-      + '    <div class="nav__item" id="changepw">' + svg('lock', 'nav__ico') + 'Change password</div>'
-      + '    <div class="nav__item" id="logout">' + svg('logout', 'nav__ico') + 'Sign out</div>'
+      + '    <button class="nav__item alertbtn" id="alertbtn" title="System Alerts">' + svg('lock', 'nav__ico')
+      + '<span class="nav__lbl">System Alerts</span><span class="nav__short">Alerts</span><span class="alertbtn__n" id="alertn"></span></button>'
+      + '    <div class="nav__item" id="changepw" title="Change password">' + svg('lock', 'nav__ico') + '<span class="nav__lbl">Change password</span><span class="nav__short">Password</span></div>'
+      + '    <div class="nav__item" id="logout" title="Sign out">' + svg('logout', 'nav__ico') + '<span class="nav__lbl">Sign out</span></div>'
       + '    <div class="side__foot">Gaia Healers &middot; live from GHL</div>'
       + '  </aside>'
       + '  <main class="main">'

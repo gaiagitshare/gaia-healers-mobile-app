@@ -316,6 +316,7 @@ button{font-family:inherit}
 /* The sidebar slides away below 760px. The button that brings it back lives
    here too -- without it the whole console was one screen deep on a phone. */
 .sidetoggle{display:none}
+.nav__short{display:none}
 .side__scrim{display:none}
 @media(max-width:760px){
   .app{grid-template-columns:1fr}
@@ -447,3 +448,26 @@ button.smh:focus-visible{outline:2px solid var(--green);outline-offset:2px}
 .hdinc--crit{border-left-color:#eb6e6e}
 .hdinc b{display:block;font-size:12.5px}
 .hdinc span{font-size:11px;color:var(--dim)}
+
+/* iPad and smaller windows (761-1279px): the menu becomes a slim icon strip
+   with short labels, so the page -- above all the Event Manager -- gets the
+   width (11 Nov 2026). Phones keep the slide-out menu; wide screens the full one. */
+@media (min-width:761px) and (max-width:1279px){
+  .app{grid-template-columns:78px 1fr}
+  .side{padding:14px 6px;gap:4px;align-items:stretch}
+  .brand{justify-content:center;padding:4px 0 12px}
+  .brand > div{display:none}
+  .nav__item{flex-direction:column;justify-content:center;gap:4px;padding:9px 2px;min-height:56px;text-align:center}
+  .nav__lbl{font-size:10.5px;line-height:1.15;max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .nav__ico{width:20px;height:20px;flex:0 0 20px}
+  .nav__ext,.side__foot{display:none}
+  .nav__item:has(.nav__short) .nav__lbl{display:none}
+  .nav__short{display:block;font-size:10.5px;line-height:1.15}
+  /* a slimmer title bar, so the Event Manager starts higher */
+  .top{padding:12px 20px 10px}
+  .top .sub{display:none}
+  .alertbtn{position:relative}
+  .alertbtn__n{position:absolute;top:4px;right:10px}
+}
+/* Touch screens: menu items at least 44px tall. */
+@media (pointer:coarse){ .nav__item{min-height:44px} }

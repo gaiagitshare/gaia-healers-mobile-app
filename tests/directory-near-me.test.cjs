@@ -55,3 +55,7 @@ test('location: asked only on tap, failures explained, a city or zip works too',
 test('profiles link to the public page on gaiapractitioners.com', () => {
   assert.match(SRC, /gaiapractitioners\.com\/practitioner\/profile\/' \+ encodeURIComponent/);
 });
+
+test('booking from a profile closes the profile so the calendar is on top', () => {
+  assert.match(SRC, /closest\('\[data-book-inline\]'\)\) setTimeout\(close, 0\)/);
+});

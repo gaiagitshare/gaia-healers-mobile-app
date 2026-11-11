@@ -289,7 +289,12 @@
     document.documentElement.style.overflow = 'hidden';
     function close() { overlay.remove(); document.documentElement.style.overflow = ''; }
     overlay.querySelector('[data-dp-close]').addEventListener('click', close);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) { close(); return; }
+      // Booking opens its own window; this card must step aside or the
+      // calendar opens underneath it and the tap looks like it did nothing.
+      if (e.target.closest('[data-book-inline]')) setTimeout(close, 0);
+    });
 
     var p = null;
     try { var r = await fetch(proxyBase() + '/api/directory/' + encodeURIComponent(id)); var j = await r.json(); if (j && j.ok) p = j.practitioner; } catch (e) {}

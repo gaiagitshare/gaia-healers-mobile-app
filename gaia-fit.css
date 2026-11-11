@@ -2010,7 +2010,7 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .gaia-dirprofile__hero { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
 .gaia-dirprofile__img { width: 76px; height: 76px; border-radius: 16px; object-fit: cover; }
 .gaia-dirprofile__hero h2 { font-family: var(--g-font-serif, "Cormorant Garamond", serif); font-weight: 600; font-size: 24px; line-height: 1.05; margin: 0 0 4px; }
-.gaia-dirprofile__loc { font-size: 13px; color: var(--g-text-dim, #93A597); margin: 0 0 6px; display: inline-flex; align-items: center; gap: 4px; }
+.gaia-dirprofile__loc { font-size: 13px; color: var(--g-text-dim, #93A597); margin: 0 0 6px; display: flex; align-items: center; gap: 4px; }
 .gaia-dirprofile__specs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
 .gaia-dirprofile__actions { display: flex; flex-direction: column; gap: 8px; }
 .gaia-dirprofile__actions .g-btn { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }

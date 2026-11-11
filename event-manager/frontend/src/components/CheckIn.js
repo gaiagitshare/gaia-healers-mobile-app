@@ -210,7 +210,33 @@ function CheckIn({ timezone: timezoneProp }) {
     // Below lg the activity feed sits UNDER the search results, not beside them,
     // so a hundred rows there is a wall the operator scrolls past to find the
     // queue. Folded until asked for, and paged once open.
-    const sideBySide = useMediaQuery(useTheme().breakpoints.up('lg'));
+    // iPad check-in stations (11 Nov 2026): a tablet in landscape gets the two
+    // columns too, so the scan result sits beside the scanner instead of below
+    // the fold; a tablet or a door-staff login gets the compact top.
+    const tablet = useMediaQuery('(pointer: coarse) and (min-width: 700px)');
+    const landscapeTablet = useMediaQuery('(pointer: coarse) and (min-width: 1000px) and (orientation: landscape)');
+    const sideBySide = useMediaQuery(useTheme().breakpoints.up('lg')) || landscapeTablet;
+    const [showPicker, setShowPicker] = useState(false);
+    const resultRef = useRef(null);
+    // Keep the station's screen on while the check-in page is open: an iPad
+    // that locks between guests means a passcode in front of the queue.
+    useEffect(() => {
+        let lock = null; let alive = true;
+        const ask = async () => {
+            try { if (alive && navigator.wakeLock && document.visibilityState === 'visible') lock = await navigator.wakeLock.request('screen'); } catch (e) { /* not supported or refused */ }
+        };
+        ask();
+        const again = () => { if (document.visibilityState === 'visible') ask(); };
+        document.addEventListener('visibilitychange', again);
+        return () => { alive = false; document.removeEventListener('visibilitychange', again); try { lock && lock.release(); } catch (e) { /* */ } };
+    }, []);
+    // One column (portrait): bring each new result into view, so the desk
+    // never scrolls to find out whether the guest may go in.
+    useEffect(() => {
+        if (!sideBySide && result && resultRef.current) {
+            try { resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { /* */ }
+        }
+    }, [result, sideBySide]);
     const [activityOpen, setActivityOpen] = useState(false);
     // The print log has always been written and never read. Reading it back is
     // what makes naming a desk worth doing.
@@ -1207,13 +1233,18 @@ function CheckIn({ timezone: timezoneProp }) {
     const shownLogs = scanLogs.filter((l) => !logFilter || logState(l) === logFilter);
     const logCounts = scanLogs.reduce((a, l) => { const k = logState(l); a[k] = (a[k] || 0) + 1; return a; }, {});
 
+    // Compact top for an iPad station or a door-staff login; the two banners
+    // become one status line for people who cannot change them anyway.
+    const compactDoor = tablet || Boolean(may && may.door_settings === false);
+    const slimStatus = Boolean(may && may.door_settings === false);
+
     return (
         <Box>
             {!eventIdFromRoute && (
                 <Typography variant="h5" sx={{ mb: 2 }}>Check-In &amp; Access</Typography>
             )}
 
-            {!eventIdFromRoute && (
+            {!eventIdFromRoute && (!compactDoor || !autoPicked || showPicker || !pickedEvent) && (
                 <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
                     <TextField select fullWidth size="small" label="Which event's door is this?"
                         value={pickedEvent ? pickedEvent.id : ''}
@@ -1394,6 +1425,11 @@ function CheckIn({ timezone: timezoneProp }) {
                                 {!doorEvent.is_active && (
                                     <Chip size="small" color="error" label="Archived — badges will not admit" />
                                 )}
+                                {compactDoor && !eventIdFromRoute && autoPicked && (
+                                    <Button size="small" sx={{ ml: 'auto' }} onClick={() => setShowPicker((v) => !v)}>
+                                        {showPicker ? 'Done' : 'Change'}
+                                    </Button>
+                                )}
                             </Stack>
                             {!doorEvent.is_active && (
                                 <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'error.light' }}>
@@ -1408,7 +1444,17 @@ function CheckIn({ timezone: timezoneProp }) {
                         this year's door, so it is never removed — it is waived,
                         deliberately, for this one event, and said out loud for as
                         long as it is on. */}
-                    {doorNotOpenYet && (
+                    {slimStatus && (doorNotOpenYet || (doorEvent && !reEntry)) && (
+                        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
+                            {doorNotOpenYet && (
+                                <Chip color={rehearsal ? 'warning' : 'default'} variant={rehearsal ? 'filled' : 'outlined'}
+                                      label={rehearsal ? 'Rehearsal — practice scans, nothing counts' : 'Event hasn’t started — check-in locked'} />
+                            )}
+                            {doorEvent && !reEntry && <Chip variant="outlined" color="warning" label="Re-entry off — one entry per badge" />}
+                            <Typography variant="caption" color="text.secondary">An organiser changes these.</Typography>
+                        </Stack>
+                    )}
+                    {!slimStatus && doorNotOpenYet && (
                         <Paper variant="outlined" sx={{ mb: 2, borderColor: rehearsal ? 'warning.main' : 'divider',
                                                         bgcolor: rehearsal ? 'warning.dark' : 'transparent',
                                                         ...(rehearsal ? { backgroundImage: 'linear-gradient(rgba(0,0,0,.72),rgba(0,0,0,.72))' } : {}) }}>
@@ -1472,7 +1518,7 @@ function CheckIn({ timezone: timezoneProp }) {
                         morning — three hundred people, at the same time, at eight
                         o'clock. It lives here, next to the scanner, because the
                         moment anybody discovers they need it there is a queue. */}
-                    {doorEvent && (
+                    {!slimStatus && doorEvent && (
                         <Paper variant="outlined" sx={{ p: 1.5, mb: 2,
                                                         borderColor: reEntry ? 'divider' : 'warning.main' }}>
                             <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap>
@@ -1513,7 +1559,7 @@ function CheckIn({ timezone: timezoneProp }) {
                         right. One column meant the last scan scrolled away under the
                         search results. */}
                     <Box sx={{ display: 'grid', gap: 2,
-                               gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1.35fr) minmax(320px, 1fr)' },
+                               gridTemplateColumns: sideBySide ? 'minmax(0, 1.35fr) minmax(320px, 1fr)' : '1fr',
                                alignItems: 'start' }}>
                         <Stack spacing={2} sx={{ minWidth: 0 }}>
                             {/* ── The primary action ───────────────────────────── */}
@@ -1552,8 +1598,8 @@ function CheckIn({ timezone: timezoneProp }) {
                                 </Stack>
                             </Paper>
 
-                            {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
-                            {result && result.result && decisionCard(result)}
+                            {!sideBySide && error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
+                            {!sideBySide && result && result.result && <Box ref={resultRef}>{decisionCard(result)}</Box>}
 
                             {/* ── Find them by name ────────────────────────────── */}
                             <Paper variant="outlined" sx={{ p: 2 }}>
@@ -1598,6 +1644,17 @@ function CheckIn({ timezone: timezoneProp }) {
                             </Paper>
                         </Stack>
 
+                        {/* ── Right column: the last scan, then activity ─────────
+                            With two columns the result sits here, in view, beside
+                            the scanner -- no scrolling between guests. */}
+                        <Stack spacing={2} sx={{ minWidth: 0 }}>
+                        {sideBySide && error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
+                        {sideBySide && result && result.result && <Box ref={resultRef}>{decisionCard(result)}</Box>}
+                        {sideBySide && !result && !error && (
+                            <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', borderStyle: 'dashed' }}>
+                                <Typography color="text.secondary">Scan a badge — the result shows here.</Typography>
+                            </Paper>
+                        )}
                         {/* ── Activity ─────────────────────────────────────────── */}
                         <Paper variant="outlined" sx={{ minWidth: 0 }}>
                             <Stack direction="row" justifyContent="space-between" alignItems="center"
@@ -1714,6 +1771,7 @@ function CheckIn({ timezone: timezoneProp }) {
                                 </Box>
                             )}
                         </Paper>
+                        </Stack>
                     </Box>
                 </>
             )}

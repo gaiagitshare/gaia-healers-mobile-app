@@ -36,7 +36,7 @@
     }
     box.innerHTML = '<div class="g-home3__recs-grid">' + r.items.map(function (p) {
       var photo = p.image
-        ? '<img src="' + esc(p.image) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML=window.GaiaHome3Placeholder" />'
+        ? '<img src="' + esc(p.image) + '" alt="" decoding="async" referrerpolicy="no-referrer" onerror="this.outerHTML=window.GaiaHome3Placeholder" />'
         : PLACEHOLDER;
       var loc = [p.city, p.state].filter(Boolean).join(', ') + (p.distance ? ' (' + p.distance + ')' : '');
       return '<article class="g-home3__rec">'

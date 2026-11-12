@@ -246,3 +246,131 @@ body.gaia-v2 .g-appt-book > h2 { font-family: var(--h3-serif); font-weight: 600;
   body.gaia-v2 .g-home3__more { margin-left: 0; }
   body.gaia-v2 .g-home3__plan h3 { font-size: 27px; }
 }
+
+/* ---- Live check fixes (12 Nov 2026) ---- */
+/* One background for the whole page: the main column carried its own glow,
+   which read as a frame with lighter strips at its edges. */
+body.gaia-v2 main.gaia-main, body.gaia-v2 .gaia-main { background: transparent !important; }
+html body.gaia-v2 { background: radial-gradient(1100px 560px at 75% -160px, rgba(120, 200, 80, 0.10), transparent 70%) fixed, #07140d !important; }
+/* Book now: same size on every card, sitting at the bottom. */
+body.gaia-v2 .g-home3__rec { grid-template-rows: 1fr auto; align-items: start; }
+body.gaia-v2 .g-home3__rec > .g-home3__btn { align-self: end; min-height: 40px; height: auto; }
+/* Names wrap at words, never mid-word; a smaller photo where cards are narrow. */
+body.gaia-v2 .g-home3__rec h3 { overflow-wrap: break-word; word-break: normal; hyphens: auto; }
+@media (min-width: 1100px) and (max-width: 1500px) {
+  body.gaia-v2 .g-home3__rec-photo { width: 70px; height: 78px; }
+  body.gaia-v2 .g-home3__rec-top { gap: 12px; }
+  body.gaia-v2 .g-home3__rec h3 { font-size: 16px; }
+}
+/* Your journey: a soft glow, not a cropped picture with hard edges. */
+body.gaia-v2 .g-home3__journey { background: radial-gradient(90% 70% at 100% 100%, rgba(183, 255, 98, 0.16), transparent 65%), radial-gradient(70% 50% at 0% 0%, rgba(120, 200, 80, 0.10), transparent 70%), linear-gradient(170deg, #14301f, #0e2217) !important; }
+body.gaia-v2 .g-home3__journey::before { display: none; }
+/* More for you: daily check and Next on your path on the left, Book a session on the right. */
+@media (min-width: 1100px) {
+  body.gaia-v2 .g-home3__more-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-auto-flow: row dense; }
+  body.gaia-v2 .g-home3__more-grid > :not(.g-home2__book) { grid-column: 1; }
+  body.gaia-v2 .g-home3__more-grid > .g-home2__book { grid-column: 2; grid-row: 1 / span 3; }
+}
+body.gaia-v2 .g-home3__more-grid #path-row { margin: 0 !important; }
+/* Event meta: icon and text together on each item. */
+body.gaia-v2 .g-home3__event-meta span i { color: var(--h3-lime); }
+/* My appointments: serif title like the rest of the design; buttons at their own width. */
+body.gaia-v2 #bookings-body .g-super-page-head h1 { font-family: var(--h3-serif); font-weight: 600; font-size: clamp(34px, 3vw, 46px); }
+body.gaia-v2 .g-appt-empty .g-btn { width: auto !important; display: inline-flex; padding-inline: 22px; }
+
+/* ---- Refinement pass (12 Nov 2026): lighter, quieter, higher quality ----
+   The first build was heavy: oversized serif, thick lime outlines, large
+   glowing pills, chunky cards. Same layout and colours; smaller type, slimmer
+   buttons, hairline borders, softer shadows, tighter rhythm. */
+body.gaia-v2 .g-home3 { max-width: 1240px; }
+body.gaia-v2 .g-home3 > * + * { margin-top: 12px !important; }
+body.gaia-v2 .g-home3__greet h1 { font-size: clamp(28px, 2.3vw, 34px); font-weight: 500; }
+body.gaia-v2 .g-home3__greet p { font-size: 14.5px; margin-top: 4px; color: #c9cfbf; }
+
+/* buttons */
+body.gaia-v2 .g-home3__btn { min-height: 38px; padding: 0 16px; font-size: 13.5px; font-weight: 600; gap: 6px; letter-spacing: .01em; }
+body.gaia-v2 .g-home3__btn--sm { min-height: 32px; padding: 0 13px; font-size: 13px; }
+body.gaia-v2 .g-home3__btn--lime { box-shadow: 0 2px 10px rgba(183, 255, 98, 0.14); }
+body.gaia-v2 .g-home3__btn--lime:hover { box-shadow: 0 4px 14px rgba(183, 255, 98, 0.22); }
+body.gaia-v2 .g-home3__btn--outline { border-width: 1px; border-color: rgba(183, 255, 98, 0.38); background: rgba(7, 20, 13, 0.25); }
+body.gaia-v2 .g-home3__btn i { font-size: 15px; }
+
+/* hairline borders, soft shadows everywhere on Home */
+body.gaia-v2 :is(.g-home3__hero, .g-home3__card, .g-home3__rec, .g-home3__journey, .g-home3__event, .g-home3__plan) {
+  border-color: rgba(183, 255, 98, 0.13) !important; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22) !important; border-radius: 16px; }
+
+/* hero */
+body.gaia-v2 .g-home3__hero { min-height: 158px; padding: 24px 30px; }
+body.gaia-v2 .g-home3__hero h2 { font-size: clamp(28px, 2.5vw, 36px); font-weight: 500; margin-bottom: 16px; }
+body.gaia-v2 .g-home3__field { flex-basis: 420px; }
+body.gaia-v2 .g-home3__field input { min-height: 42px; font-size: 14px; border-width: 1px; border-color: rgba(247, 245, 233, 0.28); padding-left: 42px; }
+body.gaia-v2 .g-home3__field i { left: 15px; font-size: 16px; }
+body.gaia-v2 .g-home3__search .g-home3__btn { min-height: 42px; }
+
+/* three cards */
+body.gaia-v2 .g-home3__card { min-height: 118px; grid-template-columns: 104px minmax(0, 1fr); gap: 6px; padding-right: 14px; }
+body.gaia-v2 .g-home3__card-art { width: 104px; min-height: 116px; }
+body.gaia-v2 .g-home3__card h3 { font-size: clamp(18px, 1.4vw, 21px); font-weight: 500; margin-bottom: 3px; }
+body.gaia-v2 .g-home3__card p { font-size: 12.5px; line-height: 1.38; margin-bottom: 8px; color: #c4cabb; }
+
+/* section headings */
+body.gaia-v2 :is(.g-home3__recs h2, .g-home3__journey h2) { font-size: 23px; font-weight: 500; }
+body.gaia-v2 .g-home3__recs-head { margin-bottom: 8px; gap: 10px; }
+body.gaia-v2 .g-home3__chip { min-height: 28px; padding: 0 10px; font-size: 12.5px; font-weight: 500; border-color: rgba(183, 255, 98, 0.22); }
+body.gaia-v2 .g-home3__more { font-size: 12.5px; font-weight: 500; }
+
+/* practitioner cards: compact */
+body.gaia-v2 .g-home3__recs-grid { gap: 10px; }
+body.gaia-v2 .g-home3__rec { padding: 12px; gap: 10px; justify-items: stretch; }
+body.gaia-v2 .g-home3__rec-photo { width: 60px !important; height: 66px !important; border-radius: 10px; }
+body.gaia-v2 .g-home3__rec-top { gap: 11px !important; }
+body.gaia-v2 .g-home3__rec h3 { font-size: 14.5px !important; margin: 0 0 4px; font-weight: 600; }
+body.gaia-v2 .g-home3__rec-loc { font-size: 12px; margin-bottom: 6px; color: #c4cabb; }
+body.gaia-v2 .g-home3__rec-next { font-size: 12.5px; gap: 6px; }
+body.gaia-v2 .g-home3__rec-next i { font-size: 15px; }
+body.gaia-v2 .g-home3__rec-next b { font-size: 11px; font-weight: 600; }
+body.gaia-v2 .g-home3__rec > .g-home3__btn { justify-self: stretch; min-height: 34px; }
+
+/* journey */
+body.gaia-v2 .g-home3__journey { padding: 16px 18px; gap: 10px; }
+body.gaia-v2 .g-home3__j-ring { width: 46px; height: 46px; font-size: 22px; border-width: 1.5px; box-shadow: 0 0 14px rgba(183, 255, 98, 0.16); }
+body.gaia-v2 .g-home3__j-main { gap: 12px; }
+body.gaia-v2 .g-home3__j-main strong { font-size: 15.5px; }
+body.gaia-v2 .g-home3__j-main p { font-size: 12.5px; color: #c4cabb; }
+body.gaia-v2 .g-home3__j-next { padding: 8px 10px; font-size: 12.5px; }
+body.gaia-v2 .g-home3__j-cta { min-height: 38px; font-size: 14px; }
+
+/* event + plan */
+body.gaia-v2 .g-home3__event, body.gaia-v2 .g-home3__plan { min-height: 190px; }
+body.gaia-v2 .g-home3__event-body { padding: 20px 24px; gap: 6px; }
+body.gaia-v2 .g-home3__event h2 { font-size: clamp(22px, 2vw, 28px); font-weight: 500; }
+body.gaia-v2 .g-home3__event-meta { font-size: 13.5px; gap: 4px 18px; }
+body.gaia-v2 .g-home3__event-blurb { font-size: 13px; color: #c4cabb; }
+body.gaia-v2 .g-home3__plan { padding: 20px; gap: 8px; }
+body.gaia-v2 .g-home3__plan-icon { width: 38px; height: 38px; font-size: 18px; box-shadow: none; }
+body.gaia-v2 .g-home3__plan h3 { font-size: 23px; font-weight: 500; }
+body.gaia-v2 .g-home3__plan p { font-size: 13px; }
+body.gaia-v2 .g-home3__eyebrow { font-size: 11px; letter-spacing: .16em; font-weight: 600; }
+
+/* More for you */
+body.gaia-v2 .g-home3__more-grid .g-home2__state { padding: 14px 16px; }
+body.gaia-v2 .g-home3__more-grid .g-home2__state h2 { font-size: 18px; }
+
+/* sidebar: lighter weight, forest kept below the menu */
+@media (min-width: 1100px) {
+  body.gaia-v2 .gaia-tabbar { background:
+      linear-gradient(180deg, #0b1d12 0%, #09190f 52%, rgba(9, 25, 15, 0) 70%),
+      url("assets/home3/ref-forest.webp") center bottom / 100% auto no-repeat,
+      #0a1a10 !important; }
+  body.gaia-v2 .gaia-tabbar__inner { padding: 22px 14px 160px !important; gap: 2px; }
+  body.gaia-v2 .gaia-tabbar .gaia-rail__brand { padding-bottom: 20px; }
+  body.gaia-v2 .gaia-tabbar .gaia-rail__brand img { width: 34px !important; height: 34px !important; }
+  body.gaia-v2 .gaia-tabbar .gaia-rail__brand span { font-size: 21px !important; }
+  body.gaia-v2 .gaia-tabbar__link, body.gaia-v2 .gaia-tabbar__home { padding: 9px 14px !important; gap: 13px !important; }
+  body.gaia-v2 .gaia-tabbar .gaia-tabbar__inner .gaia-tabbar__label,
+  body.gaia-v2 .gaia-tabbar .gaia-tabbar__inner .gaia-rail__home-label { font-size: 14.5px !important; }
+  body.gaia-v2 .gaia-tabbar__icon { font-size: 19px !important; }
+  body.gaia-v2 .gaia-tabbar__link.is-active, body.gaia-v2 .gaia-tabbar__home.is-active,
+  body.gaia-v2 .gaia-tabbar__link[aria-current="page"], body.gaia-v2 .gaia-tabbar__home[aria-current="page"] {
+    background: rgba(183, 255, 98, 0.16) !important; box-shadow: inset 0 0 0 1px rgba(183, 255, 98, 0.22) !important; font-weight: 600; }
+}

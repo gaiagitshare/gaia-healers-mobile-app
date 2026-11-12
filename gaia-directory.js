@@ -195,7 +195,7 @@
     return '';
   }
   function photoHtml(p, cls) {
-    if (p.image) return '<img class="' + cls + '" src="' + esc(p.image) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';" />'
+    if (p.image) return '<img class="' + cls + '" src="' + esc(p.image) + '" alt="" loading="' + (cls === 'gaia-dirprofile__img' ? 'eager' : 'lazy') + '" referrerpolicy="no-referrer" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';" />'
       + '<span class="' + cls + ' g-dir-avatar" style="display:none">' + esc(initials(p.name)) + '</span>';
     return '<span class="' + cls + ' g-dir-avatar">' + esc(initials(p.name)) + '</span>';
   }
@@ -215,6 +215,17 @@
       + '</span></button>';
   }
 
+  // The top band: with a scan purpose, what you are choosing; otherwise one
+  // quiet offer to switch to it. Both carry .g-dir__intent so they swap in place.
+  function introHtml() {
+    if (intent === 'scan') return '<div class="g-dir__intent"><i class="ph ph-pulse"></i><div><strong>Reserve a Bio-Well scan · ' + SCAN_PRICE + '</strong><span>Choose a Bio-Well practitioner near you, then take a time on their calendar.</span></div><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-dir-near><i class="ph ph-crosshair"></i> Near me</button><button type="button" class="g-dir__intent-x" data-dir-intent-clear aria-label="Show all practitioners">×</button></div>';
+    return '<div class="g-dir__intent g-dir__intent--offer"><i class="ph ph-pulse"></i><div><strong>Bio-Well biofield scan · ' + SCAN_PRICE + '</strong><span>See Bio-Well practitioners who take bookings online.</span></div><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-dir-scan>Find a scan</button></div>';
+  }
+  function paintIntro() {
+    var h = mount(); if (!h) return;
+    var old = h.querySelector('.g-dir__intent'); if (old) old.remove();
+    h.insertAdjacentHTML('afterbegin', introHtml());
+  }
   function controlsHtml() {
     var avail = ['In-person', 'Remote', 'Both'];
     var availChips = '<button type="button" class="g-dir-fchip' + (origin && origin.source === 'gps' ? ' is-on' : '') + '" data-dir-near aria-pressed="' + Boolean(origin && origin.source === 'gps') + '"><i class="ph ph-crosshair"></i> ' + (locating ? 'Finding you…' : 'Near me') + '</button>'
@@ -223,17 +234,16 @@
       + '<button type="button" class="g-dir-fchip' + (filters.availability === '' ? ' is-on' : '') + '" data-dir-avail="">All</button>'
       + avail.map(function (a) { return '<button type="button" class="g-dir-fchip' + (filters.availability === a ? ' is-on' : '') + '" data-dir-avail="' + esc(a) + '">' + esc(a) + '</button>'; }).join('');
     var specChips = topSpecialties(10).map(function (s) {
-      return '<button type="button" class="g-dir-schip' + (filters.specialty === s ? ' is-on' : '') + '" data-dir-spec="' + esc(s) + '">' + esc(s) + '</button>';
+      return '<option value="' + esc(s) + '"' + (filters.specialty === s ? ' selected' : '') + '>' + esc(s) + '</option>';
     }).join('');
-    var intro = intent === 'scan'
-      ? '<div class="g-dir__intent"><i class="ph ph-pulse"></i><div><strong>Reserve a Bio-Well scan · ' + SCAN_PRICE + '</strong><span>Choose a Bio-Well practitioner near you, then take a time on their calendar.</span></div><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-dir-near><i class="ph ph-crosshair"></i> Near me</button><button type="button" class="g-dir__intent-x" data-dir-intent-clear aria-label="Show all practitioners">×</button></div>'
-      : '';
+    var intro = introHtml();
     return intro + '<div class="g-dir__controls">'
       + '<div class="g-dir__search"><i class="ph ph-magnifying-glass"></i>'
       + '<input type="search" data-dir-search placeholder="Search name, city, specialty…" value="' + esc(filters.q) + '" aria-label="Search practitioners" /></div>'
-      + '<div class="g-dir__fchips">' + availChips + '</div>'
+      + '<div class="g-dir__fchips">' + availChips
+      + (specChips ? '<label class="g-dir-select"><span class="g-sr-only">Specialty</span><select data-dir-spec-select aria-label="Specialty"><option value="">All specialties</option>' + specChips + '</select><i class="ph ph-caret-down" aria-hidden="true"></i></label>' : '')
+      + '</div>'
       + '<div data-dir-where>' + whereHtml() + '</div>'
-      + '<div class="g-dir__schips">' + specChips + '</div>'
       + '</div>';
   }
   // The location row: a place box when asked for (or when location failed),
@@ -295,6 +305,16 @@
     updateMarkers(list, recentre);
   }
 
+  // The map is on request: the list is what people act on (12 Nov 2026).
+  var mapShown = false;
+  function showMap(on) {
+    mapShown = Boolean(on);
+    var h = mount(); if (!h) return;
+    var el = h.querySelector('#g-dir-map'); if (el) el.hidden = !mapShown;
+    var b = h.querySelector('[data-dir-maptoggle]');
+    if (b) { b.setAttribute('aria-expanded', String(mapShown)); b.classList.toggle('is-on', mapShown); b.innerHTML = mapShown ? '<i class="ph ph-list"></i> List only' : '<i class="ph ph-map-trifold"></i> Map'; }
+    if (mapShown) { ensureMap(); setTimeout(fitMap, 30); }
+  }
   function ensureMap() {
     if (map || !window.L) return;
     var el = document.getElementById('g-dir-map'); if (!el) return;
@@ -331,7 +351,7 @@
       pts = [[origin.lat, origin.lng]].concat(near);
     }
     lastPts = pts;
-    if (recentre && map.getContainer && map.getContainer().scrollIntoView) { try { map.getContainer().scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {} }
+    if (recentre && mapShown && map.getContainer && map.getContainer().scrollIntoView) { try { map.getContainer().scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {} }
     fitMap();
     // The screen may still be laying out (or hidden) when the list paints;
     // fit again once it has its real size.
@@ -458,7 +478,15 @@
       var oc = e.target.closest('[data-dir-origin-clear]');
       if (oc) { clearOrigin(); return; }
       var ix = e.target.closest('[data-dir-intent-clear]');
-      if (ix) { intent = ''; var h = mount(); if (h) { var c = h.querySelector('.g-dir__intent'); if (c) c.remove(); } paintList(); return; }
+      if (ix) { intent = ''; paintIntro(); paintList(); return; }
+      var sc = e.target.closest('[data-dir-scan]');
+      if (sc) { intent = 'scan'; paintIntro(); paintList(); return; }
+      var mt = e.target.closest('[data-dir-maptoggle]');
+      if (mt) { showMap(!mapShown); return; }
+    });
+    host.addEventListener('change', function (e) {
+      var ss = e.target.closest('[data-dir-spec-select]');
+      if (ss) { filters.specialty = ss.value; paintList(); }
     });
     host.addEventListener('submit', function (e) {
       var f = e.target.closest('[data-dir-place-form]'); if (!f) return;
@@ -483,8 +511,9 @@
       if (j.scanTeam) scanTeam = String(j.scanTeam);
       loaded = true;
       host.innerHTML = controlsHtml()
-        + '<p class="g-dir__count" data-dir-count aria-live="polite"></p>'
-        + '<div class="g-dir__map" id="g-dir-map"></div>'
+        + '<div class="g-dir__bar"><p class="g-dir__count" data-dir-count aria-live="polite"></p>'
+        + '<button type="button" class="g-dir__maptoggle" data-dir-maptoggle aria-expanded="false" aria-controls="g-dir-map"><i class="ph ph-map-trifold"></i> Map</button></div>'
+        + '<div class="g-dir__map" id="g-dir-map" hidden></div>'
         + '<div class="g-dir__list" data-dir-list></div>';
       bind(host);
       paintList();
@@ -507,7 +536,7 @@
     }
     if (opts && opts.near) setTimeout(nearMe, 0);
     try { window.GaiaAppShell && window.GaiaAppShell.go && window.GaiaAppShell.go('directory'); } catch (e) {}
-    if (loaded) { var h = mount(); if (h) { var old = h.querySelector('.g-dir__intent'); if (old) old.remove(); if (intent) h.insertAdjacentHTML('afterbegin', controlsHtml().split('<div class="g-dir__controls">')[0]); } paintList(); }
+    if (loaded) { paintIntro(); paintList(); }
     else load();
   }
   // Home "Recommended for you": Bio-Well practitioners who can really be

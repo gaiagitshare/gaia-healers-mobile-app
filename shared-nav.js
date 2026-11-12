@@ -5,20 +5,24 @@
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
   if (!window.location.hash) window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
 
-  // rail: shown in the tablet rail and desktop sidebar only. The phone bar
-  // keeps its six slots (Discover, Bookings and Events are on Home and in
-  // Community there), so nothing gets cramped (12 Nov 2026).
+  // phone: one of the four slots on the phone bar (Home sits in the middle,
+  // More holds the rest). Everything shows in the tablet rail and desktop
+  // sidebar. Discover and Bookings are on the bar because reserving a scan is
+  // the main thing people come to do (12 Nov 2026, full-app redesign).
   const tabs = [
     { id: 'daily', href: 'home.html?view=daily', label: 'Today', icon: 'ph-sun' },
-    { id: 'directory', href: 'home.html?view=directory', label: 'Discover', icon: 'ph-magnifying-glass', rail: true },
+    { id: 'directory', href: 'home.html?view=directory', label: 'Discover', icon: 'ph-magnifying-glass', phone: true },
     { id: 'wellness', href: 'home.html?view=wellness', label: 'Energy', icon: 'ph-sparkle' },
-    { id: 'academy', href: 'home.html?view=academy', label: 'Academy', icon: 'ph-graduation-cap' },
+    { id: 'academy', href: 'home.html?view=academy', label: 'Academy', icon: 'ph-graduation-cap', phone: true },
     { id: 'community', href: 'home.html?view=community', label: 'Community', icon: 'ph-users-three' },
-    { id: 'bookings', href: 'home.html?view=bookings', label: 'Bookings', icon: 'ph-calendar-check', rail: true },
-    { id: 'events', href: 'home.html?view=events', label: 'Events', icon: 'ph-calendar-dots', rail: true },
+    { id: 'bookings', href: 'home.html?view=bookings', label: 'Bookings', icon: 'ph-calendar-check', phone: true },
+    { id: 'events', href: 'home.html?view=events', label: 'Events', icon: 'ph-calendar-dots' },
     { id: 'store', href: 'home.html?view=store', label: 'Shop', icon: 'ph-shopping-bag' },
     { id: 'profile', href: 'home.html?view=profile', label: 'Profile', icon: 'ph-user' },
   ];
+  // What the phone's More sheet lists, in this order. Inbox stays under
+  // Community (its unread badge lives on that link).
+  const MORE = ['daily', 'wellness', 'community', 'events', 'store', 'profile'];
 
   // Compatibility map: which bottom-tab lights up for every current view.
   // Relocated/child screens (events, directory, inbox -> Community; bookings,
@@ -48,7 +52,7 @@
 
   function tabLink(t, on) {
     return `
-      <a href="${t.href}" data-app-nav="${t.id}" class="gaia-tabbar__link${t.rail ? ' gaia-tabbar__link--rail' : ''} ${on ? 'is-active' : ''}" ${on ? 'aria-current="page"' : ''}>
+      <a href="${t.href}" data-app-nav="${t.id}" class="gaia-tabbar__link${t.phone ? '' : ' gaia-tabbar__link--rail'} ${on ? 'is-active' : ''}" ${on ? 'aria-current="page"' : ''}>
         <i class="ph ${t.icon} gaia-tabbar__icon" aria-hidden="true"></i>
         <span class="gaia-tabbar__label">${t.label}</span>
       </a>`;
@@ -64,9 +68,11 @@
   // rail on tablets, a sidebar with labels on desktop. The brand and the Home
   // and Practice labels only show where there is room for them.
   function buildTabbar(inner, active) {
-    const main = tabs.filter((t) => !t.rail), rail = tabs.filter((t) => t.rail);
-    const left = main.slice(0, 3).concat(rail.slice(0, 1));
-    const right = main.slice(3).concat(rail.slice(1));
+    // Phone order: Discover, Bookings | Home | Academy, More. The rail and
+    // sidebar re-order by destination in CSS (gaia-home3.css).
+    const byId = (id) => tabs.find((t) => t.id === id);
+    const left = ['directory', 'bookings', 'daily', 'wellness'].map(byId);
+    const right = ['academy', 'community', 'events', 'store', 'profile'].map(byId);
     inner.innerHTML = `
       <a class="gaia-rail__brand" href="home.html?view=today" aria-label="Gaia Healers home">
         <img src="assets/gaia-mark.svg" alt="" aria-hidden="true" width="32" height="32" />
@@ -79,7 +85,11 @@
         <i class="ph ph-house gaia-tabbar__icon gaia-rail__home-icon" aria-hidden="true"></i>
         <span class="gaia-rail__home-label" aria-hidden="true">Home</span>
       </a>
-      <div class="gaia-tabbar__group gaia-tabbar__group--right">${right.map((t) => tabLink(t, active === t.id)).join('')}</div>
+      <div class="gaia-tabbar__group gaia-tabbar__group--right">${right.map((t) => tabLink(t, active === t.id)).join('')}
+        <button type="button" class="gaia-tabbar__link gaia-tabbar__more" data-tabbar-more aria-haspopup="dialog" aria-expanded="false">
+          <i class="ph ph-dots-three-outline gaia-tabbar__icon" aria-hidden="true"></i>
+          <span class="gaia-tabbar__label">More</span>
+        </button></div>
       <button type="button" class="gaia-tabbar__link gaia-rail__practice" data-rail-practice hidden>
         <i class="ph ph-stethoscope gaia-tabbar__icon" aria-hidden="true"></i>
         <span class="gaia-tabbar__label">Practice</span>
@@ -140,7 +150,49 @@
     inner.querySelectorAll('.gaia-tabbar__link[data-app-nav], .gaia-tabbar__home').forEach((link) => {
       setLinkActive(link, link.dataset.appNav === active);
     });
+    markMore(inner, active);
   }
+
+  // On a phone, a screen that lives in More lights up More.
+  function markMore(inner, active) {
+    const more = inner.querySelector('[data-tabbar-more]');
+    if (more) more.classList.toggle('is-active', MORE.includes(active));
+  }
+
+  // The More sheet: the rest of the app, one tap away. Plain links, so every
+  // route works exactly as it does from the sidebar.
+  function closeMore() {
+    const sheet = document.querySelector('.gaia-more-sheet');
+    if (!sheet) return;
+    sheet.remove();
+    document.querySelectorAll('[data-tabbar-more]').forEach((b) => { b.setAttribute('aria-expanded', 'false'); });
+  }
+  function openMore(btn) {
+    closeMore();
+    const active = activeTabId();
+    const items = MORE.map((id) => tabs.find((t) => t.id === id));
+    const sheet = document.createElement('div');
+    sheet.className = 'gaia-more-sheet';
+    sheet.innerHTML = `
+      <div class="gaia-more-sheet__backdrop" data-more-close></div>
+      <nav class="gaia-more-sheet__panel" role="dialog" aria-modal="true" aria-label="More">
+        <div class="gaia-more-sheet__grip" aria-hidden="true"></div>
+        ${items.map((t) => `<a class="gaia-more-sheet__link${t.id === active ? ' is-active' : ''}" href="${t.href}" data-app-nav="${t.id}"${t.id === active ? ' aria-current="page"' : ''}><i class="ph ${t.icon}" aria-hidden="true"></i><span>${t.label}</span><i class="ph ph-caret-right gaia-more-sheet__go" aria-hidden="true"></i></a>`).join('')}
+      </nav>`;
+    document.body.appendChild(sheet);
+    btn.setAttribute('aria-expanded', 'true');
+    const first = sheet.querySelector('.gaia-more-sheet__link');
+    if (first) { try { first.focus({ preventScroll: true }); } catch (e) {} }
+  }
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-tabbar-more]');
+    if (btn) { e.preventDefault(); if (document.querySelector('.gaia-more-sheet')) closeMore(); else openMore(btn); return; }
+    if (e.target.closest('[data-more-close]')) { closeMore(); return; }
+    // A link in the sheet routes like any nav link; the sheet steps aside.
+    if (e.target.closest('.gaia-more-sheet__link')) setTimeout(closeMore, 0);
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMore(); });
+  window.addEventListener('gaia:route', closeMore);
 
   const nav = document.createElement('nav');
   nav.setAttribute('aria-label', 'Main');

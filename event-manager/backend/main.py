@@ -2443,27 +2443,28 @@ def event_ticket_counts(event_id: int, db: Session = Depends(get_db),
                         current_user: models.User = Depends(get_current_user)):
     """Operational counts for the event dashboard. Base-ticket counts and add-on
     counts are reported SEPARATELY so an additive add-on never inflates a tier."""
-    _get_event_or_404(event_id, db)
-    authz.require_cap(db, current_user, event_id, "attendee.read")
-    atts = db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all()
-    from collections import Counter
-    base = Counter(); addon = Counter(); status = Counter(); checked = 0
-    for a in atts:
-        status[_ticket_status(a)] += 1
-        if a.is_checked_in:
-            checked += 1
-        eff = _effective_access(db, a)
-        bt = eff.get("base_ticket")
-        base[(bt["code"] if bt else "none")] += 1
-        for ad in (eff.get("addons") or []):
-            addon[ad["code"]] += 1
-    # "total" is every row, which is the right number for a ledger and the wrong
-    # one for a headcount: the blocked rows are still listed here by status, but
-    # nothing should read `total` as the size of the event.
-    _blocked = sum(n for st, n in status.items() if st in TICKET_BLOCKED_STATUSES)
-    return {"total": len(atts), "admitting": len(atts) - _blocked, "blocked": _blocked,
-            "checked_in": checked, "not_checked_in": len(atts) - _blocked - checked,
-            "by_base_ticket": dict(base), "by_addon": dict(addon), "by_status": dict(status)}
+    with _read_snapshot(db):  # read only: each event-wide question asked once
+        _get_event_or_404(event_id, db)
+        authz.require_cap(db, current_user, event_id, "attendee.read")
+        atts = db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all()
+        from collections import Counter
+        base = Counter(); addon = Counter(); status = Counter(); checked = 0
+        for a in atts:
+            status[_ticket_status(a)] += 1
+            if a.is_checked_in:
+                checked += 1
+            eff = _effective_access(db, a)
+            bt = eff.get("base_ticket")
+            base[(bt["code"] if bt else "none")] += 1
+            for ad in (eff.get("addons") or []):
+                addon[ad["code"]] += 1
+        # "total" is every row, which is the right number for a ledger and the wrong
+        # one for a headcount: the blocked rows are still listed here by status, but
+        # nothing should read `total` as the size of the event.
+        _blocked = sum(n for st, n in status.items() if st in TICKET_BLOCKED_STATUSES)
+        return {"total": len(atts), "admitting": len(atts) - _blocked, "blocked": _blocked,
+                "checked_in": checked, "not_checked_in": len(atts) - _blocked - checked,
+                "by_base_ticket": dict(base), "by_addon": dict(addon), "by_status": dict(status)}
 
 
 @app.get("/attendees/{attendee_id}", response_model=schemas.AttendeeDetail)
@@ -8609,9 +8610,10 @@ def review_queue(event_id: int, db: Session = Depends(get_db),
     attendee.read to see the work; analytics.read to see the money with it. A
     door lead can read "fourteen seats need a name" without reading the ledger.
     """
-    authz.require_cap(db, current_user, event_id, "attendee.read")
-    return _review_queue(db, event_id,
-                         with_money=authz.can(db, current_user, event_id, "analytics.read"))
+    with _read_snapshot(db):  # read only: each event-wide question asked once
+        authz.require_cap(db, current_user, event_id, "attendee.read")
+        return _review_queue(db, event_id,
+                             with_money=authz.can(db, current_user, event_id, "analytics.read"))
 
 
 @app.post("/events/{event_id}/review-queue/resolve")
@@ -13796,26 +13798,27 @@ def _rc_admins(db, event_id):
 @app.get("/events/{event_id}/reconcile/summary")
 def recon_summary(event_id: int, db: Session = Depends(get_db),
                   current_user: models.User = Depends(get_current_user)):
-    _get_event_or_404(event_id, db)
-    authz.require_cap(db, current_user, event_id, "reconcile.read")
-    rows = db.query(models.ReconIssue).filter(models.ReconIssue.event_id == event_id).all()
-    open_rows = [r for r in rows if r.status in _rc.OPEN_STATES]
-    by_p = {p: sum(1 for r in open_rows if r.priority == p) for p in ("critical", "high", "medium", "low")}
-    by_kind = {}
-    for r in open_rows:
-        by_kind[r.kind] = by_kind.get(r.kind, 0) + 1
-    by_status = {s: sum(1 for r in rows if r.status == s) for s in RECON_STATUSES}
-    bulk = _rc.bulk_status(db, event_id)
-    db.rollback()
-    last = db.query(func.max(models.ReconIssue.last_seen_at)).filter(models.ReconIssue.event_id == event_id).scalar()
-    return {"unresolved": len(open_rows), "by_priority": by_p, "by_kind": by_kind, "by_status": by_status,
-            "kinds": _rc.KINDS, "last_checked_at": last, "admins": _rc_admins(db, event_id),
-            "bulk_check": {"imported": bulk.get("imported", False), "ok": bool(bulk.get("ok")),
-                           "critical": len(bulk.get("critical") or []), "summary": bulk.get("summary") or {},
-                           "changed_since_list": bulk.get("changed_since_list", 0),
-                           "problems": [{"code": c["code"], "detail": c.get("detail"), "ticket_ids": (c.get("ticket_ids") or [])[:12]}
-                                        for c in (bulk.get("critical") or [])][:30],
-                           "sending": "locked"}}
+    with _read_snapshot(db):  # read only: each event-wide question asked once
+        _get_event_or_404(event_id, db)
+        authz.require_cap(db, current_user, event_id, "reconcile.read")
+        rows = db.query(models.ReconIssue).filter(models.ReconIssue.event_id == event_id).all()
+        open_rows = [r for r in rows if r.status in _rc.OPEN_STATES]
+        by_p = {p: sum(1 for r in open_rows if r.priority == p) for p in ("critical", "high", "medium", "low")}
+        by_kind = {}
+        for r in open_rows:
+            by_kind[r.kind] = by_kind.get(r.kind, 0) + 1
+        by_status = {s: sum(1 for r in rows if r.status == s) for s in RECON_STATUSES}
+        bulk = _rc.bulk_status(db, event_id)
+        db.rollback()
+        last = db.query(func.max(models.ReconIssue.last_seen_at)).filter(models.ReconIssue.event_id == event_id).scalar()
+        return {"unresolved": len(open_rows), "by_priority": by_p, "by_kind": by_kind, "by_status": by_status,
+                "kinds": _rc.KINDS, "last_checked_at": last, "admins": _rc_admins(db, event_id),
+                "bulk_check": {"imported": bulk.get("imported", False), "ok": bool(bulk.get("ok")),
+                               "critical": len(bulk.get("critical") or []), "summary": bulk.get("summary") or {},
+                               "changed_since_list": bulk.get("changed_since_list", 0),
+                               "problems": [{"code": c["code"], "detail": c.get("detail"), "ticket_ids": (c.get("ticket_ids") or [])[:12]}
+                                            for c in (bulk.get("critical") or [])][:30],
+                               "sending": "locked"}}
 
 
 @app.post("/events/{event_id}/reconcile/run")
@@ -13833,38 +13836,39 @@ def recon_run(event_id: int, db: Session = Depends(get_db),
 def recon_issues(event_id: int, status: str = "unresolved", priority: str = "", kind: str = "",
                  q: str = "", assigned: str = "", limit: int = 200, offset: int = 0,
                  db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    _get_event_or_404(event_id, db)
-    authz.require_cap(db, current_user, event_id, "reconcile.read")
-    qry = db.query(models.ReconIssue).filter(models.ReconIssue.event_id == event_id)
-    if status == "unresolved":
-        qry = qry.filter(models.ReconIssue.status.in_(_rc.OPEN_STATES))
-    elif status and status != "all":
-        qry = qry.filter(models.ReconIssue.status == status)
-    if priority:
-        qry = qry.filter(models.ReconIssue.priority == priority)
-    if kind:
-        qry = qry.filter(models.ReconIssue.kind == kind)
-    if assigned == "me":
-        qry = qry.filter(models.ReconIssue.assigned_to == current_user.id)
-    elif assigned == "none":
-        qry = qry.filter(models.ReconIssue.assigned_to.is_(None))
-    elif assigned.isdigit():
-        qry = qry.filter(models.ReconIssue.assigned_to == int(assigned))
-    rows = qry.all()
-    term = (q or "").strip().lower().lstrip("#")
-    if term:
-        rows = [r for r in rows if term in (r.search_text or "") or term in (r.issue_key or "").lower()
-                or any(term == str(x) for x in (r.attendee_ids or [])) or any(term in str(o).lower() for o in (r.order_ids or []))]
-    rows.sort(key=lambda r: (_rc.PRIORITY_ORDER.get(r.priority, 9), 0 if r.status == "open" else 1, -(r.id or 0)))
-    users = _rc_users(db)
-    tix = _rc_ticket_index(db, event_id)
-    page = []
-    for r in rows[offset:offset + min(limit, 500)]:
-        row = _rc_row(r, users)
-        row["person_tickets"] = [t["ticket_id"] for t in _rc_person_tickets(db, r, tix)]
-        row["source_kind"] = (r.facts or {}).get("kind")
-        page.append(row)
-    return {"total": len(rows), "rows": page}
+    with _read_snapshot(db):  # read only: each event-wide question asked once
+        _get_event_or_404(event_id, db)
+        authz.require_cap(db, current_user, event_id, "reconcile.read")
+        qry = db.query(models.ReconIssue).filter(models.ReconIssue.event_id == event_id)
+        if status == "unresolved":
+            qry = qry.filter(models.ReconIssue.status.in_(_rc.OPEN_STATES))
+        elif status and status != "all":
+            qry = qry.filter(models.ReconIssue.status == status)
+        if priority:
+            qry = qry.filter(models.ReconIssue.priority == priority)
+        if kind:
+            qry = qry.filter(models.ReconIssue.kind == kind)
+        if assigned == "me":
+            qry = qry.filter(models.ReconIssue.assigned_to == current_user.id)
+        elif assigned == "none":
+            qry = qry.filter(models.ReconIssue.assigned_to.is_(None))
+        elif assigned.isdigit():
+            qry = qry.filter(models.ReconIssue.assigned_to == int(assigned))
+        rows = qry.all()
+        term = (q or "").strip().lower().lstrip("#")
+        if term:
+            rows = [r for r in rows if term in (r.search_text or "") or term in (r.issue_key or "").lower()
+                    or any(term == str(x) for x in (r.attendee_ids or [])) or any(term in str(o).lower() for o in (r.order_ids or []))]
+        rows.sort(key=lambda r: (_rc.PRIORITY_ORDER.get(r.priority, 9), 0 if r.status == "open" else 1, -(r.id or 0)))
+        users = _rc_users(db)
+        tix = _rc_ticket_index(db, event_id)
+        page = []
+        for r in rows[offset:offset + min(limit, 500)]:
+            row = _rc_row(r, users)
+            row["person_tickets"] = [t["ticket_id"] for t in _rc_person_tickets(db, r, tix)]
+            row["source_kind"] = (r.facts or {}).get("kind")
+            page.append(row)
+        return {"total": len(rows), "rows": page}
 
 
 @app.post("/events/{event_id}/reconcile/issues/bulk-status")

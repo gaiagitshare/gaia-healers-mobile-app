@@ -20,7 +20,7 @@ function read(name) {
 test('the shell has a Today screen (daily) beside Home (today), and the bar sends Today there', () => {
   const html = read('home.html');
   assert.match(html, /data-screen="today" aria-label="Home"/);
-  assert.match(html, /data-screen="daily" aria-label="Today"/);
+  assert.match(html, /data-screen="daily"[^>]*aria-label="Today"/);
   assert.match(html, /id="daily-superapp"/);
   const nav = read('shared-nav.js');
   assert.match(nav, /\{ id: 'daily', href: 'home\.html\?view=daily', label: 'Today', icon: 'ph-sun' \}/);

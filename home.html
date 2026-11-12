@@ -81,7 +81,7 @@
   <link rel="stylesheet" href="gaia-shell.css?v=20261006v" />
   <link rel="stylesheet" href="gaia-warm.css?v=20261112w" />
   <link rel="stylesheet" href="gaia-home3.css?v=20261112ds1" />
-  <link rel="stylesheet" href="gaia-ds.css?v=20261112p2b" />
+  <link rel="stylesheet" href="gaia-ds.css?v=20261112p3f" />
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css?v=1.9.4" />
   <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.css?v=1.5.3" />
   <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.Default.css?v=1.5.3" />
@@ -109,7 +109,7 @@
     <!-- Today: the day itself. Home (the centre button) is the dashboard;
          this tab is what today asks for -- the daily energy check, today's
          sky, the readings shortcut, the next booking. -->
-    <section class="gaia-screen" data-screen="daily" aria-label="Today">
+    <section class="gaia-screen" data-screen="daily" data-ds-page aria-label="Today">
       <header class="g-topbar">
         <button type="button" class="g-topbar__nav" data-app-nav-btn aria-label="Home"><i class="ph ph-house" aria-hidden="true"></i></button>
         <a href="home.html?view=today" class="g-topbar__brand g-topbar__brand--stack"><img src="assets/gaia-mark.svg" alt="" /><span>Gaia Healers</span></a>
@@ -146,14 +146,15 @@
     </section>
 
     <!-- ENERGY — public daily guidance, kept separate so Home stays calm. -->
-    <section class="gaia-screen" data-screen="wellness" aria-label="Energy">
+    <section class="gaia-screen" data-screen="wellness" data-ds-page aria-label="Energy">
       <header class="g-topbar">
         <button type="button" class="g-topbar__nav" data-app-nav-btn aria-label="Home"><i class="ph ph-house" aria-hidden="true"></i></button>
         <a href="home.html?view=today" class="g-topbar__brand g-topbar__brand--stack"><img src="assets/gaia-mark.svg" alt="" /><span>Gaia Healers</span></a>
         <div class="g-topbar__actions gaia-header-actions" data-gaia-header-actions></div>
       </header>
       <main class="gaia-main g-page g-energy">
-        <div class="g-page__head g-page__head--energy">
+        <div class="g-page__head g-page__head--energy g-ds-banner">
+          <img class="g-ds-banner__art" src="assets/home3/ref-aura.webp?v=kit1" alt="" width="420" height="420" decoding="async" />
           <p class="g-page__kicker">How you are, today</p>
           <h1 class="g-page__title">Energy</h1>
           <p class="g-page__sub">Choose what you need today.</p>
@@ -270,14 +271,15 @@
 
     <!-- ACADEMY — rebuilt on the g-* system: honest course portal (deep-links
          into education.gaiahealers.com; no fabricated progress). -->
-    <section class="gaia-screen" data-screen="academy" aria-label="Academy">
+    <section class="gaia-screen" data-screen="academy" data-ds-page aria-label="Academy">
       <header class="g-topbar">
         <button type="button" class="g-topbar__nav" data-app-nav-btn aria-label="Home"><i class="ph ph-house" aria-hidden="true"></i></button>
         <a href="home.html?view=today" class="g-topbar__brand g-topbar__brand--stack"><img src="assets/gaia-mark.svg" alt="" /><span>Gaia Healers</span></a>
         <div class="g-topbar__actions gaia-header-actions" data-gaia-header-actions></div>
       </header>
       <main class="gaia-main g-page g-academy">
-        <div class="g-page__head g-page__head--academy">
+        <div class="g-page__head g-page__head--academy g-ds-banner g-ds-banner--gold">
+          <img class="g-ds-banner__art" src="assets/home3/ref-book.webp?v=kit1" alt="" width="420" height="420" decoding="async" />
           <p class="g-page__kicker">Learn · heal · evolve</p>
           <h1 class="g-page__title">Gaia Healers Academy</h1>
           <p class="g-page__sub" id="academy-summary-caption">Your courses live in the Gaia Healers portal.</p>
@@ -298,7 +300,7 @@
 
     <!-- COMMUNITY — rebuilt on the g-* system: live "My Access" unlock grid
          (unlocked / locked / coming-soon) from /api/member/access. -->
-    <section class="gaia-screen" data-screen="community" aria-label="Community">
+    <section class="gaia-screen" data-screen="community" data-ds-page aria-label="Community">
       <header class="g-topbar">
         <button type="button" class="g-topbar__nav" data-app-nav-btn aria-label="Home"><i class="ph ph-house" aria-hidden="true"></i></button>
         <a href="home.html?view=today" class="g-topbar__brand g-topbar__brand--stack"><img src="assets/gaia-mark.svg" alt="" /><span>Gaia Healers</span></a>
@@ -451,7 +453,7 @@
   <script defer src="gaia-membership-ui.js?v=20261006j"></script>
   <script defer src="gaia-app-guard.js"></script>
   <script defer src="gaia-journey.js?v=20261109b"></script>
-  <script defer src="gaia-member.js?v=20261112scan"></script>
+  <script defer src="gaia-member.js?v=20261112p3b"></script>
   <script defer src="gaia-academy-player.js?v=20261004z"></script>
   <script defer src="gaia-wellness.js?v=20261006a"></script>
   <script defer src="gaia-quiz.js?v=20260815b"></script>

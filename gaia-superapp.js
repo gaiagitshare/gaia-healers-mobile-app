@@ -1129,7 +1129,7 @@
     const learn = course && course.openUrl
       ? '<button type="button" class="g-home3__btn g-home3__btn--outline g-home3__btn--sm" data-super-course="' + esc(course.openUrl) + '" data-super-course-title="' + esc(course.title || course.name || 'Gaia Healers Academy') + '">Continue course ' + icon('arrow-right') + '</button>'
       : '<a class="g-home3__btn g-home3__btn--outline g-home3__btn--sm" href="home.html?view=academy">View courses ' + icon('arrow-right') + '</a>';
-    const card = (cls, art, title, text, action) => '<article class="g-home3__card ' + cls + '"><img class="g-home3__card-art" src="assets/home3/' + art + '" alt="" width="140" height="133" loading="lazy" decoding="async" /><div class="g-home3__card-copy"><h3>' + title + '</h3><p>' + text + '</p>' + action + '</div></article>';
+    const card = (cls, art, title, text, action) => '<article class="g-home3__card ' + cls + '"><img class="g-home3__card-art" src="assets/home3/' + art + '" alt="" width="140" height="133" decoding="async" /><div class="g-home3__card-copy"><h3>' + title + '</h3><p>' + text + '</p>' + action + '</div></article>';
     return '<section class="g-home3__cards" aria-label="Start here">'
       + card('g-home3__card--scan', 'ref-aura.webp', 'Book a Bio-Well Scan', 'Measure your energy and get a personalised biofield report.', '<button type="button" class="g-home3__btn g-home3__btn--lime g-home3__btn--sm" data-dir-intent="scan">From $99 ' + icon('arrow-right') + '</button>')
       + card('g-home3__card--energy', 'ref-stones.webp', 'Explore Energy Studio', 'Daily energy check, breathing, chakra and colour practices.', '<a class="g-home3__btn g-home3__btn--outline g-home3__btn--sm" href="home.html?view=wellness">' + icon('play-circle') + ' Explore ' + icon('arrow-right') + '</a>')
@@ -1177,7 +1177,7 @@
     const blurb = event.summary || event.description || '';
     return '<section class="g-home3__event" aria-label="Upcoming event"><img class="g-home3__event-art" src="' + esc(art) + '" alt="" width="426" height="358" loading="lazy" decoding="async" />'
       + '<div class="g-home3__event-body"><p class="g-home3__eyebrow">Upcoming event</p><h2>' + esc(event.name) + '</h2>'
-      + ((when || location) ? '<p class="g-home3__event-meta">' + (when ? icon('calendar-blank') + ' ' + esc(when) : '') + (location ? '<span>' + icon('map-pin') + ' ' + esc(location) + '</span>' : '') + '</p>' : '')
+      + ((when || location) ? '<p class="g-home3__event-meta">' + (when ? '<span>' + icon('calendar-blank') + ' ' + esc(when) + '</span>' : '') + (location ? '<span>' + icon('map-pin') + ' ' + esc(location) + '</span>' : '') + '</p>' : '')
       + (blurb ? '<p class="g-home3__event-blurb">' + esc(shortText(blurb, 150)) + '</p>' : '')
       + '<a class="g-home3__btn g-home3__btn--lime" href="home.html?view=events">View event ' + icon('arrow-right') + '</a></div></section>';
   }
@@ -2337,7 +2337,7 @@
       + '<button type="button" role="tab" aria-selected="' + (tab === 'past') + '" data-appt-tab="past" class="' + (tab === 'past' ? 'is-on' : '') + '">Past <span>' + pastList.length + '</span></button></div>';
     root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Your schedule</p><h1>My appointments</h1><p>Every session you book with Gaia Healers, in one place.</p></div>'
       + tabs + '<div class="g-appt-list">' + (list.length ? list.map(card).join('') : empty) + '</div>'
-      + '<section class="g-appt-book"><h2>Book a session</h2>' + bookingCatalog() + '</section>';
+      + '<section class="g-appt-book">' + bookingCatalog() + '</section>';
     root.querySelectorAll('[data-appt-tab]').forEach((b) => b.addEventListener('click', () => { root.dataset.apptTab = b.dataset.apptTab; renderBookings(); }));
     bind(root);
   }

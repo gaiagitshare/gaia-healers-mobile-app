@@ -36,14 +36,14 @@
     }
     box.innerHTML = '<div class="g-home3__recs-grid">' + r.items.map(function (p) {
       var photo = p.image
-        ? '<img src="' + esc(p.image) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML=window.GaiaHome3Placeholder" />'
+        ? '<img src="' + esc(p.image) + '" alt="" decoding="async" referrerpolicy="no-referrer" onerror="this.outerHTML=window.GaiaHome3Placeholder" />'
         : PLACEHOLDER;
       var loc = [p.city, p.state].filter(Boolean).join(', ') + (p.distance ? ' (' + p.distance + ')' : '');
       return '<article class="g-home3__rec">'
         + '<div class="g-home3__rec-top"><span class="g-home3__rec-photo">' + photo + '</span><div class="g-home3__rec-info"><h3>' + esc(p.name) + '</h3>'
         + (loc ? '<p class="g-home3__rec-loc"><i class="ph ph-map-pin"></i> ' + esc(loc) + '</p>' : '')
         + '<p class="g-home3__rec-next"><i class="ph ph-calendar-blank"></i><span><b>' + (p.next ? 'Next available' : 'Books online') + '</b>' + (p.next ? esc(p.next) : 'Choose a time') + '</span></p></div></div>'
-        + '<button type="button" class="g-home3__btn g-home3__btn--lime g-home3__btn--sm" data-home3-open="' + esc(p.id) + '">Book now <i class="ph ph-arrow-right"></i></button>'
+        + '<button type="button" class="g-home3__btn g-home3__btn--outline g-home3__btn--sm" data-home3-open="' + esc(p.id) + '">Book now <i class="ph ph-arrow-right"></i></button>'
         + '</article>';
     }).join('') + '</div>';
   }

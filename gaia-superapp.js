@@ -878,8 +878,8 @@
     return '<section class="gg-scan" aria-labelledby="gg-scan-title">'
       + '<span class="gg-scan__icon" aria-hidden="true">' + icon('pulse') + '</span>'
       + '<div class="gg-scan__copy"><p class="g-super-kicker">Bio-Well biofield scan</p>'
-      + '<h2 id="gg-scan-title">Reserve a scan near you</h2>'
-      + '<p>Find a certified Bio-Well practitioner close by and pick a time, right here in the app.</p></div>'
+      + '<h2 id="gg-scan-title">Reserve a scan near you · $99</h2>'
+      + '<p>A certified Bio-Well practitioner close by, a 24-page energy report, and a time that suits you — booked right here in the app.</p></div>'
       + '<div class="gg-scan__actions">'
       + '<button type="button" class="g-btn g-btn--primary" data-dir-intent="scan">' + icon('map-pin') + ' Reserve a biofield scan</button>'
       + '<a class="g-btn g-btn--secondary" href="home.html?view=directory">' + icon('users-three') + ' Find a healer</a>'
@@ -1234,7 +1234,7 @@
     // Same sessions as the Bookings page (bookingSet), in Home's card style.
     // The scan still starts at the directory (Bio-Well practitioners first).
     const LOOK = {
-      'biowell-scan': { icon: 'pulse', what: 'Choose a practitioner near you, then a time.', intent: 'scan' },
+      'biowell-scan': { icon: 'pulse', what: '$99 · a practitioner near you, then a time.', intent: 'scan' },
       'biowell-demo': { icon: 'monitor-play', what: 'See the device in action, no commitment.' },
       'healeex-combo': { icon: 'sparkle', what: 'A Healeex session together with a Bio-Well scan.' },
     };

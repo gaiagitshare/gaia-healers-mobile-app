@@ -100,6 +100,15 @@
     return ((parts[0] || '')[0] || '') + ((parts[1] || '')[0] || '');
   }
 
+  // "scan", "scanner", "biofield", "bio-well" mean "a Bio-Well practitioner",
+  // not those letters in a bio: typing "scan" found 4 of the 160+ who scan
+  // (12 Nov 2026). The rest of the words still narrow it ("scan orlando").
+  var SCAN_WORDS = /\b(bio-?well|bio-?field|energy\s+scan|scan(?:ner|ning)?s?)\b/gi;
+  function scanQuery(q) {
+    var rest = String(q || '').replace(SCAN_WORDS, ' ');
+    return rest === String(q || '') ? null : rest.replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+  function scanMode() { return intent === 'scan' || scanQuery(filters.q) !== null; }
   function matches(p) {
     if (filters.availability && p.availability !== filters.availability) return false;
     if (filters.specialty) {
@@ -107,9 +116,11 @@
       if (hay.indexOf(filters.specialty.toLowerCase()) === -1) return false;
     }
     if (filters.q) {
-      var q = filters.q.toLowerCase();
+      var sq = scanQuery(filters.q);
+      if (sq !== null && !isBioWell(p)) return false;
+      var q = sq !== null ? sq : filters.q.toLowerCase();
       var blob = (p.name + ' ' + p.city + ' ' + p.state + ' ' + p.specialty.join(' ') + ' ' + p.tags.join(' ')).toLowerCase();
-      if (blob.indexOf(q) === -1) return false;
+      if (q && blob.indexOf(q) === -1) return false;
     }
     return true;
   }
@@ -118,7 +129,7 @@
     if (intent === 'scan') { var bw = list.filter(isBioWell); if (bw.length) list = bw; }
     if (filters.online) list = list.filter(function (p) { return bookingOf(p) === 'online'; });
     // Without a starting point, people who can be booked come first (stable otherwise).
-    else if (intent === 'scan' && !origin) list = list.map(function (p, i) { return [p, i]; }).sort(function (a, b) { return (bookingOf(b[0]) === 'online') - (bookingOf(a[0]) === 'online') || a[1] - b[1]; }).map(function (x) { return x[0]; });
+    else if (scanMode() && !origin) list = list.map(function (p, i) { return [p, i]; }).sort(function (a, b) { return (bookingOf(b[0]) === 'online') - (bookingOf(a[0]) === 'online') || a[1] - b[1]; }).map(function (x) { return x[0]; });
     if (origin && radiusKm) list = list.filter(function (p) { var d = distanceOf(p); return d != null && d <= radiusKm; });
     if (origin) list = list.slice().sort(function (a, b) { var da = distanceOf(a), db = distanceOf(b); if (da == null && db == null) return 0; if (da == null) return 1; if (db == null) return -1; return da - db; });
     return list;
@@ -339,13 +350,18 @@
       // Never under their name: this booking goes to the Gaia Healers scan team, not to them.
       note = '<p class="gaia-dirprofile__note"><i class="ph ph-info"></i>' + esc(p.name) + ' doesn\'t take online bookings right now. You can contact them through their full profile, or book a scan with the Gaia Healers scan team.</p>';
       actions += '<button type="button" class="g-btn g-btn--primary" data-book-inline="' + esc(SCAN_FALLBACK) + '" data-book-title="Bio-Well scan with the Gaia Healers scan team"><i class="ph ph-calendar-check"></i> Book with the Gaia Healers scan team</button>';
-    } else if (intent === 'scan' || p.meetingLink) {
-      note = '<p class="gaia-dirprofile__note"><i class="ph ph-info"></i>' + esc(p.name) + ' doesn\'t take online bookings right now. Their full profile has other ways to reach them' + (intent === 'scan' ? ', or choose a practitioner marked “Books online”.' : '.') + '</p>';
+    } else {
+      // No online booking: the way to connect is their public Gaia
+      // Practitioners profile, which carries their phone, email and address.
+      // Say so, and make it the main button rather than a quiet "Full profile".
+      note = '<p class="gaia-dirprofile__note"><i class="ph ph-info"></i>' + esc(p.name) + ' doesn\'t take online bookings yet. Their Gaia Practitioners profile has their phone, email and address' + (scanMode() ? ' — or choose a practitioner marked “Books online”.' : '.') + '</p>';
       profileFirst = true;
     }
     if (p.profileLink) actions += '<a class="g-btn g-btn--secondary" href="' + esc(p.profileLink) + '" target="_blank" rel="noopener noreferrer"><i class="ph ph-arrow-up-right"></i> Website</a>';
     // Their public profile page on gaiapractitioners.com (open without login).
-    actions += '<a class="g-btn ' + (profileFirst ? 'g-btn--primary' : (actions ? 'g-btn--ghost' : 'g-btn--secondary')) + '" href="https://gaiapractitioners.com/practitioner/profile/' + encodeURIComponent(String(id)) + '" target="_blank" rel="noopener noreferrer">Full profile</a>';
+    var first = String(p.name || '').split(' ')[0] || 'them';
+    actions += '<a class="g-btn ' + (profileFirst ? 'g-btn--primary' : (actions ? 'g-btn--ghost' : 'g-btn--secondary')) + '" href="https://gaiapractitioners.com/practitioner/profile/' + encodeURIComponent(String(id)) + '" target="_blank" rel="noopener noreferrer">'
+      + (profileFirst ? '<i class="ph ph-chat-circle"></i> Contact ' + esc(first) : 'Full profile') + '</a>';
     body.innerHTML = '<div class="gaia-dirprofile__hero">' + photoHtml(p, 'gaia-dirprofile__img')
       + '<div><h2>' + esc(p.name) + '</h2>'
       + (loc ? '<p class="gaia-dirprofile__loc"><i class="ph ph-map-pin"></i>' + esc(loc) + '</p>' : '')
@@ -423,7 +439,7 @@
     else load();
   }
   window.GaiaDirectory = { open: openWith };
-  window.GaiaDirectory._test = { isBioWell: isBioWell, fmtDist: fmtDist, km: km, booksOnline: booksOnline };
+  window.GaiaDirectory._test = { scanQuery: scanQuery, isBioWell: isBioWell, fmtDist: fmtDist, km: km, booksOnline: booksOnline };
   function ensure() {
     if (!mount()) return;
     if (!loaded) load();

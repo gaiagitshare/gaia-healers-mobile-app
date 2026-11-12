@@ -136,7 +136,8 @@ export const getAttendees = (eventId) => cachedGet(`/events/${eventId}/attendees
 export const getUnmappedSales = (eventId) => cachedGet(`/events/${eventId}/unmapped-sales`);
 export const dismissUnmappedSale = (eventId, id) => api.post(`/events/${eventId}/unmapped-sales/${id}/dismiss`);
 // Destructive, admin-only: wipes this event's record of who was scanned where.
-export const clearScanLogs = (eventId) => api.delete(`/events/${eventId}/scan-logs`);
+export const clearScanLogs = (eventId) => api.delete(`/events/${eventId}/scan-logs`, { params: { confirm: 'CLEAR' } });
+export const clearScanLogsPreview = (eventId) => api.get(`/events/${eventId}/scan-logs/clear-preview`);
 // Door rehearsal: waives ONLY the calendar window, for one event, deliberately.
 export const setDoorTestMode = (eventId, enabled) => api.post(`/events/${eventId}/door-test-mode`, { enabled });
 export const getRehearsalCheckins = (eventId) => api.get(`/events/${eventId}/rehearsal-checkins`);

@@ -175,6 +175,12 @@ check(d.get("result") == "GRANTED" and not d.get("rehearsal"),
 before = sql("SELECT COUNT(*) FROM scan_logs WHERE event_id=?", (FUTURE,))[0][0]
 check(before > 0, "the rehearsal left scans behind", before)
 st, r = call("DELETE", "/events/%d/scan-logs" % FUTURE, token=ADMIN)
+check(st == 400 and sql("SELECT COUNT(*) FROM scan_logs WHERE event_id=?", (FUTURE,))[0][0] == before,
+      "nothing is cleared without typing CLEAR", (st, r))
+st, r = call("GET", "/events/%d/scan-logs/clear-preview" % FUTURE, token=ADMIN)
+check(st == 200 and r.get("practice") == before and r.get("kept") == 0,
+      "the preview counts what would go", (st, r))
+st, r = call("DELETE", "/events/%d/scan-logs?confirm=CLEAR" % FUTURE, token=ADMIN)
 check(st == 200 and r.get("cleared") == before, "they can be cleared in one action", (st, r))
 check(sql("SELECT COUNT(*) FROM scan_logs WHERE event_id=?", (FUTURE,))[0][0] == 0,
       "and the history is empty afterwards")
@@ -182,6 +188,12 @@ check(sql("SELECT COUNT(*) FROM scan_logs WHERE event_id=?", (NOW,))[0][0] > 0,
       "while another event's history is untouched")
 check(sql("SELECT is_checked_in FROM attendees WHERE id=?", (A["attendee_id"],))[0][0] == 1,
       "clearing the log does not un-check anyone in")
+# A running event's real door scans are the attendance record: Clear keeps them.
+real = sql("SELECT COUNT(*) FROM scan_logs WHERE event_id=?", (NOW,))[0][0]
+st, r = call("DELETE", "/events/%d/scan-logs?confirm=CLEAR" % NOW, token=ADMIN)
+check(st == 200 and r.get("cleared") == 0 and r.get("kept") == real
+      and sql("SELECT COUNT(*) FROM scan_logs WHERE event_id=?", (NOW,))[0][0] == real,
+      "real door scans from an event day are never cleared", (st, r, real))
 
 # ── cleanup ───────────────────────────────────────────────────────────────
 for ev in (FUTURE, OTHER, NOW):
@@ -191,7 +203,7 @@ write("DELETE FROM member_cards WHERE email LIKE 'zz-reh-%'")
 left = sql("SELECT COUNT(*) FROM attendees WHERE email LIKE 'zz-reh-%'")
 check(left[0][0] == 0, "the throwaway events and their people are gone afterwards", left)
 
-print("\n%d checks, %d failed" % (18, len(fails)))
+print("\n%d checks, %d failed" % (21, len(fails)))
 if fails:
     print("FAILED: " + "; ".join(fails))
 sys.exit(1 if fails else 0)

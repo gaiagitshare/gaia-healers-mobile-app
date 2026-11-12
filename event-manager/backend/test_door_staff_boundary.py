@@ -124,7 +124,7 @@ CANNOT = [
     ("read the mapping audit",  "GET",  "/events/%d/ticket-mapping-audit" % EVENT, None),
     ("see who scanned who",     "GET",  "/events/%d/scan-history" % EVENT, None),
     ("read the door report",    "GET",  "/events/%d/door-report" % EVENT, None),
-    ("clear the scan history",  "DELETE", "/events/%d/scan-logs" % EVENT, None),
+    ("clear the scan history",  "DELETE", "/events/%d/scan-logs?confirm=CLEAR" % EVENT, None),
     ("change door settings",    "POST", "/events/%d/re-entry" % EVENT, {"enabled": True}),
     ("turn rehearsal off",      "POST", "/events/%d/door-test-mode" % EVENT, {"enabled": False}),
     ("touch another event",     "GET",  "/events/2", None),

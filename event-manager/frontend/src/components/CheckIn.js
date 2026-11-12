@@ -23,7 +23,7 @@ import RestoreIcon from '@mui/icons-material/Restore';
 import GroupsIcon from '@mui/icons-material/Groups';
 import TuneIcon from '@mui/icons-material/Tune';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, setDoorTestMode, getRehearsalCheckins, resetRehearsalCheckins, getEvent, badgeLabelBlob, recordBadgePrint,
+import { authorizeScan, getScanLogs, searchAttendees, getEvents, walkInCreate, getTicketTypes, undoCheckIn, clearScanLogs, clearScanLogsPreview, setDoorTestMode, getRehearsalCheckins, resetRehearsalCheckins, getEvent, badgeLabelBlob, recordBadgePrint,
     overrideAdmit, doorIdentity, addPartySeat, setReEntry as setDoorReEntry, changePass, revokeAttendee, reinstateAttendee,
     getMyCapabilities, getPrintReport, setSharing, setAddonDay, testLabelBlob, issueActivationCode } from '../utils/api';
 import { formatVenueTime, statusLabel, isFlaggedStatus } from '../utils/datetime';
@@ -133,6 +133,8 @@ function CheckIn({ timezone: timezoneProp }) {
     const [scanLogs, setScanLogs] = useState([]);
     const [logsLoading, setLogsLoading] = useState(false);
     const [clearLogsOpen, setClearLogsOpen] = useState(false);
+    const [clearPlan, setClearPlan] = useState(null);
+    const [clearWord, setClearWord] = useState('');
     const [clearing, setClearing] = useState(false);
     const [rehearsal, setRehearsal] = useState(false);
     const [rehearsalBusy, setRehearsalBusy] = useState(false);
@@ -1673,8 +1675,11 @@ function CheckIn({ timezone: timezoneProp }) {
                                             {logsLoading ? 'Loading…' : 'Refresh'}
                                         </Button>
                                     )}
-                                    {(sideBySide || activityOpen) && scanLogs.length > 0 && (
-                                        <Button size="small" color="error" onClick={() => setClearLogsOpen(true)}>Clear</Button>
+                                    {(sideBySide || activityOpen) && scanLogs.length > 0 && may && may.door_settings === true && (
+                                        <Button size="small" color="error" onClick={() => {
+                                            setClearPlan(null); setClearWord(''); setClearLogsOpen(true);
+                                            clearScanLogsPreview(eventId).then((r) => setClearPlan(r.data)).catch(() => setClearPlan({ error: true }));
+                                        }}>Clear</Button>
                                     )}
                                 </Stack>
                             </Stack>
@@ -1792,30 +1797,44 @@ function CheckIn({ timezone: timezoneProp }) {
             <BadgeLabelDialog request={labelReq} eventId={eventId} station={station}
                 onClose={closeLabel} onRecorded={refreshSearch} notify={setFeedback} />
 
-            <Dialog open={clearLogsOpen} onClose={() => setClearLogsOpen(false)}>
-                <DialogTitle>Clear the scan history?</DialogTitle>
+            <Dialog open={clearLogsOpen} onClose={() => setClearLogsOpen(false)} maxWidth="xs" fullWidth>
+                <DialogTitle>Clear the practice scans?</DialogTitle>
                 <DialogContent>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                        This deletes all {scanLogs.length} recorded access decisions for this event and cannot be undone.
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        It does not change anyone&rsquo;s check-in state, their badge, or their ticket — only the log of
-                        who was scanned at which door. Clear it after a rehearsal so the real event starts on a
-                        clean sheet.
-                    </Typography>
+                    {!clearPlan ? <Typography variant="body2" color="text.secondary">Counting…</Typography>
+                        : clearPlan.error ? <Alert severity="error">Could not count the scans. Try again.</Alert> : (<>
+                        <Typography variant="body2" sx={{ mb: 1 }}>
+                            This removes <b>{clearPlan.practice}</b> practice {clearPlan.practice === 1 ? 'scan' : 'scans'} (rehearsal,
+                            or before opening day). It cannot be undone.
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            {clearPlan.kept > 0
+                                ? <><b>{clearPlan.kept}</b> real door {clearPlan.kept === 1 ? 'scan stays' : 'scans stay'} — they are the record of who came in, and are never cleared.</>
+                                : 'Real door scans from the event days are never cleared.'}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                            Nobody&rsquo;s check-in, badge or ticket changes — only this log.
+                        </Typography>
+                        {clearPlan.practice > 0 && (
+                            <TextField fullWidth size="small" label="Type CLEAR to confirm" value={clearWord}
+                                       autoComplete="off" inputProps={{ autoCapitalize: 'characters' }}
+                                       onChange={(e) => setClearWord(e.target.value)} />
+                        )}
+                    </>)}
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setClearLogsOpen(false)}>Cancel</Button>
-                    <Button color="error" variant="contained" disabled={clearing} onClick={async () => {
+                    <Button color="error" variant="contained"
+                            disabled={clearing || !clearPlan || clearPlan.error || !clearPlan.practice || clearWord.trim().toUpperCase() !== 'CLEAR'}
+                            onClick={async () => {
                         setClearing(true);
                         try {
                             await clearScanLogs(eventId);
                             await refreshScanLogs();
                             setClearLogsOpen(false);
                         } catch (e) {
-                            setError(e?.response?.data?.detail || 'Could not clear the scan history.');
+                            setError(e?.response?.data?.detail || 'Could not clear the practice scans.');
                         } finally { setClearing(false); }
-                    }}>{clearing ? 'Clearing…' : 'Clear history'}</Button>
+                    }}>{clearing ? 'Clearing…' : 'Clear practice scans'}</Button>
                 </DialogActions>
             </Dialog>
 

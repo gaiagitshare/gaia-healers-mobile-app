@@ -2084,22 +2084,56 @@ def set_reentry(event_id: int, payload: schemas.DoorTestMode,
     return {"ok": True, "event_id": event_id, "allow_reentry": bool(event.allow_reentry)}
 
 
-@app.delete("/events/{event_id}/scan-logs")
-def clear_scan_logs(event_id: int, db: Session = Depends(get_db),
-                    current_user: models.User = Depends(get_current_user)):
-    """Clear this event's scan history.
+def _practice_scan(event, log) -> bool:
+    """A scan that is not part of the real door record: made in rehearsal, or
+    dated before the event's first day in its own timezone (the door refuses
+    every badge before opening day unless rehearsal is on)."""
+    if (log.reason or "").upper().startswith("REHEARSAL"):
+        return True
+    if not event.start_date:
+        return False
+    day = _local_day(event, log.created_at)
+    return bool(day) and day < event.start_date.date().isoformat()
 
-    Destructive and deliberately admin-only: the history is the record of who
-    was let through which door and when. It exists so a rehearsal's worth of
-    practice scans can be cleared before the real event, rather than staff
-    reading past 160 test rows to find the one that matters on the day.
+
+def _scan_clear_plan(db, event):
+    rows = db.query(models.ScanLog).filter(models.ScanLog.event_id == event.id).all()
+    practice = [r for r in rows if _practice_scan(event, r)]
+    return practice, len(rows) - len(practice)
+
+
+@app.get("/events/{event_id}/scan-logs/clear-preview")
+def clear_scan_logs_preview(event_id: int, db: Session = Depends(get_db),
+                            current_user: models.User = Depends(get_current_user)):
+    """How many scans Clear would remove, and how many real ones it keeps. Read only."""
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "event.write")
+    practice, kept = _scan_clear_plan(db, event)
+    return {"ok": True, "practice": len(practice), "kept": kept}
+
+
+@app.delete("/events/{event_id}/scan-logs")
+def clear_scan_logs(event_id: int, confirm: Optional[str] = None,
+                    db: Session = Depends(get_db),
+                    current_user: models.User = Depends(get_current_user)):
+    """Clear the practice scans from this event's scan history.
+
+    Organisers and administrators only, and only with confirm=CLEAR. It removes
+    rehearsal scans and anything dated before opening day -- the test rows
+    staff should not have to read past -- and never a real door scan from an
+    event day: those are the record of who came in, and the per-day admission
+    report is counted from them (12 Nov 2026). Nobody's check-in state, badge
+    or ticket is touched; that lives on the attendee, not in this log.
     """
-    _get_event_or_404(event_id, db)
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Only an administrator can clear the scan history")
-    n = db.query(models.ScanLog).filter(models.ScanLog.event_id == event_id).delete()
+    event = _get_event_or_404(event_id, db)
+    authz.require_cap(db, current_user, event_id, "event.write")
+    if (confirm or "").strip().upper() != "CLEAR":
+        raise HTTPException(status_code=400, detail="Type CLEAR to confirm clearing the practice scans")
+    practice, kept = _scan_clear_plan(db, event)
+    for r in practice:
+        db.delete(r)
     db.commit()
-    return {"ok": True, "cleared": n}
+    return {"ok": True, "cleared": len(practice), "kept": kept}
 
 
 @app.get("/events/{event_id}/scan-logs")

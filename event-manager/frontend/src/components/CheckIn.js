@@ -33,6 +33,7 @@ import BadgeLabelDialog, { STATION_KEY, LABEL_SIZE_KEY, LABEL_ROLLS, savedLabelS
     preloadNiimbot, isAppleMobile, iosBluetoothSetup, connectPhaseReporter,
     needsOwnWindow, openOwnWindow, OWN_WINDOW_HINT, savedNudge, rememberNudge } from './BadgeLabelDialog';
 import BluetoothIcon from '@mui/icons-material/Bluetooth';
+import LoadGate from './LoadGate';
 
 // The access zones a scanner can be checking. The BACKEND decides the outcome;
 // the operator only tells it which door/zone this is.
@@ -132,6 +133,7 @@ function CheckIn({ timezone: timezoneProp }) {
     const [feedback, setFeedback] = useState(null);
     const [scanLogs, setScanLogs] = useState([]);
     const [logsLoading, setLogsLoading] = useState(false);
+    const [logsStatus, setLogsStatus] = useState('loading');
     const [clearLogsOpen, setClearLogsOpen] = useState(false);
     const [clearPlan, setClearPlan] = useState(null);
     const [clearWord, setClearWord] = useState('');
@@ -324,8 +326,11 @@ function CheckIn({ timezone: timezoneProp }) {
         try {
             const response = await getScanLogs(eventId, 100);
             setScanLogs(response.data.items || []);
+            setLogsStatus('ok');
         } catch (err) {
-            setScanLogs([]);
+            // Keep what the desk already sees; "Nothing scanned yet" after a
+            // failed refresh would read as an empty door on the day.
+            setLogsStatus((st) => (st === 'ok' ? 'ok' : 'failed'));
         } finally { setLogsLoading(false); }
     };
 
@@ -1700,7 +1705,9 @@ function CheckIn({ timezone: timezoneProp }) {
                                 </Stack>
                             )}
 
-                            {scanLogs.length === 0 ? (
+                            {logsStatus !== 'ok' ? (
+                                <Box sx={{ px: 1.5, pb: 2 }}><LoadGate status={logsStatus} what="the recent activity" onRetry={refreshScanLogs} /></Box>
+                            ) : scanLogs.length === 0 ? (
                                 <Box sx={{ px: 1.5, pb: 2 }}>
                                     <Typography variant="body2" color="text.secondary">
                                         Nothing scanned yet. Decisions appear here the moment a badge is read.

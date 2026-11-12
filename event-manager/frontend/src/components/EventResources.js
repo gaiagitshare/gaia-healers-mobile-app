@@ -7,6 +7,7 @@ import {
 import DeleteIcon from '@mui/icons-material/Delete';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { getEventResources, createEventResource, deleteEventResource, updateEventResource } from '../utils/api';
+import LoadGate from './LoadGate';
 
 // Downloadable files / links the organiser publishes for an event — programme
 // PDF, venue map, exhibitor kit, hotel link. Attendees see these under the
@@ -14,6 +15,7 @@ import { getEventResources, createEventResource, deleteEventResource, updateEven
 function EventResources() {
     const { id } = useParams();
     const [items, setItems] = useState([]);
+    const [itemsStatus, setItemsStatus] = useState('loading');
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [url, setUrl] = useState('');
@@ -21,7 +23,8 @@ function EventResources() {
     const [error, setError] = useState(null);
 
     const load = useCallback(() => {
-        getEventResources(id).then((r) => setItems(r.data || [])).catch(() => setItems([]));
+        getEventResources(id).then((r) => { setItems(r.data || []); setItemsStatus('ok'); })
+            .catch(() => { setItems([]); setItemsStatus('failed'); });
     }, [id]);
     useEffect(() => { load(); }, [load]);
 
@@ -86,9 +89,9 @@ function EventResources() {
             </Card>
 
             <Typography variant="overline" color="text.secondary">
-                Published · {items.length}
+                Published · {itemsStatus === 'ok' ? items.length : '…'}
             </Typography>
-            {items.length === 0 ? (
+            {itemsStatus !== 'ok' ? <LoadGate status={itemsStatus} what="the resources" onRetry={load} /> : items.length === 0 ? (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                     Nothing added yet.
                 </Typography>

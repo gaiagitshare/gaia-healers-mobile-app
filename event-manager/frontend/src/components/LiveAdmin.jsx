@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { getEvent, updateEvent, getAnnouncements } from '../utils/api';
+import LoadGate from './LoadGate';
 
 /**
  * Live — what attendees are being shown right now.
@@ -68,6 +69,7 @@ export default function LiveAdmin() {
     };
 
     if (loading && !event) return <CircularProgress size={26} />;
+    if (!event) return <LoadGate status="failed" what="the live controls" onRetry={load} />;
 
     // Exactly what /public/events/{id}/live carries: published only, pinned
     // first, five at most. Showing all of them here would be a different list

@@ -21,6 +21,7 @@ import {
 } from '../utils/api';
 import ImportCsvDialog from './ImportCsvDialog';
 import BulkToolbar, { useBulkSelection, SelectAllCheckbox } from './BulkToolbar';
+import LoadGate from './LoadGate';
 
 /**
  * Exhibitors — the stands: who is coming, what they bought, what they may do,
@@ -104,6 +105,7 @@ function Logo({ row, size = 34 }) {
 export default function Exhibitors({ eventId, onCountChange }) {
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [loadFailed, setLoadFailed] = useState(false);
     const [error, setError] = useState('');
     const [view, setView] = useState('roster');
     // A stand could see its own leads and the door could see its own log, and
@@ -136,11 +138,12 @@ export default function Exhibitors({ eventId, onCountChange }) {
         setLoading(true); setError('');
         try {
             const r = await getExhibitors(eventId);
-            setRows(r.data || []);
+            setRows(r.data || []); setLoadFailed(false);
             if (onCountChange) onCountChange((r.data || []).length);
             return r.data || [];
         } catch (e) {
             setError(e?.response?.data?.detail || 'Could not load the exhibitors.');
+            setLoadFailed(true);
             return null;
         } finally { setLoading(false); }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -361,7 +364,8 @@ export default function Exhibitors({ eventId, onCountChange }) {
 
             {loading && rows.length === 0 ? <CircularProgress size={26} /> : null}
 
-            {!loading && !visible.length && (
+            {!loading && loadFailed && !rows.length && <LoadGate status="failed" what="the exhibitors" onRetry={load} />}
+            {!loading && !loadFailed && !visible.length && (
                 <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', color: 'text.secondary' }}>
                     <Typography variant="body2">
                         {rows.length ? 'No stand matches that.' : 'No exhibitors on this event yet.'}

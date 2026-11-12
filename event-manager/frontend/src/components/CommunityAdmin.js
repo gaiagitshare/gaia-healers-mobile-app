@@ -9,6 +9,7 @@ import {
     getEventPosts, moderatePost, announceToEvent,
     suspendMember, unsuspendMember, getCommunityBans,
 } from '../utils/api';
+import LoadGate from './LoadGate';
 
 // Community moderation. Post-moderation: posts are already live; here an
 // organiser removes what shouldn't be up, pins what should stay on top,
@@ -17,13 +18,15 @@ import {
 function CommunityAdmin() {
     const { id } = useParams();
     const [posts, setPosts] = useState([]);
+    const [postsStatus, setPostsStatus] = useState('loading');
     const [bans, setBans] = useState([]);
     const [announce, setAnnounce] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState(null);
 
     const load = useCallback(() => {
-        getEventPosts(id).then((r) => setPosts(r.data?.posts || [])).catch(() => setPosts([]));
+        getEventPosts(id).then((r) => { setPosts(r.data?.posts || []); setPostsStatus('ok'); })
+            .catch(() => { setPosts([]); setPostsStatus('failed'); });
         getCommunityBans(id).then((r) => setBans(r.data?.bans || [])).catch(() => setBans([]));
     }, [id]);
     useEffect(() => { load(); }, [load]);
@@ -159,8 +162,8 @@ function CommunityAdmin() {
                 </Card>
             )}
 
-            <Typography variant="overline" color="text.secondary">All posts · {posts.length}</Typography>
-            {posts.length === 0 ? (
+            <Typography variant="overline" color="text.secondary">All posts · {postsStatus === 'ok' ? posts.length : '…'}</Typography>
+            {postsStatus !== 'ok' ? <LoadGate status={postsStatus} what="the posts" onRetry={load} /> : posts.length === 0 ? (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                     No posts yet.
                 </Typography>

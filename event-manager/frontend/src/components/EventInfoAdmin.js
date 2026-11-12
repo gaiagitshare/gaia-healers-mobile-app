@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { getEventInfo, createEventInfo, deleteEventInfo, updateEventInfo } from '../utils/api';
+import LoadGate from './LoadGate';
 
 // FAQ / Help / Info cards for one event. Attendees see these under the app's
 // "Info" tab. Every event gets this, so the section is structural, not per-event.
@@ -19,6 +20,7 @@ const SECTION_LABEL = { faq: 'FAQ', help: 'Help / Support', info: 'Good to know'
 function EventInfoAdmin() {
     const { id } = useParams();
     const [cards, setCards] = useState([]);
+    const [cardsStatus, setCardsStatus] = useState('loading');
     const [section, setSection] = useState('faq');
     const [title, setTitle] = useState('');
     const [body, setBody] = useState('');
@@ -26,7 +28,8 @@ function EventInfoAdmin() {
     const [error, setError] = useState(null);
 
     const load = useCallback(() => {
-        getEventInfo(id).then((r) => setCards(r.data || [])).catch(() => setCards([]));
+        getEventInfo(id).then((r) => { setCards(r.data || []); setCardsStatus('ok'); })
+            .catch(() => { setCards([]); setCardsStatus('failed'); });
     }, [id]);
     useEffect(() => { load(); }, [load]);
 
@@ -108,7 +111,8 @@ function EventInfoAdmin() {
                 </CardContent>
             </Card>
 
-            {grouped.map((g) => (
+            {cardsStatus !== 'ok' && <LoadGate status={cardsStatus} what="the info cards" onRetry={load} />}
+            {cardsStatus === 'ok' && grouped.map((g) => (
                 <Box key={g.value} sx={{ mb: 3 }}>
                     <Typography variant="overline" color="text.secondary">
                         {SECTION_LABEL[g.value]} · {g.items.length}

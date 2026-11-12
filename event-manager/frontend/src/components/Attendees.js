@@ -26,6 +26,7 @@ import {
 import MapReconcile from './MapReconcile';
 import BadgeLabelDialog, { savedLabelSize, savedStation } from './BadgeLabelDialog';
 import { formatVenueTime, STATUS_LABELS, statusLabel } from '../utils/datetime';
+import LoadGate from './LoadGate';
 
 // The organiser's GHL location, for the authoritative refund/payment record.
 const GHL_LOCATION = 'WkKl1K5RuZNQ60xR48k6';
@@ -45,6 +46,7 @@ function Attendees({ timezone }) {
     const { id: eventId } = useParams();
     const compact = useMediaQuery(useTheme().breakpoints.down('md'));
     const [attendees, setAttendees] = useState([]);
+    const [listStatus, setListStatus] = useState('loading');
     const [counts, setCounts] = useState(null);
     const [ticketTypes, setTicketTypes] = useState([]);
     const [openDialog, setOpenDialog] = useState(false);
@@ -123,7 +125,7 @@ function Attendees({ timezone }) {
     };
 
     useEffect(() => {
-        setAttendees([]); setResults(null); setQuery(''); setEditing(null); setConfirmDelete(null);
+        setAttendees([]); setListStatus('loading'); setResults(null); setQuery(''); setEditing(null); setConfirmDelete(null);
         loadAttendees(); loadCounts();
         getTicketTypes(eventId).then((r) => setTicketTypes(r.data || [])).catch(() => setTicketTypes([]));
         // Which event this roll belongs to. The page said only "Attendees", so an
@@ -145,8 +147,8 @@ function Attendees({ timezone }) {
     }, [query, eventId]);
 
     const loadAttendees = async () => {
-        try { const response = await getAttendees(eventId); setAttendees(response.data); }
-        catch (error) { console.error('Failed to load attendees:', error); }
+        try { const response = await getAttendees(eventId); setAttendees(response.data); setListStatus('ok'); }
+        catch (error) { console.error('Failed to load attendees:', error); setListStatus((st) => (st === 'ok' ? 'ok' : 'failed')); }
     };
     const loadCounts = () => getTicketCounts(eventId).then((r) => setCounts(r.data)).catch(() => setCounts(null));
 
@@ -1036,7 +1038,7 @@ function Attendees({ timezone }) {
                 </Paper>
             )}
 
-            {visible.length === 0 ? (
+            {listStatus !== 'ok' && results === null ? <LoadGate status={listStatus} what="the attendees" onRetry={loadAttendees} sx={{ p: 2 }} /> : visible.length === 0 ? (
                 <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
                     <Typography variant="subtitle1" gutterBottom>{(results !== null || anyFilter) ? 'Nobody matches that' : 'No attendees yet'}</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>

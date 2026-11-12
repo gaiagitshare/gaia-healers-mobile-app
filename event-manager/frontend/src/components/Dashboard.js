@@ -26,6 +26,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { autoSyncEvents, getDashboardStats } from '../utils/api';
 import PrintersCard from './PrintersCard';
+import LoadGate from './LoadGate';
 
 function StatCard({ title, value, detail, icon, color, onClick }) {
     return (
@@ -57,6 +58,7 @@ function StatCard({ title, value, detail, icon, color, onClick }) {
 function Dashboard() {
     const navigate = useNavigate();
     const [stats, setStats] = useState(null);
+    const [statsStatus, setStatsStatus] = useState('loading');
     const [syncing, setSyncing] = useState(false);
     const [notice, setNotice] = useState(null);
 
@@ -68,8 +70,10 @@ function Dashboard() {
         try {
             const response = await getDashboardStats();
             setStats(response.data);
+            setStatsStatus('ok');
         } catch (error) {
             console.error('Failed to load stats:', error);
+            setStatsStatus((st) => (st === 'ok' ? 'ok' : 'failed'));
         }
     };
 
@@ -299,7 +303,8 @@ function Dashboard() {
                                         />
                                     </Box>
                                 ))}
-                                {!stats?.events?.length && (
+                                {statsStatus !== 'ok' && <LoadGate status={statsStatus} what="the events" onRetry={loadStats} />}
+                                {statsStatus === 'ok' && !stats?.events?.length && (
                                     <Typography color="textSecondary">No events yet. Sync Gaia pages or create an event.</Typography>
                                 )}
                             </Stack>
@@ -334,7 +339,8 @@ function Dashboard() {
                                         />
                                     </ListItem>
                                 ))}
-                                {!stats?.recent_attendees?.length && (
+                                {statsStatus !== 'ok' && <LoadGate status={statsStatus} what="the registrations" onRetry={loadStats} />}
+                                {statsStatus === 'ok' && !stats?.recent_attendees?.length && (
                                     <Typography color="textSecondary">No attendee registrations yet.</Typography>
                                 )}
                             </List>

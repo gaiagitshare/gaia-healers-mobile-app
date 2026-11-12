@@ -20,6 +20,7 @@ import {
     getSponsors, createSponsor, updateSponsor, deleteSponsor,
     getAnnouncements, createAnnouncement, updateAnnouncement, deleteAnnouncement,
 } from '../utils/api';
+import LoadGate from './LoadGate';
 
 const SPONSOR_TIERS = ['headline', 'gold', 'silver', 'partner'];
 const EMPTY_SPONSOR = { name: '', tier: 'gold', logo_url: '', website: '', blurb: '', sort_order: 0, is_published: true };
@@ -293,6 +294,10 @@ function Agenda({ section }) {
 
     if (loading && !event) {
         return <Box sx={{ display: 'flex', justifyContent: 'center', p: 6 }}><CircularProgress /></Box>;
+    }
+    // Never loaded: say so, rather than showing "No sessions yet" under the error.
+    if (!event) {
+        return <Box sx={{ p: 2 }}><LoadGate status="failed" what="the agenda" onRetry={load} /></Box>;
     }
 
     const publishedCount = sessions.filter((s) => s.is_published).length;

@@ -15,6 +15,8 @@ import { getTicketMappings, createTicketMapping, deleteTicketMapping, getTicketT
 function TicketMappings() {
     const { id } = useParams();
     const [rows, setRows] = useState([]);
+    // 'loading' | 'ok' | 'failed' -- "No products mapped yet" only once it is true.
+    const [rowsStatus, setRowsStatus] = useState('loading');
     const [types, setTypes] = useState([]);
     const [productId, setProductId] = useState('');
     const [priceId, setPriceId] = useState('');
@@ -31,7 +33,8 @@ function TicketMappings() {
     const [audit, setAudit] = useState(null);
 
     const load = useCallback(() => {
-        getTicketMappings(id).then((r) => setRows(r.data || [])).catch(() => setRows([]));
+        getTicketMappings(id).then((r) => { setRows(r.data || []); setRowsStatus('ok'); })
+            .catch(() => { setRows([]); setRowsStatus('failed'); });
         getTicketTypes(id).then((r) => setTypes(r.data || [])).catch(() => setTypes([]));
         getTicketMappingAudit(id).then((r) => setAudit(r.data || null)).catch(() => setAudit(null));
     }, [id]);
@@ -189,9 +192,15 @@ function TicketMappings() {
             </Card>
 
             <Typography variant="overline" color="text.secondary">
-                Mapped products · {rows.length}
+                Mapped products · {rowsStatus === 'ok' ? rows.length : '…'}
             </Typography>
-            {rows.length === 0 ? (
+            {rowsStatus === 'loading' ? (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Loading the mapped products…</Typography>
+            ) : rowsStatus === 'failed' ? (
+                <Alert severity="warning" sx={{ mt: 1 }} action={<Button size="small" onClick={load}>Retry</Button>}>
+                    Could not load the mapped products. Nothing has changed — try again.
+                </Alert>
+            ) : rows.length === 0 ? (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                     No products mapped yet. Until you add one, sales for this event only arrive if mapped elsewhere.
                 </Typography>

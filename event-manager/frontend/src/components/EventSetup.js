@@ -44,6 +44,10 @@ function EventSetup() {
     const [places, setPlaces] = useState([]);
     const [exhibitors, setExhibitors] = useState([]);
     const [feedback, setFeedback] = useState(null);
+    // Per panel: 'loading' | 'ok' | 'failed'. An empty list only means "none"
+    // once it has actually loaded -- "No passes yet" while the request is still
+    // on its way invited a duplicate pass (12 Nov 2026).
+    const [status, setStatus] = useState({ tt: 'loading', roles: 'loading', places: 'loading', feedback: 'loading' });
     const [error, setError] = useState('');
 
     const [ttDialog, setTtDialog] = useState(false);
@@ -59,19 +63,27 @@ function EventSetup() {
 
     const load = useCallback(async () => {
         // Each panel degrades alone: a feedback hiccup must not blank the passes.
-        const grab = async (call, set, fallback) => {
-            try { const r = await call(); set(r.data); } catch (_) { set(fallback); }
+        const grab = async (call, set, fallback, key) => {
+            try { const r = await call(); set(r.data); if (key) setStatus((st) => ({ ...st, [key]: 'ok' })); }
+            catch (_) { set(fallback); if (key) setStatus((st) => ({ ...st, [key]: 'failed' })); }
         };
         await Promise.all([
-            grab(() => getTicketTypes(id), setTicketTypes, []),
-            grab(() => getRoles(id), setRoles, []),
-            grab(() => getPlaces(id), setPlaces, []),
+            grab(() => getTicketTypes(id), setTicketTypes, [], 'tt'),
+            grab(() => getRoles(id), setRoles, [], 'roles'),
+            grab(() => getPlaces(id), setPlaces, [], 'places'),
             grab(() => getExhibitors(id), setExhibitors, []),
-            grab(() => getFeedbackSummary(id), setFeedback, null),
+            grab(() => getFeedbackSummary(id), setFeedback, null, 'feedback'),
         ]);
     }, [id]);
 
     useEffect(() => { load(); }, [load]);
+
+    // What a panel shows before its list can be trusted, or null once it has loaded.
+    const notReady = (key, what) => (status[key] === 'loading'
+        ? <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>Loading {what}…</Typography>
+        : status[key] === 'failed'
+            ? <Alert severity="warning" action={<Button size="small" onClick={load}>Retry</Button>}>Could not load {what}. Nothing has changed — try again.</Alert>
+            : null);
 
     const say = (e, fallback) => setError(e?.response?.data?.detail || fallback);
 
@@ -127,7 +139,7 @@ function EventSetup() {
                             Add pass
                         </Button>
                     </Box>
-                    {ticketTypes.length === 0
+                    {notReady('tt', 'the passes') || (ticketTypes.length === 0
                         ? <Alert severity="info">No passes yet. Attendees without a pass hold no special access.</Alert>
                         : (
                             <TableContainer>
@@ -168,7 +180,7 @@ function EventSetup() {
                                 </TableBody>
                             </Table>
                             </TableContainer>
-                        )}
+                        ))}
                 </CardContent>
             </Card>
 
@@ -185,7 +197,7 @@ function EventSetup() {
                         </Box>
                         <Button variant="contained" onClick={() => setRoleDialog(true)}>Grant a role</Button>
                     </Box>
-                    {roles.length === 0
+                    {notReady('roles', 'the roles') || (roles.length === 0
                         ? <Alert severity="info">Nobody has a scoped role here yet. Platform admins always have access.</Alert>
                         : roles.map((r) => (
                             <Box key={r.id} display="flex" justifyContent="space-between" alignItems="center"
@@ -202,7 +214,7 @@ function EventSetup() {
                                     </IconButton>
                                 </Box>
                             </Box>
-                        ))}
+                        )))}
                 </CardContent>
             </Card>
 
@@ -221,7 +233,7 @@ function EventSetup() {
                             Add place
                         </Button>
                     </Box>
-                    {places.length === 0
+                    {notReady('places', 'the places') || (places.length === 0
                         ? <Alert severity="info">No places yet — the app hides the Map tab until there is something to find.</Alert>
                         : (
                             <TableContainer>
@@ -264,7 +276,7 @@ function EventSetup() {
                                 </TableBody>
                             </Table>
                             </TableContainer>
-                        )}
+                        ))}
                 </CardContent>
             </Card>
 
@@ -276,7 +288,7 @@ function EventSetup() {
                         Counts, averages and unattributed comments. Individual responses are
                         private by design — you learn what was said, never who said it.
                     </Typography>
-                    {!feedback || !(feedback.summary || []).length
+                    {notReady('feedback', 'the ratings') || (!feedback || !(feedback.summary || []).length
                         ? <Alert severity="info">No ratings yet. Stars appear for attendees once the event is running.</Alert>
                         : (feedback.summary || []).map((row) => (
                             <Box key={row.session_id || 'event'} sx={{ py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
@@ -295,7 +307,7 @@ function EventSetup() {
                                     </Typography>
                                 ))}
                             </Box>
-                        ))}
+                        )))}
                 </CardContent>
             </Card>
 

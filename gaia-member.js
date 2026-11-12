@@ -420,6 +420,19 @@ body.gaia-booking-open{overflow:hidden;}
     setTimeout(() => { try { overlay.querySelector('[data-transition-open]').focus(); } catch (e) {} }, 40);
   }
 
+  function withMemberPrefill(u) {
+    try {
+      if (!state.authed || !/^https:\/\/([a-z0-9-]+\.)*leadconnectorhq\.com\/widget\/bookings?\//i.test(u)) return u;
+      const p = (state.data && state.data.profile && state.data.profile.profile) || {};
+      const parts = String(p.name || '').trim().split(/\s+/).filter(Boolean);
+      const add = new URLSearchParams();
+      if (parts[0]) add.set('first_name', parts[0]);
+      if (parts.length > 1) add.set('last_name', parts.slice(1).join(' '));
+      if (p.email && /@/.test(p.email)) add.set('email', String(p.email));
+      const q = add.toString();
+      return q ? u + (u.includes('?') ? '&' : '?') + q : u;
+    } catch (_) { return u; }
+  }
   function openInApp(rawUrl, title) {
     const url = String(rawUrl || '').trim();
     if (!url) return;
@@ -452,9 +465,13 @@ body.gaia-booking-open{overflow:hidden;}
     }
 
     // Calendly inline embeds use query flags; everything else embeds as-is.
-    const embedUrl = url.includes('calendly.com')
+    let embedUrl = url.includes('calendly.com')
       ? url + (url.includes('?') ? '&' : '?') + 'embed_logo=false&embed_type=Inline'
       : url;
+    // A signed-in member's name and email go into a GHL booking form for them
+    // (GHL reads first_name / last_name / email from the link; checked 12 Nov
+    // 2026). Only into our own booking calendars, and only what they gave us.
+    embedUrl = withMemberPrefill(embedUrl);
 
     actuallyOpenInApp(url, embedUrl, title);
   }

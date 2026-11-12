@@ -861,7 +861,9 @@
       + '<p class="gg-hero__lede">Check in with yourself, explore free Gaia tools, and discover your next step.</p>'
       + '<div class="gg-hero__actions">'
       + '<a class="g-btn g-btn--primary gg-cta" href="home.html?view=wellness&tab=check">' + icon('sparkle') + ' Check my energy ' + icon('arrow-right', 'gg-cta__arrow') + '</a>'
-      + '<a class="g-btn g-btn--secondary gg-cta-quiet" href="#gg-explore" data-gg-explore>Explore Gaia</a></div>'
+      // The second way in is the one people come for: a scan with a real
+      // practitioner (12 Nov 2026). The free tools are right below anyway.
+      + '<button type="button" class="g-btn g-btn--secondary gg-cta-quiet" data-dir-intent="scan">' + icon('map-pin') + ' Reserve a biofield scan</button></div>'
       + '<p class="gg-hero__note">' + icon('check-circle') + ' Free — no account needed to start</p></div>'
       + '<div class="gg-hero__art"><picture>'
       + '<source media="(min-width: 1060px)" type="image/webp" srcset="assets/gaia-hero-moon.webp" />'
@@ -869,6 +871,20 @@
       + '<img src="assets/gaia-hero-moon-wide.png" alt="Person meditating in lotus pose under a full moon over mountains" width="1024" height="576" loading="eager" fetchpriority="high" /></picture></div></section>';
   }
 
+  /** The one thing people come for that no free tool replaces: a Bio-Well scan
+   * with a real practitioner. Shown to everyone, near the top (12 Nov 2026 --
+   * a new visitor's Home had no way to find a practitioner at all). */
+  function guestScan() {
+    return '<section class="gg-scan" aria-labelledby="gg-scan-title">'
+      + '<span class="gg-scan__icon" aria-hidden="true">' + icon('pulse') + '</span>'
+      + '<div class="gg-scan__copy"><p class="g-super-kicker">Bio-Well biofield scan</p>'
+      + '<h2 id="gg-scan-title">Reserve a scan near you</h2>'
+      + '<p>Find a certified Bio-Well practitioner close by and pick a time, right here in the app.</p></div>'
+      + '<div class="gg-scan__actions">'
+      + '<button type="button" class="g-btn g-btn--primary" data-dir-intent="scan">' + icon('map-pin') + ' Reserve a biofield scan</button>'
+      + '<a class="g-btn g-btn--secondary" href="home.html?view=directory">' + icon('users-three') + ' Find a healer</a>'
+      + '</div></section>';
+  }
   function guestExplore() {
     // Energy check leads; the rest are the same free doors as before, plus one
     // way to every tool so the grid ends on a full row.
@@ -1063,6 +1079,7 @@
       // guest on-ramp: what Gaia is, the tools a stranger can use now, one way
       // in, and the next gathering. The booking card host stays for Today.
       + guestHero(dayGreeting)
+      + guestScan()
       + guestExplore()
       + guestJoin()
       + guestEvent()

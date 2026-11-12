@@ -66,8 +66,52 @@ function normalizeListItem(p) {
     reviewAvg: Number(p.review_avg) || 0,
     reviewCnt: Number(p.review_cnt) || 0,
     profileLink: safeHttpUrl(p.profileLink),
+    // Published on their public listing (45 of 219 in Nov 2026); was dropped.
+    street: plausibleStreet(p.address),
+    zip: String(p.zipcode || '').trim().slice(0, 12),
   };
 }
+
+// Directions only to something that is an address: a number and a street name.
+// Not a PO box, a placeholder ("123 abc dr") or a bare number (Nov 2026 data).
+function plausibleStreet(a) {
+  const v = String(a || '').trim().replace(/\s+/g, ' ');
+  if (!/^\d[\d-]*[a-z]?\s+(?=.*[a-z]{3,})/i.test(v)) return '';
+  if (/\bp\.?\s*o\.?\s*box\b|\babc\b|\btest\b|\bn\/?a\b/i.test(v)) return '';
+  return v.slice(0, 120);
+}
+// "7/12/2024" (their format) or ISO -> YYYY-MM-DD; '' when unreadable.
+function isoDate(d) {
+  const v = String(d || '').trim();
+  const m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) {
+    // Their reviews mix "24/4/2024" and "12/25/2024": a part over 12 is the
+    // day; when both could be, read it the US way (month first).
+    let mo = Number(m[1]), da = Number(m[2]);
+    if (mo > 12 && da <= 12) [mo, da] = [da, mo];
+    if (mo < 1 || mo > 12 || da < 1 || da > 31) return '';
+    return m[3] + '-' + String(mo).padStart(2, '0') + '-' + String(da).padStart(2, '0');
+  }
+  const t = Date.parse(v);
+  return Number.isFinite(t) ? new Date(t).toISOString().slice(0, 10) : '';
+}
+// Their public reviews (/api/data "review"), newest first, a few per person.
+// Only what their own site shows publicly: rating, words, date, first name.
+let _reviews = new Map();
+function indexReviews(rows) {
+  const by = new Map();
+  (Array.isArray(rows) ? rows : []).forEach((r) => {
+    const id = String(r && r.practitioner || ''); const text = String(r && r.feedback || '').trim();
+    if (!id || !text) return;
+    const list = by.get(id) || [];
+    list.push({ rating: Math.max(0, Math.min(5, Number(r.rating) || 0)), text: text.slice(0, 600),
+      date: isoDate(r.date), by: String(r.name || '').trim().split(/\s+/)[0].slice(0, 30) });
+    by.set(id, list);
+  });
+  by.forEach((list) => list.sort((a, b) => String(b.date).localeCompare(String(a.date))));
+  return by;
+}
+export function reviewsFor(id) { return (_reviews.get(String(id)) || []).slice(0, 5); }
 
 function normalizeDetail(j, id, listItem) {
   const base = listItem || {};
@@ -86,8 +130,16 @@ function normalizeDetail(j, id, listItem) {
 
 // Whether each practitioner can really be booked online (booking-check.js).
 // Added at response time, so the cached list itself never goes stale on it.
-function withBooking(list) { return list.map((p) => Object.assign({}, p, { booking: booking.statusFor(p.id) })); }
-function detailWithBooking(d) { return d ? Object.assign({}, d, { booking: booking.statusFor(d.id), scanTeam: booking.scanTeamStatus() }) : d; }
+function bookingFields(id) {
+  const b = booking.bookingFor(id);
+  const out = { booking: b.status };
+  if (b.next) out.nextSlot = b.next;
+  if (b.durationMin) out.durationMin = b.durationMin;
+  if (typeof b.autoConfirm === 'boolean') out.autoConfirm = b.autoConfirm;
+  return out;
+}
+function withBooking(list) { return list.map((p) => Object.assign({}, p, bookingFields(p.id))); }
+function detailWithBooking(d) { return d ? Object.assign({}, d, bookingFields(d.id), { scanTeam: booking.scanTeamStatus(), reviews: reviewsFor(d.id) }) : d; }
 
 async function fetchUpstream(path, ms) {
   const ctrl = new AbortController();
@@ -115,6 +167,7 @@ async function handleList(res, sendJson, origin) {
       .map(normalizeListItem)
       .filter((p) => p.id != null && p.name);
     _listCache = { at: now, list };
+    _reviews = indexReviews(j.review);
     return sendJson(res, 200, { ok: true, source: 'gaiapractitioners.com', cached: false, count: list.length, scanTeam: booking.scanTeamStatus(), practitioners: withBooking(list) }, origin);
   } catch (e) {
     if (_listCache.list && (now - _listCache.at) < RESILIENCE_MS) {
@@ -161,7 +214,7 @@ export async function practitionerLinks(opts = {}) {
 }
 
 // Exported for the test; the router itself is the only runtime caller.
-export { directoryImage };
+export { directoryImage, plausibleStreet, isoDate, indexReviews };
 
 export async function handle(req, res, url, deps) {
   const { origin, sendJson } = deps;

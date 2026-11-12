@@ -33,6 +33,18 @@ let file = '';
 let running = false;
 
 export function statusFor(id) { const s = state.byId[String(id)]; return s ? s.status : 'unknown'; }
+/** What the directory shows beside the Book button: status, the next open time
+ * (only while it is still ahead), how long a session is, and whether the
+ * calendar confirms a booking on the spot or the practitioner confirms it. */
+export function bookingFor(id, now = Date.now()) {
+  const s = state.byId[String(id)];
+  if (!s) return { status: 'unknown' };
+  const out = { status: s.status };
+  if (s.next && Date.parse(s.next) > now) out.next = s.next;
+  if (s.durationMin) out.durationMin = s.durationMin;
+  if (typeof s.autoConfirm === 'boolean') out.autoConfirm = s.autoConfirm;
+  return out;
+}
 export function scanTeamStatus() { return state.scanTeam || 'unknown'; }
 export function summary() { return { checkedAt: state.checkedAt ? new Date(state.checkedAt).toISOString() : null, scanTeam: state.scanTeam, counts: state.counts }; }
 /** A Book button leads somewhere only for these. */
@@ -59,6 +71,15 @@ export function calendarFor(url, calendars) {
   return { ghl: true, calendar: cal };
 }
 
+/** Session length and confirmation mode, from the calendar's own settings. */
+export function calendarMeta(cal) {
+  const out = {};
+  const n = Number(cal && cal.slotDuration);
+  if (Number.isFinite(n) && n > 0) out.durationMin = /hour/i.test(String(cal.slotDurationUnit || '')) ? n * 60 : n;
+  if (cal && typeof cal.autoConfirm === 'boolean') out.autoConfirm = cal.autoConfirm;
+  return out;
+}
+
 /** One calendar's status from GHL's own free-slots answer. */
 export async function calendarStatus(cal, ghlRequest, now) {
   if (!cal) return null;
@@ -67,8 +88,13 @@ export async function calendarStatus(cal, ghlRequest, now) {
   if (!r || !r.status || r.status === 429 || r.status >= 500) return null;           // no evidence; keep what we had
   if (r.status === 200) {
     const j = r.json || {};
-    const days = Object.keys(j).filter((k) => /^\d{4}-\d\d-\d\d$/.test(k) && Array.isArray(j[k] && j[k].slots) && j[k].slots.length).length;
-    return days ? { status: 'online', days } : { status: 'full', days: 0 };
+    const dayKeys = Object.keys(j).filter((k) => /^\d{4}-\d\d-\d\d$/.test(k) && Array.isArray(j[k] && j[k].slots) && j[k].slots.length);
+    const meta = calendarMeta(cal);
+    if (!dayKeys.length) return Object.assign({ status: 'full', days: 0 }, meta);
+    // The earliest open time still ahead -- GHL already sent it; keeping it lets
+    // the directory say "Next: Thu 4:30 pm" instead of only "Books online".
+    const next = dayKeys.flatMap((k) => j[k].slots).map((t) => Date.parse(t)).filter((t) => Number.isFinite(t) && t > now).sort((a, b) => a - b)[0];
+    return Object.assign({ status: 'online', days: dayKeys.length }, next ? { next: new Date(next).toISOString() } : {}, meta);
   }
   // 400/404/422 ("No users found in the calendar") — this calendar cannot take a booking.
   return { status: 'unavailable', why: String((r.json && r.json.message) || ('http ' + r.status)).slice(0, 80) };
@@ -109,7 +135,8 @@ export async function runOnce(deps, opts = {}) {
     const byId = {};
     for (const [id, url] of Object.entries(state.links)) {
       const r = await check(url);
-      byId[id] = r ? { status: r.status, days: r.days, why: r.why, at: now } : (state.byId[id] || { status: 'unknown', at: now });
+      byId[id] = r ? { status: r.status, days: r.days, why: r.why, at: now, next: r.next, durationMin: r.durationMin, autoConfirm: r.autoConfirm }
+        : (state.byId[id] || { status: 'unknown', at: now });
     }
     state.byId = byId;
     if (deps.scanTeamSlug) {

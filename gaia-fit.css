@@ -2394,3 +2394,15 @@ body.gaia-v2 .gaia-assist:not(.gaia-assist--minimized):not(.gaia-assist--welcome
 .gaia-tour__card { font-family: var(--g-font-body, sans-serif); }
 .gaia-tour__spot { transition: none; }
 .gaia-tour__title { font-family: inherit; font-size: 20px; line-height: 1.25; }
+
+/* Directory profile: booking facts, address with directions, reviews (12 Nov 2026). */
+.gaia-dirprofile__facts { color: var(--g-text, #e8f2e2); }
+.gaia-dirprofile__addr { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin: 0 0 6px; font-size: 13px; color: var(--g-text-dim, #93A597); }
+.gaia-dirprofile__addr a { display: inline-flex; align-items: center; gap: 4px; color: var(--g-accent, #A6E84B); font-weight: 600; text-decoration: none; min-height: 32px; }
+.gaia-dirprofile__reviews { margin: 14px 0 4px; display: grid; gap: 10px; }
+.gaia-dirprofile__reviews .g-super-kicker { margin: 0; }
+.gaia-dirprofile__reviews blockquote { margin: 0; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid var(--g-line, rgba(190,240,170,0.12)); }
+.gaia-dirprofile__reviews blockquote p { margin: 4px 0; font-size: 13.5px; line-height: 1.45; color: var(--g-text, #e8f2e2); }
+.gaia-dirprofile__reviews cite { font-style: normal; font-size: 12px; color: var(--g-text-dim, #93A597); }
+.gaia-dirprofile__stars { color: #F5C451; letter-spacing: 1px; font-size: 13px; }
+.gaia-dirprofile__stars span { color: rgba(255,255,255,0.18); }

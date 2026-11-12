@@ -55,7 +55,7 @@
     locating = true; repaintControls(); paintList();
     navigator.geolocation.getCurrentPosition(function (pos) {
       origin = { lat: pos.coords.latitude, lng: pos.coords.longitude, label: 'you', source: 'gps' };
-      locating = false; placeOpen = false; repaintControls(); paintList(true);
+      locating = false; placeOpen = false; autoRadius(); repaintControls(); paintList(true);
     }, function (err) {
       locating = false; origin = null; placeOpen = true;
       locError = (err && err.code === 1)
@@ -81,9 +81,21 @@
         placeOpen = false;
       } else locError = 'We couldn\'t find "' + q + '". Try a city name or a zip code.';
     } catch (e) { locError = 'Place search is unavailable right now. Try again in a moment.'; }
-    placeBusy = false; repaintControls(); paintList(Boolean(origin));
+    placeBusy = false; autoRadius(); repaintControls(); paintList(Boolean(origin));
   }
-  function clearOrigin() { origin = null; radiusKm = 0; locError = ''; repaintControls(); paintList(); }
+  function clearOrigin() { origin = null; radiusKm = 0; radiusChosen = false; locError = ''; repaintControls(); paintList(); }
+  // With a starting point, show who is near rather than all 219 sorted by
+  // distance: the smallest of 25 / 50 / 100 mi (40 / 80 / 160 km) that holds at
+  // least three, else every distance. A radius the member picked stays theirs.
+  var radiusChosen = false;
+  function autoRadius() {
+    if (!origin || radiusChosen) return;
+    var steps = RADII.slice(1).map(unitKm);
+    for (var i = 0; i < steps.length; i++) { radiusKm = steps[i]; if (filtered().length >= 3) return; }
+    radiusKm = 0;
+  }
+  // A US zip (or "scan 32801") typed in the search box is a place, not text.
+  function zipIn(q) { var m = String(q || '').match(/(?:^|\s)(\d{5})(?:-\d{4})?(?:\s|$)/); return m ? m[1] : ''; }
   // The practitioner's own calendar opens inside the app when it is a calendar
   // we know embeds (Calendly, GHL); anything else opens in a new tab.
   function embeds(url) { return /^https?:\/\/([^/]*\.)?(calendly\.com|leadconnectorhq\.com|gohighlevel\.com)\//i.test(String(url || '')); }
@@ -152,8 +164,22 @@
     var icon = p.availability === 'Remote' ? 'ph-video-camera' : (p.availability === 'In-person' ? 'ph-map-pin' : 'ph-globe-hemisphere-west');
     return '<span class="g-dir-card__avail"><i class="ph ' + icon + '"></i>' + esc(p.availability) + '</span>';
   }
+  // "Today 4:30 pm" / "Tomorrow 9:00 am" / "Thu 20 Nov, 10:00 am", in the
+  // member's own time zone (the server keeps the open time in UTC).
+  function fmtSlot(iso, now) {
+    var t = Date.parse(iso); if (!isFinite(t)) return '';
+    var d = new Date(t), n = now ? new Date(now) : new Date();
+    var day0 = function (x) { return new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime(); };
+    var diff = Math.round((day0(d) - day0(n)) / 86400000);
+    var time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(/\s?([AP])M$/i, function (m, a) { return ' ' + a.toLowerCase() + 'm'; });
+    var day = diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : d.toLocaleDateString(undefined, diff < 7 ? { weekday: 'short' } : { weekday: 'short', day: 'numeric', month: 'short' });
+    return day + (diff >= 7 ? ', ' : ' ') + time;
+  }
+  function nextOf(p) { var base = ALL.filter(function (x) { return String(x.id) === String(p.id); })[0] || {}; return p.nextSlot || base.nextSlot || ''; }
   function bookingBadge(p) {
     var b = bookingOf(p);
+    var nx = b === 'online' && nextOf(p) ? fmtSlot(nextOf(p)) : '';
+    if (nx) return '<span class="g-dir-card__book is-online"><i class="ph ph-calendar-check"></i>Next: ' + esc(nx) + '</span>';
     if (b === 'online') return '<span class="g-dir-card__book is-online"><i class="ph ph-calendar-check"></i>Books online</span>';
     if (b === 'full') return '<span class="g-dir-card__book"><i class="ph ph-calendar-x"></i>No open times soon</span>';
     if (b === 'unavailable' || b === 'none') return '<span class="g-dir-card__book"><i class="ph ph-chat-circle"></i>Contact to book</span>';
@@ -341,10 +367,17 @@
     var bk = p.booking || base.booking || 'unknown';
     if (p.scanTeam) scanTeam = String(p.scanTeam);
     var own = p.meetingLink && bk !== 'unavailable';
-    var what = intent === 'scan' ? 'Book a Bio-Well scan' : 'Book a session';
+    var what = scanMode() ? 'Reserve a Bio-Well scan' : 'Book a session';
+    var nxt = (bk === 'online' && (p.nextSlot || base.nextSlot)) ? fmtSlot(p.nextSlot || base.nextSlot) : '';
+    if (nxt && own) what = (scanMode() ? 'Reserve ' : 'Book ') + nxt;
     var profileFirst = false;
     if (own) {
-      actions += bookButton(p.meetingLink, bk === 'full' ? 'See their calendar' : what, (intent === 'scan' ? 'Bio-Well scan with ' : 'Session with ') + p.name);
+      actions += bookButton(p.meetingLink, bk === 'full' ? 'See their calendar' : what, (scanMode() ? 'Bio-Well scan · ' : 'Session · ') + p.name);
+      if (bk !== 'full') {
+        // Only what is certain: GHL's session length and confirmation settings
+        // disagree with what many calendars tell the visitor (12 Nov 2026).
+        note = '<p class="gaia-dirprofile__note gaia-dirprofile__facts"><i class="ph ph-calendar-check"></i>' + (nxt ? 'Next open time ' + esc(nxt) + '. ' : '') + 'Pick any time on their calendar; the price is shown before you pay.</p>';
+      }
       if (bk === 'full') note = '<p class="gaia-dirprofile__note"><i class="ph ph-info"></i>' + esc(p.name) + '\'s calendar has no open times in the next 30 days. You can still look, or reach them through their full profile.</p>';
     } else if (intent === 'scan' && scanTeamOk()) {
       // Never under their name: this booking goes to the Gaia Healers scan team, not to them.
@@ -365,15 +398,36 @@
     body.innerHTML = '<div class="gaia-dirprofile__hero">' + photoHtml(p, 'gaia-dirprofile__img')
       + '<div><h2>' + esc(p.name) + '</h2>'
       + (loc ? '<p class="gaia-dirprofile__loc"><i class="ph ph-map-pin"></i>' + esc(loc) + '</p>' : '')
+      + addressHtml(p, base)
       + (p.availability ? availabilityBadge(p) : '') + ratingHtml(p) + '</div></div>'
       + (specs ? '<div class="gaia-dirprofile__specs">' + specs + '</div>' : '')
       + note + '<div class="gaia-dirprofile__actions">' + actions + '</div>'
+      + reviewsHtml(p.reviews)
       + '<p class="gaia-dirprofile__src">Live from the Gaia Healers practitioner directory.</p>';
+  }
+
+  // Their published street address (where they have one) with directions.
+  function addressHtml(p, base) {
+    var street = p.street || base.street || '', zip = p.zip || base.zip || '';
+    if (!street || /remote/i.test(String(p.availability || base.availability || '')) && !/both|in-person/i.test(String(p.availability || ''))) return '';
+    var full = [street, [p.city || base.city, p.state || base.state].filter(Boolean).join(', '), zip].filter(Boolean).join(', ');
+    return '<p class="gaia-dirprofile__addr"><span>' + esc(full) + '</span> <a href="https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(full) + '" target="_blank" rel="noopener noreferrer" data-external><i class="ph ph-navigation-arrow"></i> Directions</a></p>';
+  }
+  function reviewsHtml(list) {
+    if (!Array.isArray(list) || !list.length) return '';
+    return '<div class="gaia-dirprofile__reviews"><p class="g-super-kicker">What clients say</p>' + list.slice(0, 3).map(function (r) {
+      var stars = Math.round(Number(r.rating) || 0);
+      return '<blockquote><span class="gaia-dirprofile__stars" aria-label="' + stars + ' out of 5">' + '★★★★★'.slice(0, stars) + '<span>' + '★★★★★'.slice(stars) + '</span></span>'
+        + '<p>' + esc(String(r.text || '').slice(0, 280)) + '</p>' + (r.by ? '<cite>' + esc(r.by) + (r.date && isFinite(Date.parse(r.date)) ? ' · ' + esc(new Date(r.date + 'T12:00:00Z').toLocaleDateString(undefined, { month: 'short', year: 'numeric' })) : '') + '</cite>' : '') + '</blockquote>';
+    }).join('') + '</div>';
   }
 
   function bind(host) {
     var s = host.querySelector('[data-dir-search]');
-    if (s) { var t; s.addEventListener('input', function () { clearTimeout(t); t = setTimeout(function () { filters.q = s.value.trim(); paintList(); }, 180); }); }
+    if (s) { var t; s.addEventListener('input', function () { clearTimeout(t); t = setTimeout(function () {
+      var v = s.value.trim(), z = zipIn(v);
+      if (z) { filters.q = v.replace(z, ' ').replace(/\s+/g, ' ').trim(); nearPlace(z); return; }
+      filters.q = v; paintList(); }, 450); }); }
     host.addEventListener('click', function (e) {
       var av = e.target.closest('[data-dir-avail]');
       if (av) { filters.availability = av.getAttribute('data-dir-avail'); paintList(); return; }
@@ -388,7 +442,7 @@
       var pt = e.target.closest('[data-dir-place-toggle]');
       if (pt) { placeOpen = !placeOpen; if (!placeOpen) locError = ''; repaintControls(); return; }
       var rd = e.target.closest('[data-dir-radius]');
-      if (rd) { radiusKm = parseFloat(rd.getAttribute('data-dir-radius')) || 0; paintList(true); return; }
+      if (rd) { radiusKm = parseFloat(rd.getAttribute('data-dir-radius')) || 0; radiusChosen = true; paintList(true); return; }
       var oc = e.target.closest('[data-dir-origin-clear]');
       if (oc) { clearOrigin(); return; }
       var ix = e.target.closest('[data-dir-intent-clear]');
@@ -439,7 +493,7 @@
     else load();
   }
   window.GaiaDirectory = { open: openWith };
-  window.GaiaDirectory._test = { scanQuery: scanQuery, isBioWell: isBioWell, fmtDist: fmtDist, km: km, booksOnline: booksOnline };
+  window.GaiaDirectory._test = { fmtSlot: fmtSlot, zipIn: zipIn, scanQuery: scanQuery, isBioWell: isBioWell, fmtDist: fmtDist, km: km, booksOnline: booksOnline };
   function ensure() {
     if (!mount()) return;
     if (!loaded) load();

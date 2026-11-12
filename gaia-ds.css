@@ -440,3 +440,197 @@ body.gaia-v2 [data-screen="community"] .g-access--unlocked .g-access__name { whi
   body.gaia-v2 [data-screen="wellness"] .g-energy-switcher button i { display: none !important; }
 }
 body.gaia-v2 [data-ds-page] .g-sky__theme { text-transform: none !important; letter-spacing: 0 !important; margin: var(--gh-s3) 0 var(--gh-s1) !important; }
+
+/* =====================================================================
+ * Phase 4: Events, Shop, Membership, Profile, Inbox, sign-in (12 Nov 2026)
+ * ===================================================================== */
+body.gaia-v2 :is([data-screen="events"], [data-screen="store"], [data-screen="profile"], [data-screen="inbox"]) .gaia-main { max-width: 1240px; }
+/* One header for every screen: eyebrow, sans title, one line. */
+body.gaia-v2 .gaia-main :is([data-screen="events"], [data-screen="inbox"], [data-screen="store"]) :is(.g-super-page-head, .g-store__head),
+body.gaia-v2 :is([data-screen="events"], [data-screen="inbox"], [data-screen="store"]) .gaia-main :is(.g-super-page-head, .g-store__head) {
+  margin: 0 0 var(--gh-s5) !important; padding: 0 !important; background: none !important; border: 0 !important; box-shadow: none !important; }
+body.gaia-v2 :is([data-screen="events"], [data-screen="inbox"], [data-screen="store"]) :is(.g-super-page-head .g-super-kicker, .g-store__kicker) {
+  margin: 0 0 var(--gh-s1) !important; font-size: 11.5px !important; font-weight: 600 !important; letter-spacing: .12em !important; text-transform: uppercase; color: #a9cf86 !important; }
+body.gaia-v2 :is([data-screen="events"], [data-screen="inbox"], [data-screen="store"]) :is(.g-super-page-head h1, .g-store__title) {
+  margin: 0 !important; font-family: inherit !important; font-size: 30px !important; font-weight: 600 !important; letter-spacing: -0.015em !important; line-height: 1.15 !important; color: var(--gh-text) !important; }
+body.gaia-v2 :is([data-screen="events"], [data-screen="inbox"], [data-screen="store"]) :is(.g-super-page-head > p:not(.g-super-kicker), .g-store__sub) {
+  margin: var(--gh-s1) 0 0 !important; font-size: var(--gh-fs-body) !important; color: var(--gh-text-2) !important; max-width: 70ch; }
+@media (max-width: 699px) { body.gaia-v2 :is([data-screen="events"], [data-screen="inbox"], [data-screen="store"]) :is(.g-super-page-head h1, .g-store__title) { font-size: 26px !important; } }
+
+/* Shared quiet surfaces in these screens. */
+body.gaia-v2 :is([data-screen="events"], [data-screen="store"], [data-screen="profile"], [data-screen="inbox"]) :is(.g-card, .g-mye, .g-super-empty-panel, .g-pass, .g-cardtile) {
+  border-radius: var(--gh-r-card) !important; background: var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; }
+body.gaia-v2 :is([data-screen="events"], [data-screen="store"], [data-screen="profile"], [data-screen="inbox"]) :is(.g-card__label, .g-super-kicker, .g-pass__kicker) {
+  font-size: 11.5px !important; font-weight: 600 !important; letter-spacing: .12em !important; color: #a9cf86 !important; }
+body.gaia-v2 :is([data-screen="events"], [data-screen="store"], [data-screen="profile"], [data-screen="inbox"]) :is(.g-super-section-head h2, .g-section__title, .g-ma__title, .g-cardtile__h2, .g-mye h2, .g-super-empty-panel h2) {
+  font-family: inherit !important; font-size: 18px !important; font-weight: 600 !important; letter-spacing: -0.01em !important; }
+body.gaia-v2 :is([data-screen="events"], [data-screen="store"], [data-screen="profile"], [data-screen="inbox"]) :is(.g-card__meta, .g-empty, .g-mye p, .g-super-empty-panel p) { font-size: var(--gh-fs-body) !important; color: var(--gh-text-2) !important; }
+body.gaia-v2 :is([data-screen="events"], [data-screen="store"], [data-screen="profile"], [data-screen="inbox"]) :is(.g-card__actions, .g-pass__actions) .g-btn { width: auto !important; }
+body.gaia-v2 :is([data-screen="events"], [data-screen="profile"], [data-screen="inbox"]) .g-super-section-head { margin: var(--gh-s6) 0 var(--gh-s3) !important; padding: 0 !important; }
+body.gaia-v2 :is([data-screen="events"], [data-screen="profile"], [data-screen="inbox"]) .g-super-list { margin: 0 !important; padding: 0 !important; background: none !important; border: 0 !important; box-shadow: none !important; }
+
+/* ---------------- Events: the real event art does the talking ---------------- */
+body.gaia-v2 [data-screen="events"] .g-mye { padding: var(--gh-s4) var(--gh-s5) !important; }
+body.gaia-v2 [data-screen="events"] .g-mye--empty { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--gh-s4); }
+body.gaia-v2 [data-screen="events"] .g-mye--empty h2 { margin: 0 !important; font-size: 16px !important; }
+body.gaia-v2 [data-screen="events"] .g-mye--empty p { margin: 2px 0 0 !important; grid-column: 1; }
+body.gaia-v2 [data-screen="events"] .g-mye--empty .g-btn { grid-column: 2; grid-row: 1 / span 2; margin: 0 !important; }
+body.gaia-v2 [data-screen="events"] .g-event-grid { gap: var(--gh-s3) !important; }
+body.gaia-v2 [data-screen="events"] .g-event-card { display: grid !important; grid-template-columns: minmax(0, 46%) minmax(0, 1fr); gap: 0 !important; padding: 0 !important; overflow: hidden;
+  border-radius: var(--gh-r-card) !important; background: var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="events"] .g-event-card__art { display: block; height: 100%; min-height: 240px; margin: 0 !important; border-radius: 0 !important; border: 0 !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="events"] .g-event-card__art img { width: 100% !important; height: 100% !important; object-fit: cover; border-radius: 0 !important; }
+body.gaia-v2 [data-screen="events"] .g-event-card__body { display: flex; flex-direction: column; justify-content: center; gap: var(--gh-s2); padding: var(--gh-s6) !important; }
+body.gaia-v2 [data-screen="events"] .g-event-card h3 { margin: 0 !important; font-family: inherit !important; font-size: 24px !important; font-weight: 600 !important; letter-spacing: -0.015em !important; line-height: 1.2 !important; }
+body.gaia-v2 [data-screen="events"] .g-event-card__meta { margin: 0 !important; font-size: var(--gh-fs-body) !important; color: var(--gh-text-2) !important; }
+body.gaia-v2 [data-screen="events"] .g-event-card__countdown { align-self: flex-start; margin: 0 !important; padding: 2px 8px !important; border-radius: 6px !important; font-size: 12px !important; font-weight: 500 !important;
+  background: rgba(183, 255, 98, 0.10) !important; color: var(--gh-accent) !important; border: 0 !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="events"] .g-event-card__actions { display: flex; flex-wrap: wrap; gap: var(--gh-s2) !important; margin-top: var(--gh-s2) !important; }
+@media (max-width: 799px) {
+  body.gaia-v2 [data-screen="events"] .g-event-card { grid-template-columns: minmax(0, 1fr); }
+  body.gaia-v2 [data-screen="events"] .g-event-card__art { min-height: 0; height: auto; aspect-ratio: 16 / 10; }
+  body.gaia-v2 [data-screen="events"] .g-event-card__body { padding: var(--gh-s4) !important; }
+  body.gaia-v2 [data-screen="events"] .g-event-card h3 { font-size: 20px !important; }
+  body.gaia-v2 [data-screen="events"] .g-mye--empty { grid-template-columns: minmax(0, 1fr); row-gap: var(--gh-s3); }
+  body.gaia-v2 [data-screen="events"] .g-mye--empty .g-btn { grid-column: 1; grid-row: auto; justify-self: start; }
+}
+
+/* ---------------- Shop ---------------- */
+/* Shop / Membership as one segmented control. */
+body.gaia-v2 :is([data-screen="store"], [data-screen="profile"]) .g-tabs { display: inline-flex !important; width: auto !important; gap: 2px !important; padding: 3px !important; margin: 0 0 var(--gh-s4) !important;
+  border-radius: var(--gh-r-ctrl) !important; background: var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; }
+body.gaia-v2 :is([data-screen="store"], [data-screen="profile"]) .g-tab { height: 34px !important; min-height: 0 !important; padding: 0 16px !important; border-radius: 8px !important; border: 0 !important; box-shadow: none !important;
+  background: transparent !important; color: var(--gh-text-2) !important; font-size: 13.5px !important; font-weight: 500 !important; }
+body.gaia-v2 :is([data-screen="store"], [data-screen="profile"]) .g-tab.is-active, body.gaia-v2 :is([data-screen="store"], [data-screen="profile"]) .g-tab[aria-selected="true"] { background: rgba(183, 255, 98, 0.12) !important; color: var(--gh-text) !important; }
+/* Category jump row: plain chips, no box around them. */
+body.gaia-v2 [data-screen="store"] .g-store-jump { display: flex; gap: 6px !important; margin: 0 0 var(--gh-s5) !important; padding: 0 !important; overflow-x: auto; scrollbar-width: none; background: none !important; border: 0 !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="store"] .g-store-jump::-webkit-scrollbar { display: none; }
+body.gaia-v2 [data-screen="store"] .g-store-jump__chip { flex: none; height: 32px !important; min-height: 0 !important; padding: 0 12px !important; gap: 6px; border-radius: 8px !important; font-size: 13px !important; font-weight: 500 !important;
+  background: transparent !important; border: 1px solid var(--gh-line-2) !important; color: var(--gh-text-2) !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="store"] .g-store-jump__chip:hover { color: var(--gh-text) !important; background: rgba(255, 255, 255, 0.04) !important; }
+body.gaia-v2 [data-screen="store"] .g-store-jump__chip span { font-size: 12px !important; color: var(--gh-text-3) !important; background: none !important; padding: 0 !important; }
+body.gaia-v2 [data-screen="store"] .g-store-cat { margin: 0 0 var(--gh-s6) !important; }
+body.gaia-v2 [data-screen="store"] .g-store-cat .g-section { margin: 0 0 var(--gh-s3) !important; padding: 0 !important; }
+body.gaia-v2 [data-screen="store"] .g-section__meta { font-size: 12.5px !important; color: var(--gh-text-3) !important; letter-spacing: 0 !important; text-transform: none !important; }
+/* Product tiles: flat, image first, price clear, one quiet button. */
+body.gaia-v2 [data-screen="store"] .g-store-rail { gap: var(--gh-s3) !important; }
+body.gaia-v2 [data-screen="store"] .g-tile { padding: var(--gh-s2) !important; border-radius: var(--gh-r-card) !important; background: var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; transform: none !important; }
+body.gaia-v2 [data-screen="store"] .g-tile:hover { border-color: var(--gh-line-2) !important; }
+body.gaia-v2 [data-screen="store"] .g-tile__media { border-radius: var(--gh-r-ctrl) !important; overflow: hidden; background: #fff; box-shadow: none !important; border: 0 !important; }
+body.gaia-v2 [data-screen="store"] .g-tile__body { padding: var(--gh-s3) var(--gh-s1) var(--gh-s1) !important; gap: var(--gh-s1) !important; }
+body.gaia-v2 [data-screen="store"] :is(.g-tile__title, .g-tile__body strong, .g-tile__body h3) { font-size: 13.5px !important; font-weight: 600 !important; line-height: 1.35 !important; color: var(--gh-text) !important; }
+body.gaia-v2 [data-screen="store"] :is(.g-tile__price, .g-store-tile__price) { font-size: 15px !important; font-weight: 600 !important; color: var(--gh-text) !important; }
+body.gaia-v2 [data-screen="store"] :is(.g-tile__compare, .g-store-tile__compare, s, del) { font-size: 12px !important; color: var(--gh-text-3) !important; }
+body.gaia-v2 [data-screen="store"] .g-tile .g-btn { width: 100% !important; height: 36px !important; }
+
+/* ---------------- Membership: leaves ---------------- */
+body.gaia-v2 [data-screen="store"] .g-tier-intro { position: relative; overflow: hidden; min-height: 120px; display: flex !important; flex-direction: column; justify-content: center;
+  padding: var(--gh-s5) 40% var(--gh-s5) var(--gh-s6) !important; margin: 0 0 var(--gh-s4) !important; }
+body.gaia-v2 [data-screen="store"] .g-tier-intro::after { content: ""; position: absolute; inset: 0 0 0 auto; width: 46%; pointer-events: none;
+  background: url("assets/home3/ref-leaves.webp?v=kit1") center 35% / cover no-repeat; -webkit-mask-image: linear-gradient(90deg, transparent, #000 60%); mask-image: linear-gradient(90deg, transparent, #000 60%); opacity: .9; }
+body.gaia-v2 [data-screen="store"] .g-tier-intro .g-card__label { font-size: 22px !important; font-weight: 600 !important; letter-spacing: -0.01em !important; text-transform: none !important; color: var(--gh-text) !important; }
+body.gaia-v2 [data-screen="store"] .g-tier-intro :is(.g-card__label, .g-card__meta) { position: relative; z-index: 1; }
+body.gaia-v2 [data-screen="store"] .g-tier { padding: var(--gh-s5) !important; }
+body.gaia-v2 [data-screen="store"] .g-tier--featured { border-color: rgba(183, 255, 98, 0.30) !important; }
+body.gaia-v2 [data-screen="store"] .g-tier.g-card--feature { border-color: var(--gh-line-2) !important; background: linear-gradient(180deg, rgba(183, 255, 98, 0.05), transparent 40%), var(--gh-surface) !important; }
+body.gaia-v2 [data-screen="store"] .g-tier .g-card__label { font-size: 18px !important; font-weight: 600 !important; letter-spacing: -0.01em !important; text-transform: none !important; color: var(--gh-text) !important; }
+body.gaia-v2 [data-screen="store"] .g-tier :is(.g-chip, [class*="badge"], [class*="popular"]) { padding: 2px 8px !important; border-radius: 6px !important; font-size: 11.5px !important; font-weight: 600 !important; letter-spacing: 0 !important; text-transform: none !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="store"] .g-tier .g-btn { width: 100% !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="store"] .g-tier__list li { font-size: 13.5px !important; color: var(--gh-text-2) !important; }
+@media (max-width: 699px) {
+  body.gaia-v2 [data-screen="store"] .g-tier-intro { padding: var(--gh-s4) 36% var(--gh-s4) var(--gh-s4) !important; }
+  body.gaia-v2 [data-screen="store"] .g-tier-intro::after { width: 60%; opacity: .7; }
+}
+
+/* ---------------- Profile: minimal ---------------- */
+body.gaia-v2 [data-screen="profile"] main.g-page { row-gap: var(--gh-s4) !important; }
+body.gaia-v2 [data-screen="profile"] main.g-page > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+body.gaia-v2 [data-screen="profile"] .g-glance { display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gh-s2) !important; margin: 0 !important; }
+body.gaia-v2 [data-screen="profile"] .g-glance__tile { min-height: 0 !important; padding: var(--gh-s3) var(--gh-s4) !important; border-radius: var(--gh-r-card) !important; background: var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="profile"] .g-glance__tile:hover { background: var(--gh-surface-2) !important; }
+body.gaia-v2 [data-screen="profile"] .g-glance__tile strong { font-size: 18px !important; font-weight: 600 !important; color: var(--gh-text) !important; }
+body.gaia-v2 [data-screen="profile"] .g-glance__tile span { font-size: 12.5px !important; color: var(--gh-text-3) !important; }
+body.gaia-v2 [data-screen="profile"] .g-glance__tile > i, body.gaia-v2 [data-screen="profile"] .g-glance__tile .ph { color: var(--gh-text-3) !important; background: none !important; box-shadow: none !important; }
+@media (max-width: 699px) { body.gaia-v2 [data-screen="profile"] .g-glance { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+body.gaia-v2 [data-screen="profile"] :is(.g-card, .g-pass, .g-cardtile) { padding: var(--gh-s5) !important; }
+body.gaia-v2 [data-screen="profile"] #member-me { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gh-s3) !important; align-items: start; }
+body.gaia-v2 [data-screen="profile"] #member-me > :is(.g-pass-stack, .g-ma) { grid-column: 1 / -1; }
+body.gaia-v2 [data-screen="profile"] #member-me > * { margin: 0 !important; }
+@media (max-width: 799px) { body.gaia-v2 [data-screen="profile"] #member-me { grid-template-columns: minmax(0, 1fr); } }
+/* Member pass: one quiet row, not a lime bar across the page. */
+body.gaia-v2 [data-screen="profile"] .g-pass { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--gh-s4); align-items: center; background: url("assets/home3/ref-leaves.webp?v=kit1") right 30% / 38% auto no-repeat, var(--gh-surface) !important; }
+body.gaia-v2 [data-screen="profile"] .g-pass > :not(.g-pass__actions) { grid-column: 1; }
+body.gaia-v2 [data-screen="profile"] .g-pass__title { margin: 2px 0 !important; font-family: inherit !important; font-size: 18px !important; font-weight: 600 !important; }
+body.gaia-v2 [data-screen="profile"] .g-pass__meta { margin: 0 !important; font-size: var(--gh-fs-body) !important; color: var(--gh-text-2) !important; max-width: 52ch; }
+body.gaia-v2 [data-screen="profile"] .g-pass__actions { grid-column: 2; grid-row: 1 / span 3; margin: 0 !important; position: relative; }
+body.gaia-v2 [data-screen="profile"] .g-pass__actions .g-btn--primary { background: rgba(7, 20, 13, 0.7) !important; color: var(--gh-text) !important; border: 1px solid var(--gh-line-2) !important; -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+@media (max-width: 699px) {
+  body.gaia-v2 [data-screen="profile"] .g-pass { grid-template-columns: minmax(0, 1fr); row-gap: var(--gh-s3); background-size: 60% auto !important; background-position: right -20% top 0 !important; }
+  body.gaia-v2 [data-screen="profile"] .g-pass__actions { grid-column: 1; grid-row: auto; }
+}
+/* Lists of rows */
+body.gaia-v2 [data-screen="profile"] .g-rows { margin: var(--gh-s2) 0 0 !important; gap: 0 !important; }
+body.gaia-v2 [data-screen="profile"] .g-row { min-height: 0 !important; padding: 12px 0 !important; border: 0 !important; border-top: 1px solid var(--gh-line) !important; border-radius: 0 !important; background: none !important; box-shadow: none !important; font-size: 14px !important; }
+body.gaia-v2 [data-screen="profile"] .g-row:first-child { border-top: 0 !important; }
+body.gaia-v2 [data-screen="profile"] .g-row__meta { font-size: 12.5px !important; color: var(--gh-text-3) !important; }
+body.gaia-v2 [data-screen="profile"] .g-row--link:hover { color: var(--gh-text) !important; }
+body.gaia-v2 [data-screen="profile"] .g-pref-toggle { height: 30px !important; min-height: 0 !important; padding: 0 10px !important; }
+body.gaia-v2 [data-screen="profile"] .g-card__pill { padding: 2px 8px !important; border-radius: 6px !important; font-size: 12px !important; background: rgba(255, 255, 255, 0.05) !important; color: var(--gh-text-2) !important; border: 0 !important; }
+body.gaia-v2 [data-screen="profile"] .g-profile-signout { justify-self: start; width: auto !important; color: var(--gh-text-3) !important; border-color: var(--gh-line) !important; }
+
+/* ---------------- Inbox ---------------- */
+body.gaia-v2 [data-screen="inbox"] .g-super-empty-panel { padding: var(--gh-s5) !important; text-align: left !important; }
+body.gaia-v2 [data-screen="inbox"] .g-super-empty-panel h2 { margin: 0 0 var(--gh-s1) !important; font-size: 16px !important; }
+body.gaia-v2 [data-screen="inbox"] .g-super-list__footer { margin: var(--gh-s3) 0 0 !important; padding: 0 !important; border: 0 !important; justify-content: flex-start !important; }
+body.gaia-v2 [data-screen="inbox"] :is(.g-super-row, .g-inbox-row, .g-msg) { min-height: 0 !important; padding: var(--gh-s3) var(--gh-s4) !important; border-radius: var(--gh-r-card) !important; background: var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="inbox"] .g-super-row__icon { width: 36px !important; height: 36px !important; border-radius: var(--gh-r-ctrl) !important; background: rgba(255, 255, 255, 0.04) !important; box-shadow: none !important; color: var(--gh-text-2) !important; }
+
+/* ---------------- Sign-in and onboarding dialogs ---------------- */
+body.gaia-v2 :is(.gaia-auth-modal__panel, .gaia-onboard-modal__panel) { border-radius: 16px !important; background: #0d1d14 !important; border: 1px solid var(--gh-line-2) !important; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55) !important; padding: var(--gh-s6) !important; }
+body.gaia-v2 .gaia-auth-modal__kicker { font-size: 11.5px !important; font-weight: 600 !important; letter-spacing: .12em !important; color: #a9cf86 !important; }
+body.gaia-v2 .gaia-auth-modal__title { font-family: inherit !important; font-size: 22px !important; font-weight: 600 !important; letter-spacing: -0.015em !important; }
+body.gaia-v2 .gaia-auth-modal__body { font-size: var(--gh-fs-body) !important; color: var(--gh-text-2) !important; }
+body.gaia-v2 .gaia-auth-modal__input { height: 46px !important; padding: 0 14px !important; border-radius: var(--gh-r-ctrl) !important; background: var(--gh-surface) !important; border: 1px solid var(--gh-line-2) !important; color: var(--gh-text) !important; font-size: 15px !important; box-shadow: none !important; }
+body.gaia-v2 .gaia-auth-modal__input:focus { outline: 2px solid rgba(183, 255, 98, 0.5) !important; outline-offset: 0; border-color: transparent !important; }
+body.gaia-v2 .gaia-auth-modal__submit { height: 46px !important; min-height: 0 !important; border-radius: var(--gh-r-ctrl) !important; background: var(--gh-accent) !important; color: var(--gh-accent-ink) !important; font-size: 14.5px !important; font-weight: 600 !important; box-shadow: none !important; border: 0 !important; }
+body.gaia-v2 :is(.gaia-auth-modal__status, .gaia-auth-modal__join) { font-size: 13px !important; color: var(--gh-text-3) !important; }
+body.gaia-v2 .gaia-auth-modal__joinlink { color: var(--gh-accent) !important; font-weight: 500 !important; }
+body.gaia-v2 :is(.gaia-auth-modal__panel, .gaia-onboard-modal__panel) .gaia-sheet-close { width: 34px !important; height: 34px !important; border-radius: 8px !important; background: rgba(255, 255, 255, 0.05) !important; color: var(--gh-text-2) !important; box-shadow: none !important; border: 0 !important; }
+
+/* ---------------- Carried over from Phase 3 ---------------- */
+/* Today's sky "Try this": no purple bar. */
+body.gaia-v2 [data-ds-page] .g-sky__practice { border-left: 0 !important; padding-left: 0 !important; box-shadow: none !important; }
+body.gaia-v2 [data-ds-page] .g-sky__practice::before { display: none !important; }
+body.gaia-v2 [data-ds-page] .g-sky__practice strong { display: block; margin-bottom: 2px; font-size: 12px !important; letter-spacing: .04em !important; text-transform: none !important; color: var(--gh-text-3) !important; }
+/* Daily energy: a practice block with no text is left out, not shown as a bare label. */
+body.gaia-v2 [data-screen="daily"] .g-de__practice:not(:has(p:not(.g-de__label):not(:empty))) { display: none !important; }
+
+/* Phase 4 refinements: one lime per section. */
+body.gaia-v2 [data-screen="store"] .g-tile .g-btn--primary,
+body.gaia-v2 [data-screen="store"] .g-tier:not(.g-tier--featured) .g-btn--primary {
+  background: rgba(255, 255, 255, 0.03) !important; color: var(--gh-text) !important; border: 1px solid var(--gh-line-2) !important; font-weight: 500 !important; }
+body.gaia-v2 [data-screen="store"] .g-tile .g-btn--primary:hover,
+body.gaia-v2 [data-screen="store"] .g-tier:not(.g-tier--featured) .g-btn--primary:hover { background: rgba(255, 255, 255, 0.07) !important; }
+body.gaia-v2 [data-screen="store"] .g-tier .g-badge:not(.g-badge--on) { padding: 0 !important; background: none !important; border: 0 !important; font-size: 17px !important; font-weight: 600 !important; letter-spacing: -0.01em !important; color: var(--gh-text) !important; text-transform: none !important; }
+body.gaia-v2 [data-screen="store"] .g-tier .g-badge--on { padding: 2px 8px !important; border-radius: 6px !important; font-size: 11.5px !important; letter-spacing: 0 !important; text-transform: none !important; }
+body.gaia-v2 [data-screen="store"] .g-tier__flag { padding: 2px 10px !important; border-radius: 6px !important; font-size: 11px !important; letter-spacing: .04em !important; box-shadow: none !important; }
+body.gaia-v2 :is([data-screen="store"], [data-screen="profile"]) .g-tabs { justify-self: start; align-self: start; width: fit-content !important; max-width: 100%; }
+body.gaia-v2 [data-screen="store"] .g-store-jump { padding: 1px !important; }
+body.gaia-v2 :is([data-screen="events"], [data-screen="store"]) .g-btn { height: var(--gh-h-btn) !important; min-height: 0 !important; }
+body.gaia-v2 :is([data-screen="events"], [data-screen="store"]) .g-tile .g-btn { height: 36px !important; }
+/* Profile refinements */
+body.gaia-v2 [data-screen="profile"] .g-pass { background: linear-gradient(90deg, var(--gh-surface) 52%, rgba(14, 31, 21, 0.35) 78%, rgba(14, 31, 21, 0.1)), url("assets/home3/ref-leaves.webp?v=kit1") right 40% / 42% auto no-repeat, var(--gh-surface) !important; }
+@media (max-width: 699px) {
+  body.gaia-v2 [data-screen="profile"] .g-pass { background: linear-gradient(180deg, rgba(14, 31, 21, 0.2), var(--gh-surface) 46%), url("assets/home3/ref-leaves.webp?v=kit1") right top / 70% auto no-repeat, var(--gh-surface) !important; padding-top: 72px !important; }
+}
+body.gaia-v2 :is([data-screen="profile"], [data-screen="events"], [data-screen="inbox"]) .g-card__actions { display: flex !important; flex-wrap: wrap; align-items: center; gap: var(--gh-s2) !important; }
+body.gaia-v2 :is([data-screen="profile"], [data-screen="events"], [data-screen="inbox"]) .g-card__actions .g-btn { flex: 0 0 auto !important; width: auto !important; height: var(--gh-h-btn) !important; min-height: 0 !important; }
+body.gaia-v2 [data-screen="profile"] .g-cardtile__qr:not(:has(img, svg, canvas)) { display: none !important; }
+body.gaia-v2 [data-screen="profile"] .g-cardtile { display: flex !important; gap: var(--gh-s4) !important; align-items: center; }
+body.gaia-v2 [data-screen="profile"] .g-cardtile__body { flex: 1 1 auto; min-width: 0; }
+body.gaia-v2 [data-screen="profile"] .g-cardtile__hint { font-size: 12.5px !important; color: var(--gh-text-3) !important; }
+body.gaia-v2 [data-screen="profile"] .gpath__list:empty { display: none !important; }
+/* Membership panel rhythm */
+body.gaia-v2 [data-screen="store"] #store-memberships { gap: var(--gh-s3) !important; row-gap: var(--gh-s3) !important; }
+body.gaia-v2 [data-screen="store"] #store-memberships > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+body.gaia-v2 [data-screen="store"] .g-store-jump { -webkit-mask-image: none !important; mask-image: none !important; } body.gaia-v2 [data-screen="store"] .g-store-jump::before, body.gaia-v2 [data-screen="store"] .g-store-jump::after { display: none !important; }

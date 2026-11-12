@@ -170,8 +170,7 @@ body.gaia-v2 .g-topbar__brand img {
 
 /* Menu and sign-in: the round translucent controls from the Assist card. */
 body.gaia-v2 .g-topbar__nav,
-body.gaia-v2 .gaia-header-signin,
-body.gaia-v2 .g-topbar .gaia-menu-button {
+body.gaia-v2 .gaia-header-signin {
   min-width: 44px;
   min-height: 44px;
   border: 1px solid var(--v3-border);
@@ -184,8 +183,7 @@ body.gaia-v2 .g-topbar__nav:active,
 body.gaia-v2 .gaia-header-signin:active { transform: scale(0.94); }
 @media (hover: hover) {
   body.gaia-v2 .g-topbar__nav:hover,
-  body.gaia-v2 .gaia-header-signin:hover,
-  body.gaia-v2 .g-topbar .gaia-menu-button:hover {
+  body.gaia-v2 .gaia-header-signin:hover {
     border-color: var(--v3-border-strong);
     background: rgba(28, 52, 40, 0.8);
     color: var(--v3-text);
@@ -820,7 +818,6 @@ body.gaia-v2 .gaia-main :is(.g-dir-fchip, .g-dir-schip) {
   transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
   -webkit-tap-highlight-color: transparent;
 }
-body.gaia-v2 .gaia-main .g-dir-schip { background: transparent; }
 body.gaia-v2 .gaia-main :is(.g-dir-fchip, .g-dir-schip).is-on {
   border-color: rgba(117, 240, 90, 0.45);
   background: rgba(117, 240, 90, 0.14);

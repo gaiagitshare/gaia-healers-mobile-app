@@ -62,7 +62,6 @@
   border-color:var(--g-line);font-weight:600}
 .g-btn--pill:hover{background:var(--g-surface-hi)}
 .g-btn--sm{--pad-y:8px;--pad-x:var(--g-s3);min-height:36px;font-size:13px}
-.g-btn--block{display:flex;width:100%}
 .g-btn:active{transform:translateY(1px) scale(.99)}
 .g-btn[disabled]{opacity:.45;pointer-events:none}
 
@@ -73,16 +72,12 @@
 .g-section__kicker{font:600 11px/1 var(--g-font-mono);letter-spacing:.12em;
   text-transform:uppercase;color:var(--g-accent)}
 .g-section__title{font:600 20px/1.1 var(--g-font);letter-spacing:-.015em;margin:0;color:var(--g-text)}
-.g-section--display .g-section__title{font-family:var(--g-font-serif);font-size:clamp(30px,7vw,42px);
-  font-weight:600;line-height:1;letter-spacing:-.02em}
 .g-section__action{flex:none}
 
 /* g-card ----------------------------------------------------- */
 .g-card{display:flex;flex-direction:column;gap:var(--g-s2);
   background:var(--g-surface);border:1px solid var(--g-line);
   border-radius:var(--g-r-lg);padding:var(--g-s4);color:var(--g-text);box-shadow:var(--g-shadow-card)}
-.g-card--lg{padding:var(--g-s5);border-radius:var(--g-r-xl)}
-.g-card--flush{padding:0;overflow:hidden}
 .g-card--feature{background:
   radial-gradient(160px 120px at 100% 0,rgba(125,217,86,.18),transparent 62%),
   linear-gradient(150deg,#1a3520,#0e1c12);border-color:var(--g-line-strong)}
@@ -92,9 +87,6 @@
 .g-card__value--lg{font-size:clamp(22px,5vw,28px)}
 .g-card__meta{font-size:13px;color:var(--g-text-muted);line-height:1.45}
 .g-card__actions{display:flex;flex-wrap:wrap;gap:var(--g-s2);margin-top:var(--g-s2)}
-.g-card--interactive{cursor:pointer;text-decoration:none;
-  transition:transform var(--g-dur-2) var(--g-ease),border-color var(--g-dur-2) var(--g-ease)}
-.g-card--interactive:hover{border-color:var(--g-line-strong);transform:translateY(-2px)}
 
 /* g-tile + rail --------------------------------------------- */
 .g-rail{display:flex;gap:var(--g-s3);overflow-x:auto;overflow-y:hidden;
@@ -119,14 +111,6 @@
     radial-gradient(220px 220px at 82% 24%,rgba(125,217,86,.20),transparent 60%),
     radial-gradient(260px 200px at 12% 96%,rgba(41,168,242,.10),transparent 62%),
     linear-gradient(160deg,#12281a,#0a140d)}
-.g-hero__spectrum{position:absolute;top:0;left:0;right:0;height:4px;display:flex;opacity:.9}
-.g-hero__spectrum span{flex:1}
-.g-hero__kicker{font:600 11px/1 var(--g-font-mono);letter-spacing:.14em;
-  text-transform:uppercase;color:var(--g-accent)}
-.g-hero__title{font-family:var(--g-font-serif);font-weight:600;
-  font-size:clamp(30px,8vw,46px);line-height:1;letter-spacing:-.02em;margin:0;color:var(--g-text);text-wrap:balance}
-.g-hero__title em{font-style:italic;color:var(--g-accent)}
-.g-hero__sub{font-size:15px;color:var(--g-text-muted);max-width:34ch;margin:0}
 
 /* g-chakra-hero — the signature. Cinematic full-bleed meditation image (already
    carries the 7 glowing centres); greeting overlaid; the centres are tappable to
@@ -147,8 +131,6 @@
 /* editorial section headers on Home ------------------------- */
 .g-sec-head{display:flex;flex-direction:column;gap:3px;margin-bottom:calc(var(--g-s2) * -1)}
 .g-sec-head__kicker{font:600 11px/1 var(--g-font-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--g-accent);margin:0}
-.g-sec-head__title{font-family:var(--g-font-serif);font-weight:600;font-size:clamp(24px,6vw,30px);
-  line-height:1;letter-spacing:-.02em;color:var(--g-text);margin:0;text-wrap:balance}
 .g-chakra-hero__stage{height:var(--stage-h);display:flex;justify-content:center;align-items:center}
 .g-chakra-hero__fig{position:relative;height:100%}
 .g-chakra-hero__fig img{height:100%;width:auto;display:block;
@@ -177,23 +159,8 @@
 .g-chakra-hero__caption strong{color:var(--g-text);font-weight:600}
 .g-chakra-hero__caption a{color:var(--g-accent);font-weight:600;text-decoration:none;pointer-events:auto}
 /* tapped-centre info: a floating card anchored right next to the node */
-.g-chakra-hero__pop{position:absolute;z-index:4;left:50%;top:50%;
-  transform:translate(-50%,16px);width:min(62vw,224px);
-  background:rgba(9,14,11,.9);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-  border:1px solid var(--ck,var(--g-line));border-radius:14px;padding:11px 13px;
-  box-shadow:0 12px 36px rgba(0,0,0,.6);opacity:0;
-  /* click-through: the card never blocks the centres underneath it — only its
-     own link is interactive. Dismiss by re-tapping a centre or empty space. */
-  pointer-events:none;
-  transition:opacity .26s ease,transform .26s ease}
-.g-chakra-hero__pop.is-open{opacity:1}
-.g-chakra-hero__pop.is-above{transform:translate(-50%,calc(-100% - 16px))}
-.g-chakra-hero__pop strong{display:block;font-family:var(--g-font-serif);font-weight:600;font-size:16px;color:var(--g-text)}
-.g-chakra-hero__pop span{display:block;font-size:12.5px;color:var(--g-text-muted);margin-top:2px;line-height:1.35}
-.g-chakra-hero__pop a{display:inline-block;margin-top:7px;font-size:12.5px;font-weight:600;color:var(--ck,var(--g-accent));text-decoration:none;pointer-events:auto}
 @media (prefers-reduced-motion:reduce){
   .g-chakra-hero__fig img,.g-chakra-hero__hit::after{animation:none}
-  .g-chakra-hero__pop{transition:opacity .26s ease}
 }
 
 /* ---------- Home layout (the only Home-specific scaffolding) ---------- */
@@ -201,11 +168,6 @@
   display:flex;flex-direction:column;gap:var(--g-s6);
   padding:var(--g-s2) var(--g-s4) calc(var(--g-s9) + env(safe-area-inset-bottom))}
 .g-home>section{scroll-margin-top:var(--g-s5)}
-.g-home-cards{display:grid;grid-template-columns:1fr;gap:var(--g-s3)}
-.g-chakra__frame{margin-top:var(--g-s3);border-radius:var(--g-r-xl);overflow:hidden;
-  border:1px solid var(--g-line);background:
-    radial-gradient(200px 240px at 50% 30%,rgba(125,217,86,.10),transparent 62%),var(--g-surface);
-  padding:var(--g-s3)}
 /* clean Home header (today screen only) */
 .g-topbar{display:flex;align-items:center;justify-content:space-between;gap:var(--g-s2);
   flex-wrap:nowrap;padding:var(--g-s4) var(--g-s4) var(--g-s2);background:var(--g-bg)}
@@ -218,7 +180,6 @@
 @media (max-width:640px){ .g-topbar .gaia-live-sync--header{display:none} }
 
 /* Make the old chakra map read on the dark Home canvas + breathe */
-.g-chakra__frame .gaia-chakra-map{--chakra-frame:transparent}
 /* Belt-and-braces: legacy coach card never shows on the new Home
    (the #gaia-coach-anchor is also removed, so initCoachMark returns early) */
 .g-home .gaia-coach{display:none}
@@ -298,9 +259,6 @@
 .g-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--g-s2)}
 .g-stat{background:var(--g-surface);border:1px solid var(--g-line);border-radius:var(--g-r-md);
   padding:var(--g-s3) var(--g-s4);display:flex;flex-direction:column;gap:3px}
-.g-stat__n{font:700 22px/1 var(--g-font);letter-spacing:-.02em;color:var(--g-text)}
-.g-stat__n--accent{color:var(--g-accent)}
-.g-stat__l{font:600 10.5px/1.1 var(--g-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--g-text-muted)}
 
 /* Access list (communities / entitlements) ------------------ */
 .g-access-grid{display:flex;flex-direction:column;gap:var(--g-s3)}
@@ -311,8 +269,6 @@
 .g-access--unlocked{--st:var(--g-accent)}
 .g-access--locked{--st:#F5C518}
 .g-access--soon{--st:rgba(236,243,233,.22)}
-.g-access__ic{flex:none;width:38px;height:38px;border-radius:var(--g-r-md);display:grid;place-items:center;
-  background:var(--g-surface-hi);color:var(--st,var(--g-text-muted));font-size:17px}
 .g-access__body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .g-access__name{font:700 15px/1.2 var(--g-font);letter-spacing:-.01em;color:var(--g-text);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -353,31 +309,16 @@ a.g-access:hover{border-color:rgba(125,217,86,.4)}
 .g-hint{color:var(--g-text-muted);font-size:12px;margin:var(--g-s3) 0 0}
 
 /* Admin console -------------------------------------------- */
-.g-tabs--3{grid-template-columns:1fr 1fr 1fr;max-width:420px}
-.g-tabs--4{grid-template-columns:repeat(4,1fr);max-width:520px}
-.g-tabs--5{grid-template-columns:repeat(5,1fr);max-width:620px}
-.g-tabs--6{grid-template-columns:repeat(6,1fr);max-width:720px}
 .g-admin{gap:var(--g-s4)}
-.g-admin-panel{display:flex;flex-direction:column;gap:var(--g-s4)}
-.g-admin-panel[hidden]{display:none}
 .g-field{display:flex;flex-direction:column;gap:6px;margin-top:var(--g-s3)}
 .g-field:first-child{margin-top:0}
 .g-label{font:600 12px/1 var(--g-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--g-text-muted)}
-.g-input,.g-textarea{appearance:none;width:100%;background:var(--g-surface-hi);border:1px solid var(--g-line);
+.g-input{appearance:none;width:100%;background:var(--g-surface-hi);border:1px solid var(--g-line);
   border-radius:var(--g-r-md);color:var(--g-text);padding:11px 13px;font:500 16px var(--g-font)}
-.g-input:focus,.g-textarea:focus{outline:none;border-color:var(--g-accent);box-shadow:var(--g-focus)}
-.g-textarea{min-height:84px;resize:vertical;line-height:1.45}
-.g-input::placeholder,.g-textarea::placeholder{color:var(--g-text-muted)}
-.g-checks{display:flex;flex-wrap:wrap;gap:var(--g-s4);margin-top:var(--g-s3)}
+.g-input:focus{outline:none;border-color:var(--g-accent);box-shadow:var(--g-focus)}
+.g-input::placeholder{color:var(--g-text-muted)}
 .g-check{display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--g-text);cursor:pointer}
 .g-check input{width:18px;height:18px;accent-color:var(--g-accent)}
-.g-admin-item{display:flex;gap:var(--g-s3);align-items:flex-start;background:var(--g-surface);
-  border:1px solid var(--g-line);border-radius:var(--g-r-lg);padding:var(--g-s4)}
-.g-admin-item__body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-.g-admin-item__title{font:700 15px/1.25 var(--g-font);color:var(--g-text)}
-.g-admin-item__meta{font-size:12.5px;color:var(--g-text-muted);line-height:1.4;word-break:break-word}
-.g-admin-item__actions{display:flex;gap:6px;flex:none}
-.g-tagrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .g-tag{display:inline-flex;align-items:center;gap:6px;font:600 11px/1 var(--g-font-mono);
   color:var(--g-text);background:var(--g-surface-hi);border:1px solid var(--g-line);
   border-radius:var(--g-r-pill);padding:5px 10px}
@@ -386,11 +327,8 @@ a.g-access:hover{border-color:rgba(125,217,86,.4)}
 .g-tag button:hover{color:#F5C518}
 .g-note{border-radius:var(--g-r-md);padding:12px 14px;font-size:13px;line-height:1.5;
   border:1px solid var(--g-line);color:var(--g-text-muted);background:var(--g-surface)}
-.g-note--warn{border-color:rgba(245,197,24,.3);background:rgba(245,197,24,.06);color:var(--g-text)}
-.g-note--ok{border-color:rgba(125,217,86,.3);background:rgba(125,217,86,.07);color:var(--g-text)}
 .g-note b{color:#F5C518}
 .g-admin-status{font-size:13px;color:var(--g-text-muted);min-height:18px}
-.g-admin-status--ok{color:var(--g-accent)}
 .g-admin-status--err{color:#F5C518}
 
 /* Announcements (admin-published) --------------------------- */
@@ -436,7 +374,6 @@ body.gaia-v2,body.gaia-v2[data-theme="light"]{
 .g-btn:active{transform:translateY(1px)}
 a.g-card:active,.g-tile:active,.g-quiz-opt:active{transform:scale(.99)}
 /* Home: book + colour-test pair (stacks on mobile, 2-up on desktop) */
-.g-home-pair{display:flex;flex-direction:column;gap:var(--g-s5)}
 
 /* Birth-date chakra + daily wellness ------------------------ */
 .g-well{display:flex;flex-direction:column;gap:var(--g-s3)}
@@ -524,7 +461,6 @@ a.g-card:active,.g-tile:active,.g-quiz-opt:active{transform:scale(.99)}
   /* 2-up grids breathe on tablet & desktop. */
   .g-access-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--g-s3)}
   .g-daily{display:grid;grid-template-columns:1fr 1fr;gap:var(--g-s3);align-items:start}
-  .g-home-pair{display:grid;grid-template-columns:1fr 1fr;gap:var(--g-s4);align-items:start}
   .g-store-rail{display:grid;grid-template-columns:repeat(auto-fill,minmax(11rem,1fr));overflow:visible;gap:var(--g-s4)}
   .g-store-rail .g-tile{flex:auto}
 }
@@ -538,10 +474,7 @@ a.g-card:active,.g-tile:active,.g-quiz-opt:active{transform:scale(.99)}
   .g-home{padding-left:var(--g-s7);padding-right:var(--g-s7);gap:var(--g-s7)}
   .g-topbar{padding-left:var(--g-s7);padding-right:var(--g-s7)}
   .g-hero{min-height:280px;padding:var(--g-s8) var(--g-s7)}
-  .g-hero__title{font-size:clamp(40px,4vw,60px)}
   /* event + member CTA sit side by side */
-  .g-home-cards{grid-template-columns:1.35fr 1fr;gap:var(--g-s4);align-items:stretch}
-  .g-home-cards>*{height:100%}
   .g-tile{flex-basis:11rem}
 
   /* chakra hero → two-column: greeting left, cosmic figure right */
@@ -564,9 +497,7 @@ a.g-card:active,.g-tile:active,.g-quiz-opt:active{transform:scale(.99)}
    - color-scheme: dark on form controls so native widgets match the dark UI
    ============================================================ */
 html { -webkit-tap-highlight-color: transparent; }
-a, button, [role="button"], input[type="submit"], input[type="button"], input[type="reset"],
-.g-btn, .g-tab, .g-card--interactive, .g-tile, .g-quiz-opt, .g-access, .g-ann,
-.g-chakra-hero__hit, [data-open-in-app], [data-book-inline], [data-track-cta] {
+a, button, [role="button"], input[type="submit"], input[type="button"], input[type="reset"], .g-btn, .g-tab, .g-tile, .g-quiz-opt, .g-access, .g-ann, .g-chakra-hero__hit, [data-open-in-app], [data-book-inline], [data-track-cta] {
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -600,7 +531,6 @@ button.g-access.g-access--link {
   .g-btn--secondary:hover { border-color: var(--g-line-strong); }
   .g-btn--ghost:hover { filter: brightness(1.12); }
   .g-btn--pill:hover { background: var(--g-surface-hi); }
-  .g-card--interactive:hover { border-color: var(--g-line-strong); transform: translateY(-2px); }
   .g-tile:hover .g-tile__media { transform: scale(1.02); border-color: var(--g-line-strong); }
   .g-chakra-hero__hit:hover::after { border-color: rgba(255,255,255,.5); }
   a.g-row--link:hover, a.g-row--link:hover .g-row__meta { color: var(--g-accent); }
@@ -613,11 +543,8 @@ button.g-access.g-access--link {
 /* Suppress the inherited "stuck" hover on touch devices by overriding the
    transform/filter changes back to neutral when the pointer can't hover. */
 @media (hover: none) {
-  .g-card--interactive:hover,
   .g-tile:hover .g-tile__media,
   .g-access:hover,
-  .gaia-chakra-teaser:hover,
-  .gaia-bento__tile:hover,
   .gaia-assist__chips button:hover { transform: none !important; filter: none !important; }
 }
 
@@ -927,18 +854,10 @@ body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
 .g-sky__invite,.g-sky__personal{border-radius:16px;padding:14px;
   display:flex;flex-direction:column;gap:6px}
 .g-sky__invite{background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.16)}
-.g-sky__invite-head,.g-sky__personal-head{margin:0;font-weight:650;color:#fff;font-size:.95rem}
 .g-sky__invite p,.g-sky__personal p{margin:0;font-size:.88rem;line-height:1.5;color:rgba(255,255,255,.72)}
 .g-sky__invite .g-btn{align-self:flex-start;margin-top:4px}
 .g-sky__personal{background:color-mix(in srgb,var(--own,#7DD956) 10%,transparent);
   border:1px solid color-mix(in srgb,var(--own,#7DD956) 30%,transparent)}
-.g-sky__personal-link{align-self:flex-start;margin-top:2px;font-size:.86rem;font-weight:650;
-  color:var(--own,#7DD956);text-decoration:none}
-.g-sky__personal-link:hover{text-decoration:underline}
-.g-sky__foot{margin:0;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;
-  font-size:.76rem;color:rgba(255,255,255,.5);
-  padding-top:10px;border-top:1px solid rgba(255,255,255,.07)}
-.g-sky__source{color:rgba(255,255,255,.36)}
 
 @media (min-width:760px){
   .g-sky__art{width:104px;height:104px}
@@ -1231,11 +1150,8 @@ button.g-vendor .g-vendor__text{flex:1}
   .g-sky__invitation { font-size: .9rem; line-height: 1.45; }
   .g-sky__practice { font-size: .84rem; line-height: 1.45; padding: 9px 11px; }
   .g-sky__invite { padding: 11px 12px; gap: 4px; }
-  .g-sky__invite p { font-size: .82rem; line-height: 1.4; }
-  .g-sky__invite-head { display: none; }    /* the ask itself is the line that matters */
-  .g-sky__invite .g-btn { margin-top: 2px; }
-  .g-sky__foot { padding-top: 8px; font-size: .72rem; }
-  .g-sky__source { display: none; }         /* charming, not essential */
+  .g-sky__invite p { font-size: .82rem; line-height: 1.4; }    /* the ask itself is the line that matters */
+  .g-sky__invite .g-btn { margin-top: 2px; }         /* charming, not essential */
 }
 
 /* ── Template v2: the redesign proposal, applied ──────────────────────────
@@ -1247,17 +1163,6 @@ button.g-vendor .g-vendor__text{flex:1}
 /* Hero: one card. The artwork is the card; the words sit on it. */
 body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
   border-radius:24px;overflow:hidden;background:var(--g-surface)}
-.g-super-home .g-super-hero__art{opacity:.85;
-  -webkit-mask-image:none;mask-image:none}
-.g-super-home .g-super-hero__art::after{content:"";position:absolute;inset:0;
-  background:linear-gradient(180deg,rgba(4,7,10,.18) 0%,rgba(4,7,10,.55) 55%,rgba(4,7,10,.9) 100%)}
-@media (max-width:480px){
-  .g-super-home .g-super-hero__art{inset:0;height:auto;opacity:.8}
-  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{min-height:0;
-    display:grid;align-content:end;padding:12px 14px 12px}
-  .g-super-hero__intro h1{font-size:28px}
-  body.gaia-v2 .g-super-hero__intro::before{background:transparent}
-}
 
 /* Elevate: the poster is the card; copy sits on it so the first fold can
    hold greeting + event without stacking a 190px banner under the photo. */
@@ -1266,8 +1171,6 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 .g-feature-event__art img{opacity:1;transform:none;filter:none;object-position:center 30%}
 .g-feature-event__art::after{background:linear-gradient(180deg,transparent 28%,rgba(4,7,10,.55) 62%,rgba(4,7,10,.94) 100%)}
 .g-feature-event__body{margin-top:auto;padding:14px 16px 16px}
-.g-feature-event__where{display:flex;align-items:center;gap:5px}
-.g-feature-event__where svg{width:14px;height:14px;color:var(--g-accent)}
 @media (max-width:480px){
   .g-feature-event .g-feature-event__art{height:auto}
   .g-feature-event .g-feature-event__art img{opacity:1}
@@ -1306,20 +1209,17 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 .g-sky__practice{border-left-color:var(--g-purple)}
 .g-sky__practice strong{color:#B9A8FF}
 .g-sky__invite{border-color:rgba(167,139,250,.35)}
-.g-sky__invite-head{font-size:.88rem}
 .g-sky__personal-line{margin:0;padding:10px 12px;border-radius:12px;font-size:.86rem;
   line-height:1.5;color:color-mix(in srgb,var(--own,#B6F25C) 78%,#fff);
   background:color-mix(in srgb,var(--own,#B6F25C) 10%,transparent);
   border:1px solid color-mix(in srgb,var(--own,#B6F25C) 28%,transparent)}
 
 /* Four doors, one row, each in its own colour. */
-.g-free-tools__grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .g-free-tool{--tool:var(--g-accent);
   border-color:color-mix(in srgb,var(--tool) 22%,transparent);
   background:linear-gradient(165deg,color-mix(in srgb,var(--tool) 9%,transparent),transparent 70%),var(--g-surface)}
 .g-free-tool > span{color:var(--tool);background:color-mix(in srgb,var(--tool) 13%,transparent)}
 @media (max-width:480px){
-  .g-free-tools__grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
   .g-free-tool{min-height:92px;grid-template-columns:none;grid-auto-flow:row;
     align-content:center;justify-items:center;gap:6px;padding:10px 4px;text-align:center}
   .g-free-tool > span{width:38px;height:38px;font-size:19px}
@@ -1338,13 +1238,6 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
   .g-super-home{gap:8px}
 
   /* Hero: words seated with intention, not stacked in a corner. */
-  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{
-    min-height:0;padding:12px 14px 12px;row-gap:0}
-  .g-super-hero__intro .g-super-date{margin:0 0 4px;text-shadow:0 1px 8px rgba(0,0,0,.6)}
-  .g-super-hero__intro h1{font-size:26px;line-height:1.05;margin:0 0 4px;
-    text-shadow:0 2px 14px rgba(0,0,0,.65)}
-  .g-super-hero__intro > p:not(.g-super-date){margin:0 0 10px;font-size:13px;
-    color:rgba(255,255,255,.82);text-shadow:0 1px 10px rgba(0,0,0,.6)}
 
   /* Elevate: poster is the card; copy sits on it so the fold can hold both. */
   .g-feature-event .g-feature-event__art{position:absolute;inset:0;height:auto}
@@ -1368,12 +1261,10 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
   .g-sky__practice{font-size:.84rem;padding:10px 12px;margin-bottom:12px}
   .g-sky__invite{padding:12px 14px;gap:5px}
   .g-sky__invite p{font-size:.84rem;margin:0}
-  .g-sky__invite-head{font-size:.86rem}
   .g-sky__invite .g-btn{margin-top:6px;min-height:42px}
 
   /* Four doors: square, roomy, labels that never wrap awkwardly. */
   .g-free-tools{padding:18px 14px}
-  .g-free-tools__grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
   .g-free-tool{min-height:96px;grid-template-columns:none;grid-auto-flow:row;
     align-content:center;justify-items:center;gap:7px;padding:12px 4px;
     text-align:center;border-radius:16px}
@@ -1399,19 +1290,6 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
   /* Hero: full-bleed art, words bottom-left, air everywhere. */
   body.gaia-v2 .g-super-home .g-super-hero{position:relative;display:block;
     min-height:0;border-radius:26px}
-  .g-super-home .g-super-hero__art{position:absolute;inset:0;border-left:0;
-    background-position:center 26%;opacity:.9}
-  .g-super-home .g-super-hero__art::after{
-    background:linear-gradient(100deg,rgba(4,7,10,.82) 0%,rgba(4,7,10,.35) 45%,rgba(4,7,10,.05) 75%),
-      linear-gradient(180deg,transparent 45%,rgba(4,7,10,.8) 100%)}
-  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{position:relative;
-    z-index:1;min-height:0;max-width:620px;display:grid;align-content:end;
-    padding:40px 44px;row-gap:0}
-  .g-super-home .g-super-hero__intro h1{font-size:56px;line-height:1.02;margin:0 0 10px;
-    text-shadow:0 2px 18px rgba(0,0,0,.6)}
-  .g-super-home .g-super-hero__intro .g-super-date{margin:0 0 10px}
-  .g-super-home .g-super-hero__intro > p:not(.g-super-date){margin:0 0 22px;
-    font-size:17px;color:rgba(255,255,255,.85);text-shadow:0 1px 12px rgba(0,0,0,.55)}
 
   /* Elevate: same overlay card as mobile, stretched beside the greeting. */
   .g-feature-event{flex-direction:column;align-items:stretch;min-height:0}
@@ -1489,12 +1367,6 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 .g-cosmic__unlock-head{margin:0 0 5px;font-size:13px;font-weight:700;color:var(--g-text)}
 .g-cosmic__unlock p{margin:0 0 9px;font-size:12.5px;line-height:1.5;color:var(--g-text-muted)}
 /* Chakra Journey (Phase 3) */
-.g-chal__bar{height:6px;border-radius:4px;background:rgba(255,255,255,.07);overflow:hidden;margin:2px 0 12px}
-.g-chal__bar>i{display:block;height:100%;border-radius:4px;background:var(--ck,var(--g-accent))}
-.g-chal__affirm{margin:0 0 10px;font-family:var(--g-font-serif);font-size:16px;font-style:italic;color:var(--g-text)}
-.g-chal__foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;flex-wrap:wrap}
-.g-chal__done{font-size:13px;font-weight:700;color:var(--ck,var(--g-accent))}
-.g-chal__streak{font:600 11px/1 var(--g-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--g-text-muted)}
 
 /* Energy toolkit accordion (collapsible tool cards) */
 .g-toolkit{display:flex;flex-direction:column;gap:10px;margin-top:8px}
@@ -1587,7 +1459,6 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 .gaia-acad__back{flex:none;width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-size:20px;color:var(--g-text);background:var(--g-surface-hi);border:1px solid var(--g-line);cursor:pointer}
 .gaia-acad__back:hover{border-color:var(--g-accent);color:var(--g-accent)}
 .gaia-acad__title{flex:1;min-width:0;margin:0;font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gaia-acad__spacer{width:38px;flex:none}
 .gaia-acad__stage{background:#000;width:100%}
 .gaia-acad__video{width:100%;max-height:56vh;display:block;background:#000;aspect-ratio:16/9}
 .gaia-acad__nowplaying{margin:0;padding:13px 16px 2px;font-family:var(--g-font-serif);font-size:18px;line-height:1.25;color:var(--g-text)}
@@ -1604,7 +1475,6 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 .gaia-acad__lcheck{flex:none;width:20px;height:20px;border-radius:50%;border:1.5px solid var(--g-line)}
 .gaia-acad__lcheck.is-done{border-color:var(--g-accent);background:var(--g-accent)}
 .gaia-acad__lcheck.is-done::after{content:"\2713";display:block;text-align:center;color:#05270f;font-size:12px;line-height:17px;font-weight:700}
-.gaia-acad-cta{width:100%;text-align:left;cursor:pointer;border:1px solid color-mix(in srgb,var(--g-accent) 45%,var(--g-line))}
 
 .gaia-acad__yt{width:100%;aspect-ratio:16/9;max-height:56vh;display:block;border:0;background:#000}
 .gaia-acad__unavail{width:100%;aspect-ratio:16/9;max-height:56vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -1635,7 +1505,6 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 .g-sync__head{list-style:none;display:flex;align-items:center;gap:13px;padding:12px 14px;cursor:pointer}
 .g-sync__head::-webkit-details-marker{display:none}
 .g-sync__poster{flex:none;width:52px;height:52px;border-radius:11px;object-fit:cover;background:var(--g-surface-hi)}
-.g-sync__poster--ph{display:grid;place-items:center;font-size:22px;color:var(--g-accent);background:color-mix(in srgb,var(--g-accent) 12%,transparent)}
 .g-sync__meta{flex:1;min-width:0;display:grid;gap:4px}
 .g-sync__meta strong{font-size:14.5px;font-weight:600;line-height:1.2}
 .g-sync__meta small{font-size:12px;color:var(--g-text-muted);font-variant-numeric:tabular-nums}
@@ -1726,15 +1595,6 @@ body.gaia-v2 .g-super-home .g-super-hero{border:1px solid var(--g-line);
 @media (prefers-reduced-motion:reduce){.g-card__toast,.g-card__toggle i,.g-card__toggle i::after{transition:none}}
 
 /* theme picker + profile tile (gaia-card.js) */
-.g-card__themes{display:flex;gap:8px;flex-wrap:wrap}
-.g-card__theme{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:rgba(255,255,255,.6);text-transform:capitalize}
-.g-card__theme input{position:absolute;opacity:0;width:1px;height:1px}
-.g-card__theme i{width:36px;height:36px;border-radius:50%;border:2px solid transparent;background:conic-gradient(from 210deg,var(--t1),var(--t2),var(--t3),var(--t1))}
-.g-card__theme input:checked+i{border-color:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.18)}
-.g-card__theme input:focus-visible+i{box-shadow:var(--g-focus)}
-.g-card__theme--gaia{--t1:#B6F25C;--t2:#5CE1E6;--t3:#A78BFA}.g-card__theme--sunrise{--t1:#F5C451;--t2:#F08A5D;--t3:#E5715A}
-.g-card__theme--ocean{--t1:#5CE1E6;--t2:#4F9DF2;--t3:#A78BFA}.g-card__theme--rose{--t1:#F7A1C4;--t2:#E06C9F;--t3:#A78BFA}
-.g-card__theme--forest{--t1:#6FCE3A;--t2:#3F8C1F;--t3:#5CE1E6}.g-card__theme--gold{--t1:#F5C451;--t2:#E8B04B;--t3:#FFFFFF}
 .g-cardtile__wrap{margin:8px 0 18px}.g-cardtile__h2{margin:2px 0 12px;font-size:1.25rem}
 .g-cardtile{display:grid;grid-template-columns:104px 1fr;gap:14px;align-items:center;padding:14px;border-radius:18px;background:var(--g-surface);border:1px solid var(--g-line)}
 .g-cardtile__qr{background:#fff;border-radius:12px;padding:6px}.g-cardtile__qr img{display:block;width:100%;height:auto;image-rendering:pixelated}

@@ -1161,7 +1161,6 @@ body.gaia-v2 [data-screen="profile"] #member-data-sharing[hidden], body.gaia-v2 
 .g-readings__pnote { background: var(--g-surface-hi); border: 1px solid var(--g-line); border-radius: var(--g-r-md); padding: 12px 14px; border-top-width: 1px; }
 .g-readings__pnote-text { font-family: var(--g-font-serif); font-size: 1.1rem; font-weight: 500; line-height: 1.4; white-space: pre-line; }
 .g-readings__centre-row { display: flex; gap: 12px; align-items: flex-start; }
-.g-readings__centre-disc { flex: none; width: 34px; height: 34px; border-radius: 50%; margin-top: 2px; box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 10%, transparent); }
 .g-readings__pick-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .g-readings__pick-row label { display: flex; flex-direction: column; gap: 4px; font-size: 0.76rem; color: var(--g-text-muted); min-width: 0; }
 .g-readings__pick-row select { width: 100%; min-width: 0; padding: 8px 10px; border-radius: var(--g-r-md); border: 1px solid var(--g-line); background: var(--g-surface-hi); color: var(--g-text); font: inherit; font-size: 0.92rem; }

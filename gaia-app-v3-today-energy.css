@@ -49,14 +49,6 @@ body.gaia-v2 [data-screen="today"] .g-super-hero {
 body.gaia-v2 [data-screen="today"] .g-super-hero h1 {
   text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
 }
-body.gaia-v2 [data-screen="today"] .g-super-hero__intro .g-super-date {
-  color: rgba(214, 236, 220, 0.82);
-  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7);
-}
-body.gaia-v2 [data-screen="today"] .g-super-hero__intro > p:not(.g-super-date) {
-  color: var(--v3-text);
-  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.7);
-}
 
 /* ---------- 2. Today's energy card (g-de) -------------------------------- */
 /* Was a panel washed in the day's chakra colour with a glossy colour
@@ -211,7 +203,6 @@ body.gaia-v2 [data-screen="today"] .g-free-tools {
   background: var(--v3-card-bg);
   box-shadow: var(--v3-card-shadow);
 }
-body.gaia-v2 [data-screen="today"] .g-free-tools__grid { gap: 10px; }
 body.gaia-v2 [data-screen="today"] .g-free-tool {
   position: relative;
   display: grid;
@@ -293,7 +284,6 @@ body.gaia-v2 [data-screen="today"] .g-free-tool:focus-visible {
 /* Phones: two cards a row leave ~150px each, so the label gets the
    chevron's room and the icon steps down to 36px. */
 @media (max-width: 459px) {
-  body.gaia-v2 [data-screen="today"] .g-free-tools__grid { gap: 8px; }
   body.gaia-v2 [data-screen="today"] .g-free-tool {
     grid-template-columns: 36px minmax(0, 1fr);
     column-gap: 9px;
@@ -981,9 +971,6 @@ body.gaia-v2 [data-screen="today"] .g-super-event { border-radius: var(--v3-radi
   /* Guest Home has no feature card beside the hero: do not reserve a blank column. */
   body.gaia-v2 [data-screen="today"] .g-super-home:not(:has(> .g-feature-event, > .g-super-event)) > .g-super-hero {
     grid-column: 1 / -1 !important; min-height: 320px !important; height: 360px !important; max-height: 420px !important;
-  }
-  body.gaia-v2 [data-screen="today"] .g-super-home:not(:has(> .g-feature-event, > .g-super-event)) > .g-super-hero .g-super-hero__intro {
-    min-height: 320px !important; height: 100%; padding: 32px !important; max-width: 700px;
   }
 }
 

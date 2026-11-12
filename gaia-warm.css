@@ -43,7 +43,6 @@ body.gaia-v2 .g-topbar { background-color: rgba(13, 16, 11, 0.82) !important; }
 body.gaia-v2 .gaia-tabbar :is(a, button)[aria-current="page"], body.gaia-v2 .gaia-tabbar .is-active { background-color: rgba(232, 214, 160, 0.08); }
 
 /* A faint warm light from the top of the page, so it does not read as a void. */
-body.gaia-v2 .gaia-app-main,
 body.gaia-v2 main {
   background-image: radial-gradient(1200px 520px at 70% -120px, rgba(232, 190, 120, 0.06), transparent 70%);
 }
@@ -99,6 +98,5 @@ body.gaia-v2 .gaia-dirprofile__note { background: rgba(232, 196, 120, 0.07); bor
 body.gaia-v2 .gaia-dirprofile-modal { background: rgba(10, 9, 6, 0.70); }
 
 /* The scan price, where the scan is offered. */
-.g-dir-card__price, .gaia-dirprofile__price { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700;
+.g-dir-card__price { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700;
   background: rgba(232, 196, 120, 0.14); color: #ecd59c; white-space: nowrap; }
-.gaia-dirprofile__price { font-size: 12.5px; padding: 3px 10px; margin-left: 4px; }

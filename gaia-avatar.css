@@ -115,7 +115,6 @@
 @keyframes gava-sparkle { 0%,100% { opacity: 0; } 30%,70% { opacity: 1; } }
 /* the cursor: a few degrees of tilt, eyes toward it */
 .gava.is-looking[data-state="idle"] .gava-whole { transform: rotate(var(--gava-tilt, 0deg)); transition: transform .25s ease; animation: none; }
-.gava-bubble__text--hello { font-size: 13.5px; color: #cfe9ff; }
 .gava-bubble:has(> .gava-bubble__text--hello) { padding: 9px 12px; width: auto; max-width: 220px; }
 
 

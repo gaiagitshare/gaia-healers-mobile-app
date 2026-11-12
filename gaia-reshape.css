@@ -71,42 +71,6 @@ body.gaia-v2 .gaia-shell {
 
 .gaia-live-sync { display: none !important; }
 
-.gaia-profile-button {
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 15px;
-  border: 1px solid var(--g-line);
-  border-radius: 999px;
-  background: var(--g-surface);
-  color: var(--g-accent);
-  font-size: 12px;
-  font-weight: 750;
-  text-decoration: none;
-}
-.gaia-profile-button:focus-visible { outline: 2px solid var(--g-accent); outline-offset: 2px; }
-
-.gaia-menu-button {
-  width: auto;
-  min-width: 66px;
-  height: 48px;
-  padding: 0 15px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--g-line);
-  border-radius: 999px;
-  background: var(--g-surface);
-  color: var(--g-accent);
-  font-size: 12px;
-  font-weight: 750;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-}
-.gaia-menu-button svg { width: 23px; height: 23px; }
-.gaia-menu-button:focus-visible { outline: none; box-shadow: var(--g-focus); }
-
 .g-home,
 .g-page,
 .g-store {
@@ -116,126 +80,6 @@ body.gaia-v2 .gaia-shell {
 }
 
 /* Event-first Home ------------------------------------------------------ */
-.g-event-hero {
-  position: relative;
-  min-height: 380px;
-  display: flex;
-  align-items: flex-end;
-  overflow: hidden;
-  border: 1px solid var(--g-line);
-  border-radius: var(--g-r-xl);
-  background-color: #08100b;
-  background-image: url("assets/gaia-event-hero.webp");
-  background-size: cover;
-  background-position: 58% center;
-  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.34);
-}
-.g-event-hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: rgba(2, 7, 4, 0.24);
-  pointer-events: none;
-}
-.g-event-hero__content {
-  position: relative;
-  z-index: 1;
-  width: min(86%, 390px);
-  padding: 24px 22px 22px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-}
-.g-event-hero__kicker,
-.g-priority__kicker,
-.g-member-access__kicker,
-.g-founder-row__kicker {
-  margin: 0;
-  color: var(--g-accent);
-  font: 700 11px/1.1 var(--g-font-mono);
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-}
-.g-event-hero__title {
-  margin: 0;
-  max-width: 7ch;
-  color: var(--g-text);
-  font: 600 clamp(46px, 13vw, 64px) / 0.86 var(--g-font-serif);
-  letter-spacing: -0.045em;
-  text-wrap: balance;
-}
-.g-event-hero__title em { color: var(--g-accent); font-style: normal; }
-.g-event-hero__title--long {
-  max-width: 10.5ch;
-  font-size: clamp(37px, 10.5vw, 48px);
-  line-height: 0.9;
-}
-.g-event-hero__summary {
-  max-width: 30ch;
-  margin: 0;
-  color: #d7ded4;
-  font-size: 15px;
-  line-height: 1.55;
-}
-.g-event-hero__meta {
-  margin: 2px 0 0;
-  color: var(--g-text);
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.5;
-}
-.g-event-hero__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
-.g-event-hero__actions .g-btn { min-height: 48px; border-radius: 999px; padding-inline: 20px; }
-.g-event-hero__status {
-  display: inline-flex;
-  min-height: 42px;
-  align-items: center;
-  color: var(--g-text-muted);
-  font-size: 13px;
-}
-
-.g-home-priorities {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  border-top: 1px solid var(--g-line);
-  border-bottom: 1px solid var(--g-line);
-}
-.g-priority {
-  min-width: 0;
-  min-height: 188px;
-  padding: 24px 16px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 9px;
-  color: var(--g-text);
-  text-decoration: none;
-}
-.g-priority + .g-priority { border-left: 1px solid var(--g-line); }
-.g-priority strong {
-  font: 600 clamp(25px, 7.4vw, 35px) / 0.98 var(--g-font-serif);
-  letter-spacing: -0.025em;
-  text-wrap: balance;
-}
-.g-priority > span:last-child { color: var(--g-accent); font-size: 13px; font-weight: 700; }
-.g-priority:focus-visible { outline: 2px solid var(--g-accent); outline-offset: -3px; }
-
-.g-member-access {
-  min-height: 112px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 18px;
-  border: 1px solid var(--g-line);
-  border-radius: var(--g-r-lg);
-  background: var(--g-surface);
-}
-.g-member-access__body { min-width: 0; flex: 1; }
-.g-member-access__title { margin: 6px 0 0; font: 600 25px/1 var(--g-font-serif); }
-.g-member-access__meta { margin: 5px 0 0; color: var(--g-text-muted); font-size: 13px; line-height: 1.4; }
-.g-member-access .g-btn { flex: none; border-radius: 999px; }
-.g-member-access__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 
 .g-chakra-hero { border-radius: var(--g-r-xl); background: #050906; }
 .g-chakra-hero { --stage-h: min(44vh, 370px); }
@@ -272,26 +116,6 @@ body.gaia-v2 .gaia-shell {
 .g-chakra-guide__steps button:focus-visible { outline: 2px solid var(--g-accent); outline-offset: 2px; }
 
 .g-sec-head { gap: 6px; margin-bottom: -12px; }
-.g-sec-head__title { font-family: var(--g-font-serif); font-size: 34px; }
-
-.g-founder-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 16px;
-  padding: 18px 2px;
-  border-top: 1px solid var(--g-line);
-  border-bottom: 1px solid var(--g-line);
-}
-.g-founder-row__title { margin: 7px 0 0; font: 600 27px/1 var(--g-font-serif); }
-.g-founder-row__meta { margin: 5px 0 0; color: var(--g-text-muted); font-size: 13px; line-height: 1.45; }
-.g-founder-row .g-btn { border-radius: 999px; }
-.g-founder-row--home {
-  padding: 18px;
-  border: 1px solid var(--g-line);
-  border-radius: var(--g-r-lg);
-  background: linear-gradient(145deg, rgba(125, 217, 86, 0.08), transparent 62%), var(--g-surface);
-}
 
 .g-tile[type="button"] {
   padding: 0;
@@ -384,8 +208,6 @@ body.gaia-v2 .gaia-shell {
 .g-section__title { font-family: var(--g-font-serif); font-size: 26px; }
 .g-stats { gap: 7px; }
 .g-stat { padding: 13px 11px; background: var(--g-surface); }
-.g-stat__n { font-family: var(--g-font-serif); font-size: 28px; }
-.g-stat__l { font-size: 9px; }
 
 .g-tabs { position: sticky; top: 72px; z-index: 20; max-width: none; background: #0d1710; }
 .g-tab { min-height: 46px; font-size: 13px; }
@@ -590,31 +412,7 @@ body.gaia-v2 .gaia-assist--welcome .gaia-assist__bubble--bot {
   font-size: 13px;
 }
 
-@media (max-width: 560px) {
-  /* Long live event names need more vertical room than the original fixed
-     card. Without it the flex-end content can overflow behind the sticky
-     header on common 390–430px phones. */
-  .g-event-hero { min-height: 460px; }
-  .g-event-hero__content { width: 92%; padding: 24px 20px 22px; }
-  .g-event-hero__title--long { font-size: clamp(35px, 10vw, 44px); line-height: 0.92; }
-
-  /* Keep copy readable and actions thumb-sized on every normal phone, not
-     only on devices narrower than 359px. */
-  .g-member-access { min-height: 0; align-items: stretch; flex-direction: column; gap: 16px; padding: 20px; }
-  .g-member-access__body { width: 100%; }
-  .g-member-access__meta { max-width: 36ch; }
-  .g-member-access__actions { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .g-member-access .g-btn { width: 100%; min-height: 46px; justify-content: center; text-align: center; }
-  .g-member-access__actions .g-btn:last-child { grid-column: 1 / -1; }
-}
-
 @media (max-width: 359px) {
-  .g-event-hero__content { width: 92%; padding: 22px 18px; }
-  .g-event-hero__title { font-size: 46px; }
-  .g-priority { min-height: 164px; padding: 20px 12px; }
-  .g-priority strong { font-size: 23px; }
-  .g-member-access__actions { grid-template-columns: 1fr; }
-  .g-member-access__actions .g-btn:last-child { grid-column: auto; }
   .g-chakra-guide { grid-template-columns: 1fr; }
   .g-chakra-guide__shop { width: 100%; }
   body.gaia-v2 .gaia-tabbar__label { display: none; }
@@ -627,9 +425,6 @@ body.gaia-v2 .gaia-assist--welcome .gaia-assist__bubble--bot {
   .g-home,
   .g-page,
   .g-store { padding-inline: 28px; }
-  .g-event-hero { min-height: 590px; }
-  .g-event-hero__content { padding: 42px; }
-  .g-home-pair { grid-template-columns: 1fr 1fr; }
 }
 
 @media (min-width: 980px) {
@@ -638,9 +433,6 @@ body.gaia-v2 .gaia-assist--welcome .gaia-assist__bubble--bot {
   .g-home,
   .g-page,
   .g-store { padding-inline: 48px; }
-  .g-event-hero { min-height: 620px; background-position: center; }
-  .g-event-hero__content { width: 48%; }
-  .g-home-priorities { grid-template-columns: 1fr 1fr; }
   .g-access-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -657,7 +449,6 @@ body.gaia-v2 .gaia-assist--welcome .gaia-assist__bubble--bot {
 }
 .g-topbar__brand { font-size: 17px; }
 .g-topbar__brand img { width: 32px; height: 32px; }
-.gaia-menu-button { height: 44px; }
 
 .g-home,
 .g-page,
@@ -678,7 +469,6 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
   .g-topbar { min-height: 60px; padding-block: 7px; }
   .g-topbar__brand { gap: 9px; font-size: 16px; }
   .g-topbar__brand img { width: 30px; height: 30px; }
-  .gaia-menu-button { height: 42px; padding-inline: 15px; }
 
   body.gaia-v2 .g-home,
   .g-page,
@@ -686,32 +476,11 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
     gap: 10px;
     padding: 6px 10px 20px;
   }
-
-  .g-event-hero { min-height: clamp(332px, 40svh, 350px); align-items: center; border-radius: 20px; }
-  .g-event-hero__content { width: 94%; gap: 7px; padding: 14px 16px; }
-  .g-event-hero__title--long { font-size: clamp(30px, 8.6vw, 36px); line-height: 0.94; }
-  .g-event-hero__meta { font-size: 12px; line-height: 1.3; }
-  .g-event-hero__actions { margin-top: 1px; }
-  .g-event-hero__actions .g-btn { min-height: 42px; padding-inline: 16px; }
-
-  .g-member-access { gap: 10px; padding: 14px; border-radius: 20px; }
-  .g-member-access__title { font-size: clamp(29px, 8vw, 33px); }
-  .g-member-access__meta { margin-top: 4px; font-size: 12px; line-height: 1.4; }
-  .g-member-access__actions { gap: 7px; }
-  .g-member-access .g-btn { min-height: 42px; }
-  .g-member-access__actions .g-btn:last-child { min-height: 32px; }
-
-  .g-founder-row { gap: 9px; padding: 13px 14px; border-radius: 20px; }
-  .g-founder-row__title { font-size: 24px; }
-  .g-founder-row__meta { margin-top: 3px; font-size: 12px; line-height: 1.35; }
   .g-page__head,
   .g-store__head { min-height: 132px; padding: 18px; border-radius: 20px; }
   .g-page__title,
   .g-store__title { font-size: clamp(38px, 11vw, 48px); }
-  .g-card,
-  .g-community-card,
-  .g-course-card,
-  .g-store-card { border-radius: 18px; }
+  .g-card { border-radius: 18px; }
   body.gaia-v2 .gaia-tabbar__label { font-size: 8px !important; }
   body.gaia-v2.gaia-has-tabbar { padding-bottom: calc(4.25rem + env(safe-area-inset-bottom)); }
 }
@@ -722,7 +491,6 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
   .g-home,
   .g-page,
   .g-store { padding: 18px 24px calc(98px + env(safe-area-inset-bottom)); }
-  .g-event-hero { min-height: min(540px, 64svh); }
   .g-home {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -733,9 +501,6 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
   #home-announcements:empty { display: none; }
   #home-member-access,
   #home-founder { height: 100%; }
-  #home-founder .g-founder-row { height: 100%; }
-  .g-member-access { flex-direction: column; align-items: stretch; }
-  .g-member-access__actions { justify-content: flex-start; }
 }
 
 @media (min-width: 980px) {
@@ -756,10 +521,6 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
   #home-announcements { grid-area: announcements; }
   #home-member-access { grid-area: access; }
   #home-founder { grid-area: founder; }
-  .g-event-hero { min-height: clamp(540px, calc(100dvh - 130px), 700px); }
-  .g-event-hero__content { width: 48%; padding: 46px 42px; }
-  .g-member-access { flex-direction: column; align-items: stretch; gap: 18px; }
-  .g-member-access__actions { justify-content: flex-start; }
 }
 
 @media (display-mode: standalone) {
@@ -772,10 +533,7 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
 /* Premium consistency pass -------------------------------------------- */
 .g-btn,
 .g-btn--sm,
-.g-event-hero__actions .g-btn,
-.g-member-access .g-btn,
 .g-card__actions .g-btn,
-.g-founder-row .g-btn,
 .g-chakra-guide__shop,
 .g-profile-signout {
   min-height: 44px;
@@ -789,15 +547,12 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
   padding-inline: 14px;
 }
 
-.gaia-menu-button,
 .g-tab {
   min-height: 44px;
   height: 44px;
 }
 
 .g-card,
-.g-member-access,
-.g-founder-row--home,
 .g-page__head,
 .g-store__head {
   border-color: rgba(232, 242, 230, 0.14);
@@ -836,9 +591,6 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
     padding: 6px 10px calc(86px + env(safe-area-inset-bottom));
   }
 
-  .g-event-hero { min-height: clamp(316px, 37svh, 332px); }
-  .g-member-access .g-member-access__actions .g-btn { min-height: 44px; }
-
   .g-page__head,
   .g-store__head {
     min-height: 132px;
@@ -864,10 +616,6 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
 
 .g-page__kicker,
 .g-store__kicker,
-.g-event-hero__kicker,
-.g-priority__kicker,
-.g-member-access__kicker,
-.g-founder-row__kicker,
 .g-card__label,
 .g-section__kicker,
 .g-chakra-guide__kicker {
@@ -889,7 +637,6 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
 }
 
 .g-section__title,
-.g-sec-head__title,
 .g-store-cat .g-section__title {
   color: var(--g-text);
   font-family: var(--g-font-serif);
@@ -912,8 +659,6 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
 
 .g-page__sub,
 .g-card__meta,
-.g-member-access__meta,
-.g-founder-row__meta,
 .g-energy-note span,
 .gaia-product-modal__description {
   color: var(--g-text-muted);
@@ -959,8 +704,6 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
 }
 
 .g-card:not(.g-card--feature),
-.g-member-access,
-.g-founder-row--home,
 .g-access {
   background:
     linear-gradient(145deg, rgba(158, 229, 101, 0.035), transparent 48%),
@@ -972,13 +715,6 @@ body.gaia-v2 .gaia-tabbar__assist { width: 52px; height: 52px; margin: -0.55rem 
 .g-access-grid { gap: 9px; }
 .g-store-panel { gap: 26px; }
 .g-store-cat { gap: 12px; }
-
-@media (max-width: 560px) {
-  .g-member-access__meta,
-  .g-founder-row__meta { font-size: 13px; line-height: 1.45; }
-  .g-member-access__title { font-size: 32px; line-height: 1; }
-  .g-founder-row__title { font-size: 25px; line-height: 1; }
-}
 
 /* Cross-device app shell ------------------------------------------------
    Keep the phone experience compact, let tablets breathe, and turn the

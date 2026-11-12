@@ -57,6 +57,7 @@
     locating = true; repaintControls(); paintList();
     navigator.geolocation.getCurrentPosition(function (pos) {
       origin = { lat: pos.coords.latitude, lng: pos.coords.longitude, label: 'you', source: 'gps' };
+      remember(origin);
       locating = false; placeOpen = false; autoRadius(); repaintControls(); paintList(true);
     }, function (err) {
       locating = false; origin = null; placeOpen = true;
@@ -80,11 +81,17 @@
         var a = j[0].address || {}, town = a.city || a.town || a.village || a.suburb || a.county || '';
         var label = zip ? q.slice(0, 5) + (town ? ' (' + town + ')' : '') : String(j[0].display_name || q).split(',').slice(0, 2).join(',').trim();
         origin = { lat: parseFloat(j[0].lat), lng: parseFloat(j[0].lon), label: label, source: 'place' };
+        remember(origin);
         placeOpen = false;
       } else locError = 'We couldn\'t find "' + q + '". Try a city name or a zip code.';
     } catch (e) { locError = 'Place search is unavailable right now. Try again in a moment.'; }
     placeBusy = false; autoRadius(); repaintControls(); paintList(Boolean(origin));
   }
+  // A location the member gave (Near me or a place they typed), kept on this
+  // device only so Home can recommend near it. Never guessed.
+  var ORIGIN_KEY = 'gaia.dir.origin';
+  function remember(o) { try { localStorage.setItem(ORIGIN_KEY, JSON.stringify({ lat: o.lat, lng: o.lng, label: o.source === 'gps' ? 'your location' : o.label, at: Date.now() })); } catch (e) {} }
+  function savedOrigin() { try { var o = JSON.parse(localStorage.getItem(ORIGIN_KEY) || 'null'); return o && isFinite(o.lat) && isFinite(o.lng) ? o : null; } catch (e) { return null; } }
   function clearOrigin() { origin = null; radiusKm = 0; radiusChosen = false; locError = ''; repaintControls(); paintList(); }
   // With a starting point, show who is near rather than all 219 sorted by
   // distance: the smallest of 25 / 50 / 100 mi (40 / 80 / 160 km) that holds at
@@ -492,12 +499,38 @@
   function openWith(opts) {
     intent = (opts && opts.intent) || '';
     // Personal Path "Book with {practitioner}": open with their name in the search box.
-    if (opts && typeof opts.q === 'string') filters.q = opts.q.slice(0, 80);
+    if (opts && typeof opts.q === 'string') {
+      var zq = zipIn(opts.q);
+      filters.q = (zq ? opts.q.replace(zq, ' ') : opts.q).replace(/\s+/g, ' ').trim().slice(0, 80);
+      if (zq) setTimeout(function () { nearPlace(zq); }, 0);
+      var si = document.querySelector('[data-dir-search]'); if (si) si.value = filters.q;
+    }
+    if (opts && opts.near) setTimeout(nearMe, 0);
     try { window.GaiaAppShell && window.GaiaAppShell.go && window.GaiaAppShell.go('directory'); } catch (e) {}
     if (loaded) { var h = mount(); if (h) { var old = h.querySelector('.g-dir__intent'); if (old) old.remove(); if (intent) h.insertAdjacentHTML('afterbegin', controlsHtml().split('<div class="g-dir__controls">')[0]); } paintList(); }
     else load();
   }
-  window.GaiaDirectory = { open: openWith };
+  // Home "Recommended for you": Bio-Well practitioners who can really be
+  // booked, nearest first when the member has given a location, otherwise the
+  // soonest open time. Only real directory data; nothing invented.
+  var _recData = null;
+  async function recommend(n) {
+    n = n || 3;
+    if (!_recData) {
+      if (loaded && ALL.length) _recData = ALL;
+      else { var r = await fetch(proxyBase() + '/api/directory'); var j = await r.json(); if (!j || !j.ok || !Array.isArray(j.practitioners)) throw new Error('unavailable'); _recData = j.practitioners; }
+    }
+    var o = savedOrigin();
+    var soon = function (p) { return p.nextSlot && Date.parse(p.nextSlot) > Date.now() ? Date.parse(p.nextSlot) : Infinity; };
+    var list = _recData.filter(function (p) { return isBioWell(p) && p.booking === 'online'; });
+    var withD = list.map(function (p) { return { p: p, d: (o && p.lat != null && p.lng != null) ? km(o, { lat: p.lat, lng: p.lng }) : null }; });
+    // "Near you" means near: within 100 mi (160 km), nearest first.
+    if (o) withD = withD.filter(function (x) { return x.d != null && x.d <= 160.9; }).sort(function (a, b) { return a.d - b.d; });
+    else withD = withD.filter(function (x) { return soon(x.p) < Infinity; }).sort(function (a, b) { return soon(a.p) - soon(b.p); });
+    return { origin: o, items: withD.slice(0, n).map(function (x) { return { id: x.p.id, name: x.p.name, city: x.p.city, state: x.p.state, image: x.p.image, specialty: (x.p.specialty || [])[0] || 'Bio-Well practitioner', distance: x.d != null ? fmtDist(x.d) : '', next: soon(x.p) < Infinity ? fmtSlot(x.p.nextSlot) : '' }; }) };
+  }
+  function openProfileFor(id) { openWith({ intent: 'scan' }); setTimeout(function () { openProfile(id); }, 350); }
+  window.GaiaDirectory = { open: openWith, recommend: recommend, savedOrigin: savedOrigin, openProfile: openProfileFor, price: SCAN_PRICE };
   window.GaiaDirectory._test = { fmtSlot: fmtSlot, zipIn: zipIn, scanQuery: scanQuery, isBioWell: isBioWell, fmtDist: fmtDist, km: km, booksOnline: booksOnline };
   function ensure() {
     if (!mount()) return;

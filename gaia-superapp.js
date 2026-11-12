@@ -1112,6 +1112,52 @@
    * Nothing is listed twice; every destination and link is the one that was
    * here before. The guest Home keeps its own on-ramp (the hero, free tools).
    */
+  /** Home v3 hero: search the real directory, or start from where you are. */
+  function home3Hero() {
+    return '<section class="g-home3__hero" aria-labelledby="home3-hero-title">'
+      + '<div class="g-home3__hero-copy"><h2 id="home3-hero-title">Find the right practitioner for you</h2>'
+      + '<form class="g-home3__search" data-home3-search role="search">'
+      + '<label class="g-home3__field"><span class="sr-only">Search practitioners</span>' + icon('magnifying-glass') + '<input type="search" name="q" placeholder="Search Bio-Well scans, practitioners, or city" autocomplete="off" enterkeyhint="search" /></label>'
+      + '<button type="submit" class="g-btn g-btn--primary">Find a practitioner ' + icon('arrow-right') + '</button>'
+      + '<button type="button" class="g-btn g-btn--secondary" data-home3-near>' + icon('map-pin') + ' Near me</button>'
+      + '</form></div></section>';
+  }
+  /** The three things people come for. Price is the owner's (all scans $99). */
+  function home3Actions() {
+    const course = courseGrants()[0];
+    const learn = course && course.openUrl
+      ? '<button type="button" class="g-btn g-btn--ghost g-btn--sm" data-super-course="' + esc(course.openUrl) + '" data-super-course-title="' + esc(course.title || course.name || 'Gaia Healers Academy') + '">Continue course ' + icon('arrow-right') + '</button>'
+      : '<a class="g-btn g-btn--ghost g-btn--sm" href="home.html?view=academy">View courses ' + icon('arrow-right') + '</a>';
+    const card = (cls, art, title, text, action) => '<article class="g-home3__card ' + cls + '"><span class="g-home3__art" aria-hidden="true">' + art + '</span><div class="g-home3__card-copy"><h3>' + title + '</h3><p>' + text + '</p>' + action + '</div></article>';
+    return '<section class="g-home3__cards" aria-label="Start here">'
+      + card('g-home3__card--scan', '<span class="g-home3__aura"></span>' + icon('person-simple'), 'Book a Bio-Well Scan', 'Measure your energy and get a personalised biofield report.', '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-dir-intent="scan">Find a scan · $99 ' + icon('arrow-right') + '</button>')
+      + card('g-home3__card--energy', icon('leaf'), 'Explore Energy', 'Daily energy check, breathing, chakra and colour tools.', '<a class="g-btn g-btn--ghost g-btn--sm" href="home.html?view=wellness">Explore ' + icon('arrow-right') + '</a>')
+      + card('g-home3__card--learn', icon('book-open-text'), course ? 'Continue Learning' : 'Start Learning', course ? esc(course.title || course.name || 'Your course') : 'Courses and certifications to deepen your practice.', learn)
+      + '</section>';
+  }
+  /** Your journey: the course they are on, their next booking, or a first step. No invented progress. */
+  function home3Journey() {
+    const course = courseGrants()[0];
+    const appt = upcomingAppointments()[0];
+    let body = '';
+    if (course) {
+      body += '<div class="g-home3__j-item"><span class="g-home3__j-icon">' + icon('graduation-cap') + '</span><div><small>Continue learning</small><strong>' + esc(course.title || course.name || 'Your course') + '</strong></div></div>';
+    }
+    if (appt) {
+      body += '<a class="g-home3__j-item" href="home.html?view=bookings"><span class="g-home3__j-icon">' + icon('calendar-check') + '</span><div><small>Coming up</small><strong>' + esc(appt.title || 'Appointment') + '</strong><span>' + esc(appointmentWhen(appt)) + '</span></div></a>';
+    }
+    const action = course && course.openUrl
+      ? '<button type="button" class="g-btn g-btn--primary g-home3__j-cta" data-super-course="' + esc(course.openUrl) + '" data-super-course-title="' + esc(course.title || course.name || 'Gaia Healers Academy') + '">Continue ' + icon('arrow-right') + '</button>'
+      : '<a class="g-btn g-btn--primary g-home3__j-cta" href="home.html?view=academy">Find a course ' + icon('arrow-right') + '</a>';
+    if (!body) body = '<p class="g-home3__muted">Start with a course or a Bio-Well scan, and your next steps will appear here.</p>';
+    return '<h2>Your journey</h2>' + body + action;
+  }
+  /** Membership: what they hold, or Gaia 2.0 when they hold nothing. */
+  function home3Plan() {
+    const m = activeMembership();
+    if (m) return '<a class="g-home3__plan" href="home.html?view=profile"><span class="g-home3__plan-icon">' + icon('diamond') + '</span><h3>' + esc(m.label || m.key || 'Member') + ' member</h3><p>Your pass, access and billing live in Profile.</p><span class="g-btn g-btn--secondary g-btn--sm">Open Profile ' + icon('arrow-right') + '</span></a>';
+    return '<a class="g-home3__plan" href="home.html?view=store&tab=membership"><span class="g-home3__plan-icon">' + icon('diamond') + '</span><h3>Gaia 2.0 Membership</h3><p>Certifications, practitioner communities, a directory listing, CRM tools and more.</p><span class="g-btn g-btn--secondary g-btn--sm">Explore membership ' + icon('arrow-right') + '</span></a>';
+  }
   function renderHomeMember(root, greeting) {
     const d = memberState().data || {};
     const rows = [
@@ -1124,16 +1170,23 @@
     const sync = (meta.degraded || meta.stale)
       ? '<p class="g-home2__sync" role="status">' + icon('warning-circle') + ' Your access may not be up to date' + (meta.confirmed_at ? ' (last confirmed ' + esc(String(meta.confirmed_at).slice(0, 10)) + ')' : '') + '. Courses, communities and plans refresh on their own; nothing has been removed.</p>'
       : '';
-    root.innerHTML = '<div class="g-super-home g-super-home--v2 g-home2">'
+    // Home v3 (12 Nov 2026): find a practitioner first, then the three
+    // things people come for, real recommendations beside their journey, the
+    // gathering and the plan. Every block below is one that was here before
+    // (state, path row, Your Gaia, Book a session) -- re-ordered, not removed.
+    root.innerHTML = '<div class="g-super-home g-super-home--v2 g-home2 g-home3">'
       + '<div id="home-announcements"></div>'
-      + '<header class="g-home2__greet"><h1>' + greeting + '</h1><p>' + esc(homeLine()) + '</p></header>'
-      // How am I doing -> what next -> what is happening for me.
+      + '<header class="g-home2__greet g-home3__greet"><h1>' + greeting + '</h1><p>' + esc(homeLine()) + '</p></header>'
+      + home3Hero()
+      + home3Actions()
+      + '<div class="g-home3__split">'
+      +   '<section class="g-home3__recs" id="home3-recs" aria-labelledby="home3-recs-title"><div class="g-home3__recs-head"><h2 id="home3-recs-title">Recommended for you</h2><a class="g-home3__more" href="home.html?view=directory">View all practitioners ' + icon('arrow-right') + '</a></div><div class="g-home3__recs-body" data-home3-recs><p class="g-home3__muted">Loading practitioners…</p></div></section>'
+      +   '<aside class="g-home3__journey" aria-label="Your journey">' + home3Journey() + '</aside>'
+      + '</div>'
       + stateHero()
-      + forYou()
       + '<section class="g-home2__gaia" aria-label="Your Gaia"><p class="g-super-kicker">Your Gaia</p><div class="g-home2__rows">' + rows + '</div></section>'
       + bookActions()
-      + upcoming()
-      + membershipStrip()
+      + '<div class="g-home3__split g-home3__split--bottom">' + upcoming() + home3Plan() + '</div>'
       + sync
       + '<div id="home-book" hidden></div>'   // gaia-member still writes its booking card here; Today copies it
       + '</div>';
@@ -2203,12 +2256,63 @@
       root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Sessions and consultations</p><h1>Book your next step</h1><p>Explore real Gaia Healers sessions now. Member appointments appear after you connect your Member Pass.</p></div>' + bookingCatalog() + guestJoinBlock();
       bind(root); return;
     }
-    const rows = upcomingAppointments().length ? upcomingAppointments().map((item) => {
-      const meeting = item.meetingLocation || '';
-      const join = item.isVideo && meeting ? '<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(meeting) + '" target="_blank" rel="noopener noreferrer">Join meeting</a>' : '';
-      return '<article class="g-booking-item"><div><p class="g-super-kicker">' + esc(item.status || 'Scheduled') + '</p><h2>' + esc(item.title || 'Appointment') + '</h2><p>' + esc(appointmentWhen(item)) + (item.address ? ' · ' + esc(item.address) : '') + '</p></div>' + join + '</article>';
-    }).join('') : '<section class="g-super-empty-panel"><h2>Nothing booked yet</h2><p>When you book a session it appears here with its date and time. The sessions you can book are just below.</p></section>';
-    root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Your schedule</p><h1>Bookings</h1><p>Your appointments appear here automatically.</p></div>' + rows + bookingCatalog();
+    // My appointments (12 Nov 2026): everything GHL holds for this member,
+    // upcoming and past, with what each one needs -- join, directions, add to
+    // calendar, book again. Read-only; nothing here changes a booking.
+    const now = Date.now();
+    const all = appointments().filter((a) => Number.isFinite(Date.parse(a.startTime || '')));
+    const cancelled = (a) => /cancel|invalid|no.?show/i.test(a.status || '');
+    const upcomingList = all.filter((a) => Date.parse(a.startTime) > now - 30 * 60000 && !cancelled(a)).sort((a, b) => Date.parse(a.startTime) - Date.parse(b.startTime));
+    const pastList = all.filter((a) => !upcomingList.includes(a)).sort((a, b) => Date.parse(b.startTime) - Date.parse(a.startTime));
+    const tab = root.dataset.apptTab === 'past' ? 'past' : 'upcoming';
+    const list = tab === 'past' ? pastList : upcomingList;
+    const statusLabel = (a) => {
+      const st = String(a.status || '').toLowerCase();
+      if (/cancel/.test(st)) return ['Cancelled', 'is-off'];
+      if (/no.?show/.test(st)) return ['Missed', 'is-off'];
+      if (Date.parse(a.startTime) < now) return ['Completed', 'is-done'];
+      if (/confirm|booked|new|^$/.test(st)) return ['Confirmed', 'is-on'];
+      return [a.status, ''];
+    };
+    const ics = (a) => {
+      const z = (t) => new Date(t).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+      const end = a.endTime && Number.isFinite(Date.parse(a.endTime)) ? a.endTime : new Date(Date.parse(a.startTime) + 3600000).toISOString();
+      const txt = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Gaia Healers//Appointments//EN', 'BEGIN:VEVENT', 'UID:' + (a.id || z(a.startTime)) + '@gaiahealers.app',
+        'DTSTAMP:' + z(Date.now()), 'DTSTART:' + z(a.startTime), 'DTEND:' + z(end), 'SUMMARY:' + String(a.title || 'Appointment').replace(/[\r\n,;]/g, ' '),
+        (a.address ? 'LOCATION:' + String(a.address).replace(/[\r\n,;]/g, ' ') : (a.isVideo ? 'LOCATION:' + a.meetingLocation : '')), 'END:VEVENT', 'END:VCALENDAR'].filter(Boolean).join('\r\n');
+      return 'data:text/calendar;charset=utf-8,' + encodeURIComponent(txt);
+    };
+    const card = (a) => {
+      const d = new Date(a.startTime);
+      const [label, cls] = statusLabel(a);
+      const end = a.endTime && Number.isFinite(Date.parse(a.endTime)) ? new Date(a.endTime) : null;
+      const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) + (end ? ' – ' + end.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '');
+      const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())) / 86400000);
+      const when = days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : (days > 1 && days < 7 ? 'In ' + days + ' days' : d.toLocaleDateString(undefined, { weekday: 'long' }));
+      const isScan = /bio-?well|scan|biofield/i.test(a.title || '');
+      const acts = [];
+      if (tab === 'upcoming' && a.isVideo && a.meetingLocation) acts.push('<a class="g-btn g-btn--primary g-btn--sm" href="' + esc(a.meetingLocation) + '" target="_blank" rel="noopener noreferrer">' + icon('video-camera') + ' Join</a>');
+      if (tab === 'upcoming' && a.address) acts.push('<a class="g-btn g-btn--secondary g-btn--sm" href="https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(a.address) + '" target="_blank" rel="noopener noreferrer" data-external>' + icon('navigation-arrow') + ' Directions</a>');
+      if (tab === 'upcoming') acts.push('<a class="g-btn g-btn--ghost g-btn--sm" href="' + ics(a) + '" download="gaia-appointment.ics" data-external>' + icon('calendar-plus') + ' Add to calendar</a>');
+      if (tab === 'past' && isScan) acts.push('<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-dir-intent="scan">' + icon('arrow-clockwise') + ' Book another scan · $99</button>');
+      return '<article class="g-appt' + (tab === 'past' ? ' g-appt--past' : '') + '">'
+        + '<div class="g-appt__date" aria-hidden="true"><span>' + esc(d.toLocaleDateString(undefined, { month: 'short' })) + '</span><strong>' + d.getDate() + '</strong><small>' + esc(d.toLocaleDateString(undefined, { weekday: 'short' })) + '</small></div>'
+        + '<div class="g-appt__body"><p class="g-appt__meta"><span class="g-appt__status ' + cls + '">' + esc(label) + '</span>' + (tab === 'upcoming' ? '<span>' + esc(when) + '</span>' : '') + '</p>'
+        + '<h2>' + esc(a.title || 'Appointment') + '</h2>'
+        + '<p class="g-appt__when">' + icon('clock') + ' ' + esc(d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })) + ' · ' + esc(time) + '</p>'
+        + (a.address ? '<p class="g-appt__where">' + icon('map-pin') + ' ' + esc(a.address) + '</p>' : (a.isVideo ? '<p class="g-appt__where">' + icon('video-camera') + ' Online session</p>' : ''))
+        + (acts.length ? '<div class="g-appt__actions">' + acts.join('') + '</div>' : '') + '</div></article>';
+    };
+    const empty = tab === 'past'
+      ? '<section class="g-super-empty-panel"><h2>No past appointments</h2><p>Sessions you have had appear here.</p></section>'
+      : '<section class="g-super-empty-panel g-appt-empty"><h2>No upcoming appointments</h2><p>Book a Bio-Well scan with a practitioner near you, or choose a session below.</p><button type="button" class="g-btn g-btn--primary" data-dir-intent="scan">' + icon('map-pin') + ' Reserve a biofield scan · $99</button></section>';
+    const tabs = '<div class="g-appt-tabs" role="tablist" aria-label="Appointments">'
+      + '<button type="button" role="tab" aria-selected="' + (tab === 'upcoming') + '" data-appt-tab="upcoming" class="' + (tab === 'upcoming' ? 'is-on' : '') + '">Upcoming <span>' + upcomingList.length + '</span></button>'
+      + '<button type="button" role="tab" aria-selected="' + (tab === 'past') + '" data-appt-tab="past" class="' + (tab === 'past' ? 'is-on' : '') + '">Past <span>' + pastList.length + '</span></button></div>';
+    root.innerHTML = '<div class="g-super-page-head"><p class="g-super-kicker">Your schedule</p><h1>My appointments</h1><p>Every session you book with Gaia Healers, in one place.</p></div>'
+      + tabs + '<div class="g-appt-list">' + (list.length ? list.map(card).join('') : empty) + '</div>'
+      + '<section class="g-appt-book"><h2>Book a session</h2>' + bookingCatalog() + '</section>';
+    root.querySelectorAll('[data-appt-tab]').forEach((b) => b.addEventListener('click', () => { root.dataset.apptTab = b.dataset.apptTab; renderBookings(); }));
     bind(root);
   }
 

@@ -1,0 +1,174 @@
+/* Gaia Home v3 + My appointments + nav (12 Nov 2026).
+ * Loaded after gaia-warm.css. Premium dark green, serif display headings
+ * (Cormorant Garamond, already loaded), lime accents, nature light. Layout
+ * only re-orders blocks that already existed; see gaia-superapp.js. */
+
+body.gaia-v2 {
+  --h3-bg: #0b1710;
+  --h3-card: #11241a;
+  --h3-card-2: #15301f;
+  --h3-line: rgba(183, 255, 98, 0.16);
+  --h3-line-soft: rgba(183, 255, 98, 0.10);
+  --h3-lime: #b7ff62;
+  --h3-lime-2: #85c94b;
+  --h3-text: #f7f5e9;
+  --h3-text-2: #b4bdb0;
+  --h3-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  /* The design's palette for the whole app (replaces the warm interim tones). */
+  --v3-page: #07140d;
+  --v3-card: #102318;
+  --v3-card-2: #142b1d;
+  --v3-text: #f7f5e9;
+  --v3-text-2: #b4bdb0;
+  --v3-border: rgba(183, 255, 98, 0.13);
+  --v3-label: #a9cf86;
+}
+html, html body.gaia-v2, html body.gaia-v2.gaia-app { background-color: #07140d !important; }
+body.gaia-v2 .gaia-tabbar { background-color: #09190f !important; }
+body.gaia-v2 .g-topbar { background-color: rgba(7, 20, 13, 0.84) !important; }
+
+/* ---------------- Home v3 ---------------- */
+body.gaia-v2 .g-home3 > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+body.gaia-v2 .g-home3 > * + * { margin-top: 20px !important; }
+body.gaia-v2 .g-home3 .g-home2__greet { margin-bottom: 0 !important; }
+body.gaia-v2 .g-home3__greet h1 { font-family: var(--h3-serif); font-weight: 600; font-size: clamp(30px, 3.4vw, 42px); letter-spacing: -0.01em; margin: 0; color: var(--h3-text); }
+body.gaia-v2 .g-home3__greet p { margin: 4px 0 0; color: var(--h3-text-2); }
+
+/* hero */
+body.gaia-v2 .g-home3__hero {
+  position: relative; overflow: hidden; border-radius: 22px; padding: clamp(20px, 3vw, 34px);
+  border: 1px solid var(--h3-line);
+  background:
+    linear-gradient(90deg, var(--h3-card) 0%, rgba(17, 36, 26, 0.94) 44%, rgba(17, 36, 26, 0.30) 72%, rgba(17, 36, 26, 0.05) 100%),
+    url("assets/gaia-hero-moon-wide.webp") right center / cover no-repeat,
+    var(--h3-card);
+  min-height: 180px; display: flex; align-items: center;
+}
+body.gaia-v2 .g-home3__hero::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(60% 120% at 85% 50%, rgba(183, 255, 98, 0.16), transparent 60%); }
+body.gaia-v2 .g-home3__hero-copy { position: relative; z-index: 1; width: min(100%, 760px); }
+body.gaia-v2 .g-home3__hero h2 { font-family: var(--h3-serif); font-weight: 600; font-size: clamp(28px, 3.4vw, 44px); line-height: 1.08; margin: 0 0 16px; color: var(--h3-text); }
+body.gaia-v2 .g-home3__search { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+body.gaia-v2 .g-home3__field { position: relative; flex: 1 1 280px; display: flex; align-items: center; }
+body.gaia-v2 .g-home3__field i { position: absolute; left: 14px; font-size: 18px; color: var(--h3-text-2); pointer-events: none; }
+body.gaia-v2 .g-home3__field input { width: 100%; min-height: 48px; padding: 10px 16px 10px 42px; border-radius: 999px; font-size: 15px;
+  background: rgba(6, 16, 10, 0.72); border: 1px solid rgba(247, 245, 233, 0.22); color: var(--h3-text); }
+body.gaia-v2 .g-home3__field input:focus { outline: 2px solid var(--h3-lime); outline-offset: 1px; }
+body.gaia-v2 .g-home3__search .g-btn { min-height: 48px; border-radius: 999px; padding-inline: 20px; }
+body.gaia-v2 .g-home3 .g-btn--primary { background: var(--h3-lime); color: #0b1a08; border-color: var(--h3-lime); }
+body.gaia-v2 .g-home3 .g-btn--primary:hover { background: #c8ff86; }
+
+/* three action cards */
+body.gaia-v2 .g-home3__cards { display: grid; gap: 14px; grid-template-columns: 1fr; }
+@media (min-width: 900px) { body.gaia-v2 .g-home3__cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+body.gaia-v2 .g-home3__card { position: relative; overflow: hidden; display: flex; gap: 14px; align-items: center; padding: 16px; border-radius: 18px;
+  background: linear-gradient(160deg, var(--h3-card-2), var(--h3-card)); border: 1px solid var(--h3-line-soft); }
+body.gaia-v2 .g-home3__card h3 { font-family: var(--h3-serif); font-weight: 600; font-size: 22px; margin: 0 0 4px; color: var(--h3-text); }
+body.gaia-v2 .g-home3__card p { margin: 0 0 12px; font-size: 13.5px; line-height: 1.45; color: var(--h3-text-2); }
+body.gaia-v2 .g-home3__art { position: relative; flex: none; width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; font-size: 36px; color: var(--h3-lime);
+  background: radial-gradient(circle at 50% 45%, rgba(183, 255, 98, 0.22), rgba(183, 255, 98, 0.04) 60%, transparent 72%); }
+body.gaia-v2 .g-home3__card--scan .g-home3__art { color: #f7f5e9; }
+body.gaia-v2 .g-home3__aura { position: absolute; inset: 4px; border-radius: 50%;
+  background: conic-gradient(from 200deg, #7b5cff, #3fc3ff, #5cff8f, #ffe35c, #ff7a3c, #ff4fa3, #7b5cff); filter: blur(9px); opacity: .55; }
+body.gaia-v2 .g-home3__card--scan .g-home3__art i { position: relative; z-index: 1; }
+body.gaia-v2 .g-home3__card--learn .g-home3__art { color: #f2d98f; background: radial-gradient(circle at 50% 45%, rgba(242, 217, 143, 0.24), rgba(242, 217, 143, 0.04) 60%, transparent 72%); }
+
+/* recommendations + journey */
+body.gaia-v2 .g-home3__split { display: grid; gap: 14px; grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 1100px) { body.gaia-v2 .g-home3__split { grid-template-columns: minmax(0, 7fr) minmax(0, 3fr); } }
+body.gaia-v2 .g-home3__recs-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+body.gaia-v2 .g-home3__recs h2, body.gaia-v2 .g-home3__journey h2 { font-family: var(--h3-serif); font-weight: 600; font-size: 26px; margin: 0; color: var(--h3-text); }
+body.gaia-v2 .g-home3__more { color: var(--h3-lime); font-size: 13px; font-weight: 600; text-decoration: none; display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+body.gaia-v2 .g-home3__where { margin: 0 0 10px; font-size: 13px; color: var(--h3-text-2); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+body.gaia-v2 .g-home3__where .g-linkbtn { color: var(--h3-lime); }
+body.gaia-v2 .g-home3__muted { color: var(--h3-text-2); font-size: 14px; margin: 0; }
+body.gaia-v2 .g-home3__muted a { color: var(--h3-lime); }
+body.gaia-v2 .g-home3__recs-grid { display: grid; gap: 12px; grid-template-columns: 1fr; }
+@media (min-width: 640px) { body.gaia-v2 .g-home3__recs-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+body.gaia-v2 .g-home3__rec { display: grid; gap: 12px; padding: 14px; border-radius: 16px; background: var(--h3-card); border: 1px solid var(--h3-line-soft); }
+body.gaia-v2 .g-home3__rec-top { display: flex; gap: 12px; align-items: flex-start; min-width: 0; }
+body.gaia-v2 .g-home3__rec-photo { flex: none; width: 64px; height: 64px; border-radius: 14px; overflow: hidden; display: grid; place-items: center; background: var(--h3-card-2); }
+body.gaia-v2 .g-home3__rec-photo img { width: 100%; height: 100%; object-fit: cover; }
+body.gaia-v2 .g-home3__rec-ini { font-weight: 700; color: var(--h3-lime); font-size: 20px; }
+body.gaia-v2 .g-home3__rec h3 { margin: 0 0 4px; font-size: 16px; color: var(--h3-text); }
+body.gaia-v2 .g-home3__rec p { margin: 0 0 3px; font-size: 12.5px; color: var(--h3-text-2); display: flex; gap: 5px; align-items: center; }
+body.gaia-v2 .g-home3__rec-next { color: var(--h3-text) !important; flex-wrap: wrap; }
+body.gaia-v2 .g-home3__rec-next span { color: var(--h3-lime); font-weight: 600; }
+body.gaia-v2 .g-home3__rec .g-btn { justify-self: start; border-radius: 999px; }
+
+body.gaia-v2 .g-home3__journey { display: grid; gap: 12px; padding: 18px; border-radius: 18px; border: 1px solid var(--h3-line);
+  background: radial-gradient(120% 100% at 100% 0%, rgba(183, 255, 98, 0.10), transparent 55%), var(--h3-card); }
+body.gaia-v2 .g-home3__j-item { display: flex; gap: 12px; align-items: center; text-decoration: none; color: inherit; }
+body.gaia-v2 .g-home3__j-icon { flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-size: 22px; color: var(--h3-lime); border: 1px solid var(--h3-line); }
+body.gaia-v2 .g-home3__j-item small { display: block; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--h3-text-2); }
+body.gaia-v2 .g-home3__j-item strong { display: block; color: var(--h3-text); font-size: 15px; }
+body.gaia-v2 .g-home3__j-item span:not(.g-home3__j-icon) { font-size: 12.5px; color: var(--h3-text-2); }
+body.gaia-v2 .g-home3__j-cta { width: 100%; justify-content: center; border-radius: 999px; min-height: 44px; }
+
+/* event + plan */
+body.gaia-v2 .g-home3__split--bottom .g-home2__upcoming > .g-super-kicker { display: none; }
+body.gaia-v2 .g-home3 .g-home2__event { border-radius: 18px; border: 1px solid var(--h3-line-soft); background: var(--h3-card); overflow: hidden; }
+body.gaia-v2 .g-home3 .g-home2__event h2 { font-family: var(--h3-serif); font-weight: 600; font-size: clamp(24px, 2.4vw, 32px); }
+body.gaia-v2 .g-home3__plan { display: grid; gap: 8px; align-content: start; padding: 20px; border-radius: 18px; text-decoration: none; color: inherit; border: 1px solid var(--h3-line);
+  background: radial-gradient(120% 120% at 100% 100%, rgba(183, 255, 98, 0.14), transparent 55%), var(--h3-card-2); }
+body.gaia-v2 .g-home3__plan-icon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: rgba(183, 255, 98, 0.14); color: var(--h3-lime); font-size: 20px; }
+body.gaia-v2 .g-home3__plan h3 { font-family: var(--h3-serif); font-weight: 600; font-size: 26px; margin: 0; color: var(--h3-text); }
+body.gaia-v2 .g-home3__plan p { margin: 0; color: var(--h3-text-2); font-size: 14px; line-height: 1.45; }
+body.gaia-v2 .g-home3__plan .g-btn { justify-self: start; border-radius: 999px; }
+
+/* ---------------- My appointments ---------------- */
+body.gaia-v2 .g-appt-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--h3-card); border: 1px solid var(--h3-line-soft); margin: 4px 0 14px; }
+body.gaia-v2 .g-appt-tabs button { border: 0; background: none; color: var(--h3-text-2); font-weight: 600; font-size: 14px; padding: 8px 16px; border-radius: 999px; min-height: 40px; cursor: pointer; }
+body.gaia-v2 .g-appt-tabs button.is-on { background: rgba(183, 255, 98, 0.16); color: var(--h3-text); }
+body.gaia-v2 .g-appt-tabs button span { margin-left: 4px; font-size: 12px; opacity: .8; }
+body.gaia-v2 .g-appt-list { display: grid; gap: 12px; margin-bottom: 26px; }
+body.gaia-v2 .g-appt { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; padding: 16px; border-radius: 18px; background: var(--h3-card); border: 1px solid var(--h3-line-soft); }
+body.gaia-v2 .g-appt--past { opacity: .82; }
+body.gaia-v2 .g-appt__date { width: 64px; padding: 8px 0; border-radius: 14px; text-align: center; background: rgba(183, 255, 98, 0.10); border: 1px solid var(--h3-line); align-self: start; }
+body.gaia-v2 .g-appt__date span, body.gaia-v2 .g-appt__date small { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--h3-text-2); }
+body.gaia-v2 .g-appt__date strong { display: block; font-family: var(--h3-serif); font-size: 30px; line-height: 1; color: var(--h3-text); }
+body.gaia-v2 .g-appt__meta { display: flex; gap: 8px; align-items: center; margin: 0 0 4px; font-size: 12px; color: var(--h3-text-2); }
+body.gaia-v2 .g-appt__status { padding: 2px 9px; border-radius: 999px; font-weight: 700; font-size: 11.5px; background: rgba(247, 245, 233, 0.08); color: var(--h3-text-2); }
+body.gaia-v2 .g-appt__status.is-on { background: rgba(183, 255, 98, 0.16); color: var(--h3-lime); }
+body.gaia-v2 .g-appt__status.is-done { background: rgba(247, 245, 233, 0.08); color: var(--h3-text); }
+body.gaia-v2 .g-appt__status.is-off { background: rgba(255, 120, 100, 0.12); color: #ffb3a6; }
+body.gaia-v2 .g-appt h2 { margin: 0 0 6px; font-size: 18px; color: var(--h3-text); }
+body.gaia-v2 .g-appt__when, body.gaia-v2 .g-appt__where { margin: 0 0 4px; font-size: 13.5px; color: var(--h3-text-2); display: flex; gap: 6px; align-items: center; }
+body.gaia-v2 .g-appt__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+body.gaia-v2 .g-appt__actions .g-btn { border-radius: 999px; }
+body.gaia-v2 .g-appt-empty { text-align: left; }
+body.gaia-v2 .g-appt-empty .g-btn { margin-top: 10px; border-radius: 999px; }
+body.gaia-v2 .g-appt-book > h2 { font-family: var(--h3-serif); font-weight: 600; font-size: 26px; margin: 0 0 10px; }
+
+/* ---------------- Navigation ---------------- */
+/* Sidebar-only links stay off the phone bar. */
+@media (max-width: 699px) { body.gaia-v2 .gaia-tabbar__link--rail { display: none !important; } }
+/* Rail and sidebar: Home, Today, Discover, Energy, Academy, | Community,
+   Bookings, Events, Shop, Profile, Practice -- by destination, not position. */
+@media (min-width: 700px) {
+  body.gaia-v2 .gaia-tabbar .gaia-tabbar__home { order: 1 !important; }
+  body.gaia-v2 .gaia-tabbar .gaia-tabbar__group .gaia-tabbar__link[data-app-nav="daily"] { order: 2 !important; }
+  body.gaia-v2 .gaia-tabbar .gaia-tabbar__group .gaia-tabbar__link[data-app-nav="directory"] { order: 3 !important; }
+  body.gaia-v2 .gaia-tabbar .gaia-tabbar__group .gaia-tabbar__link[data-app-nav="wellness"] { order: 4 !important; }
+  body.gaia-v2 .gaia-tabbar .gaia-tabbar__group .gaia-tabbar__link[data-app-nav="academy"] { order: 5 !important; }
+  body.gaia-v2 .gaia-tabbar .gaia-tabbar__group .gaia-tabbar__link[data-app-nav="community"] { order: 6 !important; }
+  body.gaia-v2 .gaia-tabbar .gaia-tabbar__group .gaia-tabbar__link[data-app-nav="bookings"] { order: 7 !important; margin-top: 0 !important; }
+  body.gaia-v2 .gaia-tabbar .gaia-tabbar__group .gaia-tabbar__link[data-app-nav="events"] { order: 8 !important; margin-top: 0 !important; }
+  body.gaia-v2 .gaia-tabbar .gaia-tabbar__group .gaia-tabbar__link[data-app-nav="store"] { order: 9 !important; margin-top: 0 !important; }
+  body.gaia-v2 .gaia-tabbar .gaia-tabbar__group .gaia-tabbar__link[data-app-nav="profile"] { order: 10 !important; margin-top: 0 !important; }
+  body.gaia-v2 .gaia-tabbar__link--rail::after { display: none !important; }
+}
+@media (min-width: 1100px) {
+  body.gaia-v2 .gaia-tabbar { background:
+    linear-gradient(180deg, transparent 62%, rgba(9, 25, 15, 0.0) 62%),
+    radial-gradient(140% 40% at 50% 100%, rgba(133, 201, 75, 0.12), transparent 70%), #09190f !important; }
+  body.gaia-v2 .gaia-tabbar__link.is-active, body.gaia-v2 .gaia-tabbar__home.is-active { background: rgba(183, 255, 98, 0.14) !important; color: var(--h3-lime) !important; border-radius: 999px; }
+}
+/* Phones: the artwork sits behind the heading, so it is dimmed for legibility. */
+@media (max-width: 699px) {
+  body.gaia-v2 .g-home3__hero { background:
+    linear-gradient(180deg, rgba(17, 36, 26, 0.82), rgba(17, 36, 26, 0.94)),
+    url("assets/gaia-hero-moon-wide.webp") 70% center / cover no-repeat, var(--h3-card); }
+  body.gaia-v2 .g-home3__search .g-btn { flex: 1 1 auto; justify-content: center; }
+  body.gaia-v2 .g-home3__recs h2 { font-size: 24px; }
+}

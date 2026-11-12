@@ -20,8 +20,9 @@ test('next open time is the earliest slot still ahead; duration and confirm mode
     pageStatus: async () => 200 }, { now: NOW, paceMs: 0, refreshLinks: true });
   assert.deepEqual(bc.bookingFor(1, NOW), { status: 'online', next: '2026-11-12T16:30:00.000Z', durationMin: 30, autoConfirm: false });
   assert.deepEqual(bc.bookingFor(2, NOW), { status: 'online', next: '2026-11-20T10:00:00.000Z', durationMin: 60, autoConfirm: true });
-  // once that time has passed it is no longer offered as "next"
-  assert.equal(bc.bookingFor(1, Date.parse('2026-11-12T17:00:00Z')).next, undefined);
+  // once that time has passed, the next one the check saw takes its place
+  assert.equal(bc.bookingFor(1, Date.parse('2026-11-12T17:00:00Z')).next, '2026-11-13T15:00:00.000Z');
+  assert.equal(bc.bookingFor(1, Date.parse('2026-11-14T00:00:00Z')).next, undefined);
   assert.deepEqual(bc.bookingFor(99, NOW), { status: 'unknown' });
 });
 

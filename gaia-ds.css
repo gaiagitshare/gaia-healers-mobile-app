@@ -634,3 +634,6 @@ body.gaia-v2 [data-screen="profile"] .gpath__list:empty { display: none !importa
 body.gaia-v2 [data-screen="store"] #store-memberships { gap: var(--gh-s3) !important; row-gap: var(--gh-s3) !important; }
 body.gaia-v2 [data-screen="store"] #store-memberships > * { margin-top: 0 !important; margin-bottom: 0 !important; }
 body.gaia-v2 [data-screen="store"] .g-store-jump { -webkit-mask-image: none !important; mask-image: none !important; } body.gaia-v2 [data-screen="store"] .g-store-jump::before, body.gaia-v2 [data-screen="store"] .g-store-jump::after { display: none !important; }
+/* Shop category row: the old pill shape clipped the first and last chips'
+   corners; it is also sticky, so it needs a solid ground under it. */
+body.gaia-v2 [data-screen="store"] .g-store-jump { border-radius: 0 !important; background: var(--gh-bg) !important; padding: 6px 1px !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }

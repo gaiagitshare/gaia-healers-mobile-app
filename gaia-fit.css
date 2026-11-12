@@ -141,8 +141,7 @@ body.gaia-v2 .g-super-home > section + section {
   }
 
   body.gaia-v2 .g-super-section-head h2,
-  body.gaia-v2 .g-section__title,
-  body.gaia-v2 .g-sec-head__title {
+  body.gaia-v2 .g-section__title {
     font-size: var(--fit-section);
     line-height: 1.15;
   }
@@ -168,49 +167,6 @@ body.gaia-v2 .g-super-home > section + section {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     min-height: 0;
-  }
-
-  body.gaia-v2 .g-super-home .g-super-hero__art {
-    position: absolute;
-    z-index: 0;
-    inset: 0;
-    height: auto;
-    min-height: 0;
-    opacity: 0.94;
-    border: 0;
-  }
-
-  body.gaia-v2 .g-super-home .g-super-hero__art img {
-    object-position: center center;
-  }
-
-  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro {
-    position: relative;
-    z-index: 2;
-    min-height: 0 !important;
-    height: 100%;
-    align-content: start;
-    background: transparent;
-    padding: clamp(8px, 2vw, 11px) clamp(12px, 3.4vw, 16px) clamp(9px, 1.6vw, 12px);
-  }
-
-  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro::before {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    inset: 0;
-    background: linear-gradient(180deg, rgba(7, 16, 10, .32) 0%, rgba(7, 16, 10, .1) 40%, rgba(7, 16, 10, .5) 100%);
-  }
-
-  body.gaia-v2 .g-super-hero__intro .g-super-date {
-    margin: 0 0 4px;
-  }
-
-  body.gaia-v2 .g-super-hero__intro > p:not(.g-super-date) {
-    max-width: 28ch;
-    margin: 0 0 7px;
-    font-size: 0.82rem;
-    line-height: 1.3;
   }
 
   /* Side-by-side on the fold so labels stay whole and the stack stays short. */
@@ -248,9 +204,7 @@ body.gaia-v2 .g-super-home > section + section {
     line-height: 1;
   }
 
-  body.gaia-v2 .g-super-actions .g-btn,
-  body.gaia-v2 .g-pass__actions .g-btn,
-  body.gaia-v2 .g-member-access .g-btn {
+  body.gaia-v2 .g-pass__actions .g-btn {
     width: 100%;
     min-width: 0;
     justify-content: center;
@@ -315,7 +269,6 @@ body.gaia-v2 .g-super-home > section + section {
     overflow: hidden;
   }
 
-  body.gaia-v2 .g-super-actions,
   body.gaia-v2 .g-pass__actions {
     display: grid;
     grid-template-columns: 1fr;
@@ -326,11 +279,6 @@ body.gaia-v2 .g-super-home > section + section {
   /* Two readable doors per row on phones; four across is too tight. */
   body.gaia-v2 .g-free-tools {
     padding: 16px 14px;
-  }
-
-  body.gaia-v2 .g-free-tools__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
   }
 
   body.gaia-v2 .g-free-tool {
@@ -370,8 +318,7 @@ body.gaia-v2 .g-super-home > section + section {
     font-size: var(--fit-title);
   }
 
-  body.gaia-v2 .g-super-service__copy strong,
-  body.gaia-v2 .g-super-event__copy strong {
+  body.gaia-v2 .g-super-service__copy strong {
     font-size: 1.2rem;
   }
 
@@ -594,16 +541,10 @@ body.gaia-v2 .g-super-home > section + section {
   }
 
   body.gaia-v2 .g-feature-event__actions,
-  body.gaia-v2 .g-super-actions,
   body.gaia-v2 .g-pass__actions {
     display: flex;
     flex-wrap: wrap;
     width: auto;
-  }
-
-  body.gaia-v2 .g-free-tools__grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
   }
 
   body.gaia-v2 .g-free-tool {
@@ -732,11 +673,6 @@ body.gaia-v2 .g-super-home > section + section {
     width: auto;
   }
 
-  body.gaia-v2 .g-free-tools__grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
-  }
-
   body.gaia-v2 .g-free-tool {
     min-height: 118px;
     padding: 16px 12px;
@@ -776,38 +712,6 @@ body.gaia-v2 .g-super-home .g-feature-event {
   overflow: hidden;
 }
 
-body.gaia-v2 .g-super-home .g-super-hero__art {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  min-width: 0;
-  min-height: 0;
-}
-
-body.gaia-v2 .g-super-home .g-super-hero__art img,
-body.gaia-v2 .g-super-home .g-super-hero__art picture {
-  position: absolute;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-body.gaia-v2 .g-super-home .g-super-hero__art img {
-  object-fit: cover;
-  object-position: center center;
-}
-
-@media (min-width: 900px) {
-  body.gaia-v2 .g-super-home .g-super-hero__art img {
-    object-position: center 24%;
-  }
-}
-
-body.gaia-v2 .g-super-home .g-super-hero__art::after {
-  background: linear-gradient(180deg, rgba(4, 7, 10, .12) 0%, rgba(4, 7, 10, .04) 38%, rgba(4, 7, 10, .58) 100%);
-}
-
 body.gaia-v2 .g-super-home .g-feature-event__art {
   position: absolute;
   inset: 0;
@@ -840,37 +744,6 @@ body.gaia-v2 .g-super-home .g-feature-event__art img {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     min-height: 0;
-  }
-
-  body.gaia-v2 .g-super-home .g-super-hero__art {
-    position: absolute;
-    z-index: 0;
-    inset: 0;
-    height: auto;
-    opacity: 0.9;
-    border: 0;
-  }
-
-  body.gaia-v2 .g-super-home .g-super-hero__art img {
-    object-position: center center;
-  }
-
-  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro {
-    position: relative;
-    z-index: 2;
-    min-height: 0 !important;
-    height: 100%;
-    align-content: start;
-    background: transparent;
-    padding: clamp(16px, 2.4vw, 28px);
-  }
-
-  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro::before {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    inset: 0;
-    background: linear-gradient(180deg, rgba(7, 16, 10, .38) 0%, rgba(7, 16, 10, .12) 48%, rgba(7, 16, 10, .7) 100%);
   }
 
   body.gaia-v2 .g-super-home .g-super-hero h1 {
@@ -915,42 +788,9 @@ body.gaia-v2 .g-super-home .g-feature-event__art img {
     height: auto;
   }
 
-  body.gaia-v2 .g-super-home > .g-super-hero__art,
-  body.gaia-v2 .g-super-home .g-super-hero__art {
-    position: absolute;
-    z-index: 0;
-    inset: 0;
-    height: auto;
-    opacity: 0.92;
-    border: 0;
-  }
-
   /* The hero is a ~3:1 strip here, so the 16:9 photo is cut top and bottom.
      Aim the cut at the meditator (and the lower half of the moon) rather
      than the middle, which used to leave only the top of the figure's head. */
-  body.gaia-v2 .g-super-home .g-super-hero__art img {
-    object-position: center 24%;
-  }
-
-  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro {
-    position: relative;
-    z-index: 2;
-    min-height: 0 !important;
-    max-width: 38rem;
-    height: 100%;
-    display: grid;
-    align-content: end;
-    background: transparent;
-    padding: clamp(20px, 2.8vw, 40px);
-  }
-
-  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro::before {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    inset: 0;
-    background: linear-gradient(100deg, rgba(4, 7, 10, .78) 0%, rgba(4, 7, 10, .28) 52%, rgba(4, 7, 10, .04) 78%);
-  }
 
   body.gaia-v2 .g-super-home > .g-feature-event,
   body.gaia-v2 .g-super-home > .g-super-event {
@@ -1029,7 +869,6 @@ body.gaia-v2 .g-super-home .g-super-event {
   overflow: hidden;
 }
 
-body.gaia-v2 .g-super-home .g-super-hero__art,
 body.gaia-v2 .g-super-home .g-feature-event__art {
   position: absolute !important;
   inset: 0 !important;
@@ -1038,12 +877,6 @@ body.gaia-v2 .g-super-home .g-feature-event__art {
   height: auto !important;
   min-height: 0 !important;
   flex: none !important;
-}
-
-body.gaia-v2 .g-super-home .g-super-hero__intro {
-  position: relative;
-  z-index: 1;
-  min-height: 0 !important;
 }
 
 body.gaia-v2 .g-super-home .g-feature-event__body {
@@ -1113,31 +946,10 @@ body.gaia-v2 .g-super-home .g-feature-event__body {
     object-position: center 52% !important;
   }
 
-  body.gaia-v2 .g-super-home .g-super-hero__intro {
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    gap: 2px;
-    height: auto !important;
-    padding: 10px 12px 12px !important;
-    background: transparent;
-  }
-
-  body.gaia-v2 .g-super-hero__intro .g-super-date {
-    margin: 0 0 2px;
-    font-size: 10px;
-  }
-
   body.gaia-v2 .g-super-home .g-super-hero h1 {
     font-size: clamp(1.2rem, 5.4vw, 1.45rem) !important;
     line-height: 1.08;
     margin: 0;
-  }
-
-  body.gaia-v2 .g-super-hero__intro > p:not(.g-super-date) {
-    margin: 2px 0 8px !important;
-    font-size: 12.5px !important;
-    line-height: 1.3;
   }
 
   body.gaia-v2 .g-super-home .g-super-discover {
@@ -1268,7 +1080,6 @@ body.gaia-v2 .g-super-home .g-feature-event__body {
     --gaia-hero-h: clamp(9.5rem, calc(var(--gaia-fold) * 0.34), 12.5rem);
   }
 
-  body.gaia-v2 .g-super-home .g-super-hero__intro,
   body.gaia-v2 .g-super-home .g-feature-event__body {
     padding: 16px 18px 18px !important;
   }
@@ -1317,7 +1128,6 @@ body.gaia-v2 .g-super-home .g-feature-event__body {
     height: clamp(18rem, calc(var(--gaia-fold) * 0.72), 28rem) !important;
   }
 
-  body.gaia-v2 .g-super-home .g-super-hero__intro,
   body.gaia-v2 .g-super-home .g-feature-event__body {
     margin-top: auto;
     height: auto !important;
@@ -1404,40 +1214,10 @@ body.gaia-v2 .g-super-home .g-super-hero{position:relative;display:flex !importa
   aspect-ratio:720/749;height:auto !important;
   max-height:calc(40vh);max-height:calc(40dvh);
   min-height:0 !important;border-radius:24px;overflow:hidden;isolation:isolate}
-
-body.gaia-v2 .g-super-home .g-super-hero__art{position:absolute !important;
-  inset:0 !important;z-index:0;height:auto !important;width:auto;max-height:none;
-  border:0;opacity:1 !important;transform:none;background-color:#0a1310;
-  background-image:url("assets/gaia-hero-moon.jpg") !important;
-  background-repeat:no-repeat;background-size:cover;background-position:center top}
-body.gaia-v2 .g-super-home .g-super-hero__art::before{content:none}
-body.gaia-v2 .g-super-home .g-super-hero__art::after{content:"";position:absolute;
-  inset:0;background:linear-gradient(180deg,rgba(4,7,10,.78) 0%,rgba(4,7,10,.42) 20%,
-    rgba(4,7,10,.06) 38%,transparent 52%,rgba(4,7,10,.5) 78%,rgba(4,7,10,.92) 100%)}
-
-body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{position:relative;
-  z-index:1;width:100% !important;max-width:none !important;height:100% !important;
-  min-height:0 !important;margin:0 !important;
-  display:flex !important;flex-direction:column !important;
-  /* Greeting at the top, actions at the bottom, artwork breathing between
-     them — the flat markup groups itself via margin-top:auto on the CTA row. */
-  align-items:flex-start !important;justify-content:flex-start !important;
-  gap:0;text-align:left !important;padding:18px 18px 16px !important}
-body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro::before{content:none}
-body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro > *{
-  align-self:flex-start !important;margin-left:0 !important;margin-right:0 !important;
-  max-width:100%}
 /* The date opens the bottom group, so it carries the push. */
-body.gaia-v2 .g-super-hero__intro .g-super-date{margin:auto 0 5px !important;
-  font-size:10.5px !important;text-shadow:0 1px 6px rgba(0,0,0,.6)}
-body.gaia-v2 .g-super-hero h1,
-body.gaia-v2 .g-super-hero__intro h1{font-size:clamp(25px,6.4vw,38px) !important;
+body.gaia-v2 .g-super-hero h1{font-size:clamp(25px,6.4vw,38px) !important;
   line-height:1.04;margin:0 !important;max-width:none !important;
   text-align:left !important;text-shadow:0 2px 14px rgba(0,0,0,.6)}
-body.gaia-v2 .g-super-hero__intro > p:not(.g-super-date){margin:0 0 11px !important;
-  max-width:32ch;font-size:clamp(12.5px,3.4vw,15px);line-height:1.3;
-  color:rgba(255,255,255,.9);text-align:left !important;
-  text-shadow:0 1px 8px rgba(0,0,0,.6)}
 body.gaia-v2 .g-super-home .g-super-hero .g-super-discover,
 body.gaia-v2 .g-super-home .g-super-discover{display:flex !important;
   flex-direction:row !important;justify-content:flex-start !important;
@@ -1469,12 +1249,8 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{
    Measured — at 667px tall the default tier overshot the tab bar by 23px. */
 @media (max-height:740px){
   body.gaia-v2 .g-super-home .g-super-hero{max-height:calc(22vh);max-height:calc(22dvh)}
-  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{padding:9px 16px 9px !important}
-  body.gaia-v2 .g-super-hero h1,
-  body.gaia-v2 .g-super-hero__intro h1{font-size:clamp(21px,5.4vw,26px) !important;
+  body.gaia-v2 .g-super-hero h1{font-size:clamp(21px,5.4vw,26px) !important;
     margin:0 0 3px !important}
-  body.gaia-v2 .g-super-hero__intro > p:not(.g-super-date){margin:0 0 9px !important;
-    font-size:12.5px}
   body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{
     height:clamp(140px,22vh,170px) !important;height:clamp(140px,22dvh,170px) !important}
   body.gaia-v2 .g-super-home .g-feature-event__body{padding:10px 14px 12px !important}
@@ -1483,12 +1259,6 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{
 }
 
 /* Roomier once there is room: tablets and up. */
-@media (min-height:820px) and (max-width:1059px){
-  /* Only the padding gets roomier. An earlier 52dvh bump here was written
-     when the poster banner was half its current height and pushed the cards
-     8px past the tab bar. */
-  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{padding:18px 20px 18px !important}
-}
 
 /* Event: banner, then details. Nothing overlays the poster's lettering. */
 body.gaia-v2 .g-super-home .g-feature-event{display:flex !important;flex-direction:column !important;
@@ -1544,10 +1314,8 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
 /* Desktop: taller hero; the poster earns its side seat. */
 @media (min-width:1060px){
   /* The hero's height is set with the event's, from --pair-h below. */
-  body.gaia-v2 .g-super-home .g-super-hero__art{background-position:center 30%}
   body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art{height:auto !important;
     max-height:none;min-height:0}
-  body.gaia-v2 .g-super-home .g-super-hero .g-super-hero__intro{padding:44px 48px 52px !important}
   body.gaia-v2 .g-super-home .g-feature-event{flex-direction:column !important;
     align-items:stretch;min-height:0}
   body.gaia-v2 .g-super-home .g-feature-event .g-feature-event__art::after{
@@ -1613,9 +1381,6 @@ body.gaia-v2 .g-super-home .g-feature-event__actions .g-btn{white-space:nowrap}
      height — the tiles get roomier rather than the card getting emptier. */
   body.gaia-v2 .g-super-home .g-free-tools{display:flex !important;
     flex-direction:column;min-height:0}
-  body.gaia-v2 .g-super-home .g-free-tools__grid{
-    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
-    flex:1 1 auto;align-content:stretch;gap:14px !important}
   body.gaia-v2 .g-super-home .g-free-tool{min-height:0 !important;height:100%;
     justify-content:center}
 }
@@ -1740,9 +1505,6 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 .gaia-tour__title { font-family: var(--g-font-serif, "Cormorant Garamond", serif); font-weight: 600; font-size: 22px; margin-top: 6px; line-height: 1.1; }
 .gaia-tour__body { font-size: 13.5px; color: var(--g-text-dim, #93A597); margin-top: 6px; line-height: 1.45; }
 .gaia-tour__row { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; gap: 12px; }
-.gaia-tour__dots { display: flex; gap: 6px; }
-.gaia-tour__dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--g-line-strong, rgba(190,240,170,.18)); display: block; transition: width .2s, background .2s; }
-.gaia-tour__dots i.on { width: 20px; border-radius: 99px; background: var(--g-accent, #A6E84B); }
 .gaia-tour__btns { display: flex; gap: 8px; align-items: center; }
 .gaia-tour__skip { background: none; border: none; color: var(--g-text-dim, #93A597); font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .gaia-tour__next { background: var(--g-accent, #A6E84B); color: #0a1705; border: none; border-radius: 999px; padding: 9px 18px; font-weight: 700; font-size: 13px; cursor: pointer; }
@@ -1830,9 +1592,7 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
   body.gaia-v2 .g-super-home > .g-super-event { grid-column: 2 !important; grid-row: 1 !important; height: 100%; margin: 0; }
   body.gaia-v2 .g-super-home > [data-sky-host],
   body.gaia-v2 .g-super-home > .g-upgrade,
-  body.gaia-v2 .g-super-home > .g-free-tools,
-  body.gaia-v2 .g-super-home > .g-super-discover-gaia { grid-column: 1 / -1 !important; }
-  body.gaia-v2 .g-super-home > .g-free-tools .g-free-tools__grid { grid-template-columns: repeat(4, 1fr) !important; }
+  body.gaia-v2 .g-super-home > .g-free-tools { grid-column: 1 / -1 !important; }
   body.gaia-v2 .g-super-home > [data-sky-host] .g-sky { max-width: 900px; }
 }
 
@@ -1966,10 +1726,10 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 /* These were 35px tall against a 44px minimum for a comfortable thumb. Height
    is raised without touching the padding, type or radius, so the chips look
    the same and only the tap area grows. */
-.g-dir-fchip, .g-dir-schip { flex: 0 0 auto; padding: 7px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+.g-dir-fchip { flex: 0 0 auto; padding: 7px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
   min-height: 44px; display: inline-flex; align-items: center; white-space: nowrap; cursor: pointer;
   background: rgba(255,255,255,0.04); border: 1px solid var(--g-line, rgba(190,240,170,0.14)); color: var(--g-text-dim, #93A597); }
-.g-dir-fchip.is-on, .g-dir-schip.is-on { background: color-mix(in srgb, var(--g-accent, #A6E84B) 22%, transparent); color: #F4F7F1; border-color: color-mix(in srgb, var(--g-accent, #A6E84B) 45%, transparent); }
+.g-dir-fchip.is-on { background: color-mix(in srgb, var(--g-accent, #A6E84B) 22%, transparent); color: #F4F7F1; border-color: color-mix(in srgb, var(--g-accent, #A6E84B) 45%, transparent); }
 .g-dir__count { font-size: 12px; color: var(--g-text-dim, #93A597); margin: 2px 2px 10px; font-weight: 600; letter-spacing: 0.02em; }
 
 .g-dir__map { height: 260px; border-radius: 16px; overflow: hidden; margin-bottom: 14px; border: 1px solid var(--g-line, rgba(190,240,170,0.14)); background: #0c130d; }
@@ -2025,20 +1785,10 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 }
 
 /* My Gaia Healers Journey — real credentials (derived from tags/membership) */
-.g-jcreds { margin: 4px 0 10px; }
-.g-jcreds__grid { display: grid; gap: 10px; grid-template-columns: 1fr; margin-top: 10px; }
-@media (min-width: 560px) { .g-jcreds__grid { grid-template-columns: 1fr 1fr; } }
-.g-jcred { display: flex; align-items: center; gap: 13px; padding: 14px 15px; border-radius: 16px;
-  background: radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--g-accent, #A6E84B) 16%, transparent), transparent 60%), var(--g-card-bg, rgba(20,30,22,0.6));
-  border: 1px solid color-mix(in srgb, var(--g-accent, #A6E84B) 30%, var(--g-line, rgba(190,240,170,0.14))); }
-.g-jcred__ic { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #0a0f0a; background: linear-gradient(135deg, var(--g-accent, #A6E84B), #6fb03a); }
-.g-jcred__body { display: flex; flex-direction: column; min-width: 0; }
-.g-jcred__body strong { font-size: 14.5px; color: var(--g-text, #E7EFE6); line-height: 1.2; }
-.g-jcred__body small { font-size: 11.5px; color: var(--g-text-dim, #93A597); margin-top: 2px; }
 
 /* ================= UI polish pass ================= */
 /* Action button rows wrap gracefully — a button never spills past its frame. */
-.g-de__actions, .g-super-actions, .g-card__actions, .gaia-share-modal__actions, .gaia-onboard-modal .g-super-actions, .g-feature-event__actions, .gaia-dirprofile__actions, .g-pass__actions, .g-upgrade__tiers { flex-wrap: wrap; }
+.g-de__actions, .g-card__actions, .gaia-share-modal__actions, .g-feature-event__actions, .gaia-dirprofile__actions, .g-pass__actions, .g-upgrade__tiers { flex-wrap: wrap; }
 
 /* Close (×) buttons: centre the glyph (was baseline-offset) + a real hover state. */
 .gaia-sheet-close, .gaia-booking-modal__close, .gaia-assist__close, .gaia-portal-workspace__close {
@@ -2103,18 +1853,15 @@ body.gaia-v2 .g-topbar__actions.gaia-header-actions { display: flex; align-items
 
 /* ==== Header: one compact row — [menu/back] | centered wordmark | [sign in/avatar] ==== */
 .g-topbar { display: grid !important; grid-template-columns: minmax(44px, 1fr) auto minmax(44px, 1fr); align-items: center; column-gap: 6px; }
-.g-topbar__nav,
-.gaia-menu-button {
+.g-topbar__nav {
   display: inline-flex; align-items: center; justify-content: center; flex: none;
   width: 36px; height: 36px; min-width: 0; padding: 0; border: 0; border-radius: 11px;
   background: transparent; color: inherit; font-size: 20px; line-height: 1; letter-spacing: normal;
   cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color .15s ease, transform .12s ease;
 }
 .g-topbar__nav { justify-self: start; }
-.g-topbar__nav:hover,
-.gaia-menu-button:hover { background: rgba(125, 217, 86, .12); }
-.g-topbar__nav:active,
-.gaia-menu-button:active { transform: scale(.92); }
+.g-topbar__nav:hover { background: rgba(125, 217, 86, .12); }
+.g-topbar__nav:active { transform: scale(.92); }
 /* Brand: small mark + wordmark, one line, optically centered on screen */
 .g-topbar__brand--stack {
   justify-self: center; display: inline-flex; flex-direction: row; align-items: center; gap: 7px;

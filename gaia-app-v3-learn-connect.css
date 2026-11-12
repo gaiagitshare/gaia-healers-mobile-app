@@ -205,14 +205,6 @@ body.gaia-v2 [data-screen="academy"] .g-access--link.g-access--locked > .g-acces
 }
 
 /* Signed-in "Your courses" rows (gaia-member.js renderSyncedAcademy). */
-body.gaia-v2 [data-screen="academy"] .gaia-acad-cta {
-  border: 1px solid rgba(117, 240, 90, 0.3);
-  border-radius: 24px;
-  background:
-    linear-gradient(135deg, rgba(117, 240, 90, 0.07), transparent 60%),
-    var(--v3-card-2);
-  color: var(--v3-text);
-}
 body.gaia-v2 [data-screen="academy"] .g-acadprog { background: rgba(160, 255, 185, 0.12); }
 body.gaia-v2 [data-screen="academy"] .g-acadprog > span {
   background: linear-gradient(90deg, var(--v3-emerald), var(--v3-green));
@@ -398,19 +390,6 @@ body.gaia-v2 [data-screen="community"] #community-body .g-stat {
   border: 1px solid var(--v3-border);
   border-radius: 18px;
   background: var(--v3-card-2);
-}
-body.gaia-v2 [data-screen="community"] #community-body .g-stat__n {
-  color: var(--v3-text);
-  font-family: var(--g-font);
-  font-weight: 600;
-}
-body.gaia-v2 [data-screen="community"] #community-body .g-stat__n--accent { color: var(--v3-green-hi); }
-body.gaia-v2 [data-screen="community"] #community-body .g-stat__l {
-  color: var(--v3-text-2);
-  font-family: var(--g-font);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
 }
 
 /* Circle rows: Assist action cards — a round tinted state icon (the
@@ -1092,20 +1071,6 @@ body.gaia-v2 [data-screen="events"] .g-mypass__vip {
    touch more room between them. Signed-in appointments: a card with the
    status as an eyebrow, the title, when, and Join on the right/below. */
 body.gaia-v2 [data-screen="bookings"] .g-super-list > .g-super-row:first-of-type { margin-top: 14px; }
-body.gaia-v2 [data-screen="bookings"] .g-booking-item {
-  gap: 16px;
-  padding: 20px;
-  border-color: rgba(117, 240, 90, 0.26);
-  background:
-    radial-gradient(90% 120% at 100% 0%, rgba(117, 240, 90, 0.1), transparent 58%),
-    var(--v3-card);
-}
-body.gaia-v2 [data-screen="bookings"] .g-booking-item p:not(.g-super-kicker) { color: var(--v3-text-2); }
-body.gaia-v2 [data-screen="bookings"] .g-booking-item h2 { margin: 4px 0 6px; }
-@media (max-width: 699px) {
-  body.gaia-v2 [data-screen="bookings"] .g-booking-item { display: flex; flex-direction: column; align-items: stretch; }
-  body.gaia-v2 [data-screen="bookings"] .g-booking-item .g-btn { width: 100%; justify-content: center; }
-}
 
 /* ---------- 7. The ticket prompt (Events) ------------------------------ */
 /* Events' "Your tickets live here" (and its empty / problem variants). */
@@ -1233,15 +1198,6 @@ body.gaia-v2 [data-screen="community"] #community-body .g-chip--pending {
    so chips and buttons line up across a row. Courses without artwork get a
    placeholder tile (gaia-member.js) so titles start at the same x. */
 body.gaia-v2 [data-screen="academy"] .g-access--link { grid-template-rows: minmax(0, 1fr) auto; }
-body.gaia-v2 [data-screen="academy"] .g-access--link > .g-access__img--ph {
-  display: grid;
-  place-items: center;
-  color: var(--v3-green);
-  font-size: 26px;
-  background:
-    radial-gradient(circle at 50% 35%, rgba(157, 225, 119, 0.16), transparent 70%),
-    #0a1a12;
-}
 
 @media (min-width: 1100px) {
   body.gaia-v2 [data-screen="academy"] .g-page.g-academy > * {

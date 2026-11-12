@@ -1,0 +1,219 @@
+/* Gaia Healers design system, shared by every screen (full-app redesign,
+ * Phase 2, 12 Nov 2026).
+ *
+ * The tokens below were born on Home (gaia-home3.css) and are unchanged.
+ * Screen styles are scoped to [data-screen="..."] so a phase only changes
+ * the screens it names. Restraint by default: flat surfaces, hairline
+ * borders, one lime primary per section, sans type except the greeting.
+ * Loaded last.
+ */
+
+body.gaia-v2 {
+  /* colour */
+  --gh-bg: #07140d;
+  --gh-surface: #0e1f15;          /* cards */
+  --gh-surface-2: #12271a;        /* raised / hover */
+  --gh-line: rgba(232, 240, 220, 0.08);
+  --gh-line-2: rgba(232, 240, 220, 0.14);
+  --gh-accent: #b7ff62;
+  --gh-accent-ink: #0b1a08;
+  --gh-text: #f2f2ea;
+  --gh-text-2: #b9c0b2;
+  --gh-text-3: #8f978a;
+  /* type */
+  --gh-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --gh-fs-display: 34px;          /* hero */
+  --gh-fs-greet: 30px;
+  --gh-fs-h2: 20px;               /* section */
+  --gh-fs-h3: 16px;               /* card title */
+  --gh-fs-body: 14px;
+  --gh-fs-small: 12.5px;
+  /* space, radius, controls, shadow */
+  --gh-s1: 4px; --gh-s2: 8px; --gh-s3: 12px; --gh-s4: 16px; --gh-s5: 20px; --gh-s6: 24px;
+  --gh-r-card: 14px;
+  --gh-r-ctrl: 10px;
+  --gh-h-btn: 38px;
+  --gh-h-btn-sm: 34px;
+  --gh-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+
+  /* the rest of the app follows the same palette */
+  --v3-page: var(--gh-bg);
+  --v3-card: var(--gh-surface);
+  --v3-card-2: var(--gh-surface-2);
+  --v3-text: var(--gh-text);
+  --v3-text-2: var(--gh-text-2);
+  --v3-border: var(--gh-line);
+  --v3-label: #a9cf86;
+}
+body.gaia-v2 [data-screen="directory"] .g-dir__map[hidden] { display: none !important; }
+
+/* ================= Shared pieces ================= */
+/* Page header: eyebrow, title, one line. Same on every screen. */
+body.gaia-v2 .gaia-main :is([data-ds-page] .g-page__head) { margin: 0 0 var(--gh-s5) !important; padding: 0 !important; background: none !important; border: 0 !important; box-shadow: none !important; }
+body.gaia-v2 [data-ds-page] .g-page__kicker { margin: 0 0 var(--gh-s1) !important; font-size: 11.5px !important; font-weight: 600 !important; letter-spacing: .12em !important; text-transform: uppercase; color: #a9cf86 !important; }
+body.gaia-v2 [data-ds-page] .g-page__title { margin: 0 !important; font-size: 30px !important; font-weight: 600 !important; letter-spacing: -0.015em !important; line-height: 1.15 !important; color: var(--gh-text) !important; }
+body.gaia-v2 [data-ds-page] .g-page__sub { margin: var(--gh-s1) 0 0 !important; font-size: var(--gh-fs-body) !important; color: var(--gh-text-2) !important; }
+@media (max-width: 699px) { body.gaia-v2 [data-ds-page] .g-page__title { font-size: 26px !important; } }
+
+/* Buttons inside redesigned screens and dialogs follow the Home buttons. */
+body.gaia-v2 :is([data-ds-page], .gaia-dirprofile__panel) .g-btn { height: var(--gh-h-btn); min-height: 0; padding: 0 14px; border-radius: var(--gh-r-ctrl) !important; font-size: 13.5px; font-weight: 500; letter-spacing: 0; box-shadow: none !important; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+body.gaia-v2 :is([data-ds-page], .gaia-dirprofile__panel) .g-btn--sm { height: var(--gh-h-btn-sm); padding: 0 12px; font-size: 13px; }
+body.gaia-v2 :is([data-ds-page], .gaia-dirprofile__panel) .g-btn--primary { background: var(--gh-accent) !important; color: var(--gh-accent-ink) !important; border: 1px solid transparent !important; font-weight: 600; }
+body.gaia-v2 :is([data-ds-page], .gaia-dirprofile__panel) .g-btn--primary:hover { background: #c6ff80 !important; }
+body.gaia-v2 :is([data-ds-page], .gaia-dirprofile__panel) :is(.g-btn--secondary, .g-btn--ghost) { background: rgba(255, 255, 255, 0.03) !important; color: var(--gh-text) !important; border: 1px solid var(--gh-line-2) !important; }
+body.gaia-v2 :is([data-ds-page], .gaia-dirprofile__panel) :is(.g-btn--secondary, .g-btn--ghost):hover { background: rgba(255, 255, 255, 0.07) !important; }
+body.gaia-v2 :is([data-ds-page], .gaia-dirprofile__panel) .g-btn:focus-visible { outline: 2px solid var(--gh-accent); outline-offset: 2px; }
+
+/* ================= Discover ================= */
+/* Clean and quiet: one search, one filter row, the list. The map is on request. */
+body.gaia-v2 [data-screen="directory"] .g-directory { max-width: 1240px; }
+body.gaia-v2 [data-screen="directory"] #directory-body { min-width: 0; max-width: 100%; margin: 0 !important; padding: 0 !important; background: none !important; border: 0 !important; }
+
+/* Scan band: the one offer on the page. */
+body.gaia-v2 [data-screen="directory"] .g-dir__intent { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: var(--gh-s3);
+  margin: 0 0 var(--gh-s4); padding: var(--gh-s3) var(--gh-s4); border-radius: var(--gh-r-card); background: var(--gh-surface); border: 1px solid var(--gh-line); box-shadow: none; }
+body.gaia-v2 [data-screen="directory"] .g-dir__intent:not(.g-dir__intent--offer) { border-color: rgba(183, 255, 98, 0.28); background: linear-gradient(90deg, rgba(183, 255, 98, 0.07), transparent 70%), var(--gh-surface); }
+body.gaia-v2 [data-screen="directory"] .g-dir__intent > .ph { box-sizing: border-box; width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--gh-r-ctrl); font-size: 18px; color: var(--gh-accent); background: rgba(183, 255, 98, 0.08); }
+body.gaia-v2 [data-screen="directory"] .g-dir__intent strong { display: block; font-size: 14.5px; font-weight: 600; color: var(--gh-text); }
+body.gaia-v2 [data-screen="directory"] .g-dir__intent span { display: block; font-size: var(--gh-fs-small); color: var(--gh-text-2); }
+body.gaia-v2 [data-screen="directory"] .g-dir__intent-x { width: 32px; height: 32px; border-radius: 8px; border: 0; background: none; color: var(--gh-text-3); font-size: 20px; cursor: pointer; }
+body.gaia-v2 [data-screen="directory"] .g-dir__intent-x:hover { background: rgba(255, 255, 255, 0.06); color: var(--gh-text); }
+
+/* Search and filters */
+body.gaia-v2 [data-screen="directory"] .g-dir__controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gh-s3); margin: 0 0 var(--gh-s3); }
+body.gaia-v2 [data-screen="directory"] .g-dir__search i { left: 14px; font-size: 17px; color: var(--gh-text-3); z-index: 1; }
+body.gaia-v2 [data-screen="directory"] .g-dir__search input { height: 44px; padding: 0 14px 0 40px; border-radius: var(--gh-r-ctrl); font-size: 14.5px; background: var(--gh-surface); border: 1px solid var(--gh-line-2); color: var(--gh-text); box-shadow: none; }
+body.gaia-v2 [data-screen="directory"] .g-dir__search input::placeholder { color: var(--gh-text-3); }
+body.gaia-v2 [data-screen="directory"] .g-dir__search input:focus { outline: 2px solid rgba(183, 255, 98, 0.5); outline-offset: 0; border-color: transparent; }
+body.gaia-v2 [data-screen="directory"] .g-dir__fchips { gap: 6px; align-items: center; flex-wrap: wrap; overflow: visible; }
+body.gaia-v2 [data-screen="directory"] :is(.g-dir-fchip, .g-dir-rchip) { min-height: 34px; height: 34px; padding: 0 12px; gap: 6px; border-radius: 8px; font-size: 13px; font-weight: 500;
+  background: transparent; border: 1px solid var(--gh-line-2); color: var(--gh-text-2); box-shadow: none; }
+body.gaia-v2 [data-screen="directory"] :is(.g-dir-fchip, .g-dir-rchip):hover { color: var(--gh-text); background: rgba(255, 255, 255, 0.04); }
+body.gaia-v2 [data-screen="directory"] :is(.g-dir-fchip, .g-dir-rchip).is-on { background: rgba(183, 255, 98, 0.10); border-color: rgba(183, 255, 98, 0.35); color: var(--gh-text); }
+body.gaia-v2 [data-screen="directory"] .g-dir-fchip .ph { font-size: 15px; }
+body.gaia-v2 [data-screen="directory"] .g-dir-select { position: relative; display: inline-flex; align-items: center; }
+body.gaia-v2 [data-screen="directory"] .g-dir-select select { -webkit-appearance: none; appearance: none; height: 34px; max-width: 240px; padding: 0 30px 0 12px; border-radius: 8px; font: inherit; font-size: 13px; font-weight: 500;
+  background: transparent; border: 1px solid var(--gh-line-2); color: var(--gh-text-2); cursor: pointer; text-overflow: ellipsis; }
+body.gaia-v2 [data-screen="directory"] .g-dir-select select:focus-visible { outline: 2px solid var(--gh-accent); outline-offset: 2px; }
+body.gaia-v2 [data-screen="directory"] .g-dir-select select option { background: #0e1f15; color: var(--gh-text); }
+body.gaia-v2 [data-screen="directory"] .g-dir-select i { position: absolute; right: 10px; font-size: 13px; color: var(--gh-text-3); pointer-events: none; }
+body.gaia-v2 [data-screen="directory"] :is(.g-dir__near, .g-dir__place, .g-dir__locmsg) { margin: 0; }
+
+/* Count + map toggle */
+body.gaia-v2 [data-screen="directory"] .g-dir__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--gh-s3); margin: 0 0 var(--gh-s3); }
+body.gaia-v2 [data-screen="directory"] .g-dir__count { margin: 0; font-size: 12.5px; font-weight: 500; letter-spacing: 0; color: var(--gh-text-3); }
+body.gaia-v2 [data-screen="directory"] .g-dir__maptoggle { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; font: inherit; font-size: 13px; font-weight: 500;
+  background: transparent; border: 1px solid var(--gh-line-2); color: var(--gh-text-2); cursor: pointer; }
+body.gaia-v2 [data-screen="directory"] .g-dir__maptoggle:hover, body.gaia-v2 [data-screen="directory"] .g-dir__maptoggle.is-on { color: var(--gh-text); background: rgba(255, 255, 255, 0.05); }
+body.gaia-v2 [data-screen="directory"] .g-dir__map { height: 320px; margin: 0 0 var(--gh-s4); border-radius: var(--gh-r-card); border: 1px solid var(--gh-line); }
+@media (max-width: 699px) { body.gaia-v2 [data-screen="directory"] .g-dir__map { height: 240px; } }
+
+/* Practitioner rows: the Home "Recommended" pattern. */
+body.gaia-v2 [data-screen="directory"] .g-dir__list { gap: var(--gh-s2); grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); }
+@media (max-width: 699px) { body.gaia-v2 [data-screen="directory"] .g-dir__list { grid-template-columns: minmax(0, 1fr); } }
+body.gaia-v2 [data-screen="directory"] .g-dir-card { min-width: 0; align-items: center; gap: var(--gh-s3); padding: var(--gh-s3); border-radius: var(--gh-r-card); background: var(--gh-surface); border: 1px solid var(--gh-line); box-shadow: none; color: var(--gh-text); transform: none; }
+body.gaia-v2 [data-screen="directory"] .g-dir-card:hover { background: var(--gh-surface-2); border-color: var(--gh-line-2); transform: none; }
+body.gaia-v2 [data-screen="directory"] .g-dir-card:focus-visible { outline: 2px solid var(--gh-accent); outline-offset: 2px; }
+body.gaia-v2 [data-screen="directory"] :is(.g-dir-card__photo, .g-dir-card__img, .g-dir-avatar) { width: 56px; height: 56px; border-radius: 12px; }
+/* An empty well while a photo loads, never a hole. */
+body.gaia-v2 :is([data-screen="directory"] .g-dir-card__img, .gaia-dirprofile__img) { object-fit: cover; background: var(--gh-surface-2); box-shadow: inset 0 0 0 1px var(--gh-line); }
+body.gaia-v2 [data-screen="directory"] .g-dir-avatar { font-size: 17px; font-weight: 600; background: var(--gh-surface-2); box-shadow: inset 0 0 0 1px var(--gh-line-2); color: var(--gh-text-2); }
+body.gaia-v2 [data-screen="directory"] .g-dir-card__body { gap: 2px; }
+body.gaia-v2 [data-screen="directory"] .g-dir-card__top strong { font-size: 15px; font-weight: 600; }
+body.gaia-v2 [data-screen="directory"] .g-dir-card__rating { font-size: 12px; font-weight: 600; color: #e9c46a; }
+body.gaia-v2 [data-screen="directory"] :is(.g-dir-card__loc, .g-dir-card__avail) { font-size: 12.5px; color: var(--gh-text-2); }
+body.gaia-v2 [data-screen="directory"] :is(.g-dir-card__loc, .g-dir-card__avail) .ph { color: var(--gh-text-3); }
+/* One specialty, not three: the profile has the rest. */
+body.gaia-v2 [data-screen="directory"] .g-dir-card__specs { gap: 6px; margin-top: 2px; flex-wrap: nowrap; overflow: hidden; }
+body.gaia-v2 [data-screen="directory"] .g-dir-card__specs .g-dir-chip ~ .g-dir-chip { display: none; }
+body.gaia-v2 [data-screen="directory"] .g-dir-chip { padding: 2px 8px; border-radius: 6px; font-size: 11.5px; background: rgba(255, 255, 255, 0.05); color: var(--gh-text-2); overflow: hidden; text-overflow: ellipsis; }
+body.gaia-v2 [data-screen="directory"] .g-dir-card__price { padding: 2px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 600; background: rgba(183, 255, 98, 0.10); color: var(--gh-accent); white-space: nowrap; }
+body.gaia-v2 [data-screen="directory"] .g-dir-card__badges { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 3px; }
+body.gaia-v2 [data-screen="directory"] .g-dir-card__badges > * { margin: 0; padding: 0; background: none; border: 0; font-size: 12px; font-weight: 500; color: var(--gh-text-3); display: inline-flex; align-items: center; gap: 4px; }
+body.gaia-v2 [data-screen="directory"] .g-dir-card__book.is-online { color: var(--gh-accent); }
+body.gaia-v2 [data-screen="directory"] .g-dir-card::after { content: ""; flex: none; width: 8px; height: 8px; margin-right: 4px; border-top: 1.5px solid var(--gh-text-3); border-right: 1.5px solid var(--gh-text-3); transform: rotate(45deg); }
+body.gaia-v2 [data-screen="directory"] :is(.g-dir__empty, .g-dir__loading, .g-dir__unavailable) { padding: var(--gh-s5); border-radius: var(--gh-r-card); background: var(--gh-surface); border: 1px solid var(--gh-line); color: var(--gh-text-2); font-size: var(--gh-fs-body); text-align: left; }
+@media (max-width: 699px) {
+  body.gaia-v2 [data-screen="directory"] .g-dir__intent { grid-template-columns: auto minmax(0, 1fr) auto; padding: var(--gh-s3); }
+  body.gaia-v2 [data-screen="directory"] .g-dir__intent > .g-btn { grid-column: 1 / -1; width: 100%; margin: 0; }
+  body.gaia-v2 [data-screen="directory"] .g-dir__intent:not(.g-dir__intent--offer) > .g-btn { grid-column: 1 / 3; }
+  body.gaia-v2 [data-screen="directory"] .g-dir__intent-x { grid-row: 1; grid-column: 3; }
+  body.gaia-v2 [data-screen="directory"] .g-dir__fchips { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px; padding: 0 16px 2px; }
+}
+
+/* ================= Practitioner profile dialog ================= */
+body.gaia-v2 .gaia-dirprofile-modal { background: rgba(3, 9, 5, 0.72); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+body.gaia-v2 .gaia-dirprofile__panel { max-width: 440px; padding: var(--gh-s5) var(--gh-s5) calc(var(--gh-s5) + env(safe-area-inset-bottom, 0px)); border-radius: 16px; background: #0d1d14; border: 1px solid var(--gh-line-2); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55); color: var(--gh-text); }
+body.gaia-v2 .gaia-dirprofile__panel .gaia-sheet-close { position: absolute; top: 12px; right: 12px; width: 34px; height: 34px; border-radius: 8px; border: 0; background: rgba(255, 255, 255, 0.05); color: var(--gh-text-2); font-size: 20px; line-height: 1; cursor: pointer; }
+body.gaia-v2 .gaia-dirprofile__panel .gaia-sheet-close:hover { background: rgba(255, 255, 255, 0.1); color: var(--gh-text); }
+body.gaia-v2 .gaia-dirprofile__hero { gap: var(--gh-s4); align-items: flex-start; margin: 0 0 var(--gh-s4); padding-right: 36px; }
+body.gaia-v2 .gaia-dirprofile__hero > div { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+body.gaia-v2 :is(.gaia-dirprofile__img, .gaia-dirprofile__hero .g-dir-avatar) { flex: none; width: 72px; height: 72px; border-radius: 14px; }
+body.gaia-v2 .gaia-dirprofile__hero h2 { margin: 0; font-family: inherit; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; color: var(--gh-text); }
+body.gaia-v2 :is(.gaia-dirprofile__loc, .gaia-dirprofile__addr) { margin: 0; font-size: 13px; color: var(--gh-text-2); }
+body.gaia-v2 .gaia-dirprofile__addr a { color: var(--gh-accent); white-space: nowrap; }
+body.gaia-v2 .gaia-dirprofile__hero :is(.g-dir-card__avail, .g-dir-card__rating) { font-size: 12.5px; font-weight: 500; color: var(--gh-text-2); }
+body.gaia-v2 .gaia-dirprofile__hero .g-dir-card__rating { color: #e9c46a; }
+body.gaia-v2 .gaia-dirprofile__specs { gap: 6px; margin: 0 0 var(--gh-s4); }
+body.gaia-v2 .gaia-dirprofile__specs .g-dir-chip { padding: 3px 9px; border-radius: 6px; font-size: 12px; background: rgba(255, 255, 255, 0.05); color: var(--gh-text-2); }
+body.gaia-v2 .gaia-dirprofile__note { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 var(--gh-s3); padding: var(--gh-s3); border-radius: var(--gh-r-ctrl); font-size: 13px; line-height: 1.45; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--gh-line); color: var(--gh-text-2); }
+body.gaia-v2 .gaia-dirprofile__note .ph { margin-top: 1px; font-size: 16px; color: var(--gh-text-3); }
+body.gaia-v2 .gaia-dirprofile__facts .ph { color: var(--gh-accent); }
+body.gaia-v2 .gaia-dirprofile__actions { gap: var(--gh-s2); }
+body.gaia-v2 .gaia-dirprofile__actions .g-btn { height: 42px; }
+body.gaia-v2 .gaia-dirprofile__reviews { margin-top: var(--gh-s5); padding-top: var(--gh-s4); border-top: 1px solid var(--gh-line); }
+body.gaia-v2 .gaia-dirprofile__reviews .g-super-kicker { margin: 0 0 var(--gh-s2); font-size: 11.5px; letter-spacing: .12em; color: #a9cf86; }
+body.gaia-v2 .gaia-dirprofile__src { margin-top: var(--gh-s4); font-size: 11.5px; color: var(--gh-text-3); opacity: 1; }
+@media (max-width: 699px) {
+  body.gaia-v2 .gaia-dirprofile-modal { align-items: flex-end; padding: 0; }
+  body.gaia-v2 .gaia-dirprofile__panel { max-width: none; max-height: 88vh; border-radius: 16px 16px 0 0; border-bottom: 0; }
+}
+
+/* ================= Booking dialog frame ================= */
+/* The calendar inside is the booking provider's own page (white); only the
+   frame around it follows the app. */
+body.gaia-v2 .gaia-booking-modal:not(.gaia-product-modal) .gaia-booking-modal__backdrop { background: rgba(3, 9, 5, 0.72); }
+body.gaia-v2 .gaia-booking-modal:not(.gaia-product-modal) .gaia-booking-modal__sheet { max-width: 520px; border-radius: 16px 16px 0 0; background: #0d1d14; border: 1px solid var(--gh-line-2); border-bottom: 0; box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45); }
+body.gaia-v2 .gaia-booking-modal:not(.gaia-product-modal) .gaia-booking-modal__head { padding-left: var(--gh-s5); padding-right: var(--gh-s3); border-bottom: 1px solid var(--gh-line); background: #0d1d14; }
+body.gaia-v2 .gaia-booking-modal:not(.gaia-product-modal) .gaia-booking-modal__title { font-size: 15px; font-weight: 600; color: var(--gh-text); }
+body.gaia-v2 .gaia-booking-modal:not(.gaia-product-modal) .gaia-booking-modal__close { width: 36px; height: 36px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); color: var(--gh-text-2); font-size: 20px; }
+body.gaia-v2 .gaia-booking-modal:not(.gaia-product-modal) .gaia-booking-modal__close:hover { background: rgba(255, 255, 255, 0.1); color: var(--gh-text); }
+body.gaia-v2 .gaia-booking-modal:not(.gaia-product-modal) .gaia-booking-modal__foot { background: #0d1d14; border-top: 1px solid var(--gh-line); }
+body.gaia-v2 .gaia-booking-modal:not(.gaia-product-modal) .gaia-booking-modal__done { height: 40px; padding: 0 22px; border-radius: var(--gh-r-ctrl); background: var(--gh-accent); color: var(--gh-accent-ink); font-size: 14px; }
+body.gaia-v2 .gaia-booking-modal:not(.gaia-product-modal) .gaia-booking-modal__fallback { background: #0d1d14; border-top: 1px solid var(--gh-line); color: var(--gh-accent); }
+@media (min-width: 700px) {
+  body.gaia-v2 .gaia-booking-modal:not(.gaia-product-modal) { align-items: center; }
+  body.gaia-v2 .gaia-booking-modal:not(.gaia-product-modal) .gaia-booking-modal__sheet { height: min(86vh, 860px); border-radius: 16px; border-bottom: 1px solid var(--gh-line-2); }
+}
+
+/* ================= My appointments ================= */
+/* Practical: the same sans header as every other screen. */
+body.gaia-v2 [data-screen="bookings"] #bookings-body .g-super-page-head h1 { font-family: inherit !important; font-size: 30px !important; font-weight: 600 !important; letter-spacing: -0.015em !important; }
+@media (max-width: 699px) { body.gaia-v2 [data-screen="bookings"] #bookings-body .g-super-page-head h1 { font-size: 26px !important; } }
+body.gaia-v2 [data-screen="bookings"] .g-appt-tabs { margin-bottom: var(--gh-s4); }
+body.gaia-v2 [data-screen="bookings"] .g-appt-empty { padding: var(--gh-s5) !important; border-radius: var(--gh-r-card) !important; background: var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="bookings"] .g-appt-empty h2 { margin: 0 0 var(--gh-s1); font-size: 17px !important; font-weight: 600; font-family: inherit !important; }
+body.gaia-v2 [data-screen="bookings"] .g-appt-empty p { margin: 0; font-size: var(--gh-fs-body); color: var(--gh-text-2); max-width: 46ch; }
+body.gaia-v2 [data-screen="bookings"] .g-appt-empty .g-btn { height: var(--gh-h-btn); min-height: 0; box-shadow: none !important; font-size: 13.5px; }
+body.gaia-v2 [data-screen="bookings"] .g-super-row { min-height: 0; padding: var(--gh-s3) var(--gh-s4) !important; border-radius: var(--gh-r-ctrl) !important; background: transparent !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="bookings"] .g-super-row:hover { background: rgba(255, 255, 255, 0.03) !important; }
+body.gaia-v2 [data-screen="bookings"] .g-super-row__icon { width: 34px !important; height: 34px !important; border-radius: 8px !important; background: rgba(255, 255, 255, 0.04) !important; box-shadow: none !important; color: var(--gh-text-2) !important; }
+
+/* ================= Phone bar: More ================= */
+body.gaia-v2 .gaia-tabbar__more { border: 0; background: none; font: inherit; cursor: pointer; position: relative; }
+body.gaia-v2 .gaia-tabbar__inner:has(.gaia-tabbar__link[data-app-nav="community"] .gaia-tabbar__badge) .gaia-tabbar__more::before {
+  content: ""; position: absolute; top: 6px; right: calc(50% - 14px); width: 7px; height: 7px; border-radius: 50%; background: var(--gh-accent); }
+@media (min-width: 700px) { body.gaia-v2 .gaia-tabbar__more { display: none !important; } }
+body.gaia-v2 .gaia-more-sheet { position: fixed; inset: 0; z-index: 1300; display: flex; align-items: flex-end; }
+body.gaia-v2 .gaia-more-sheet__backdrop { position: absolute; inset: 0; background: rgba(3, 9, 5, 0.6); }
+body.gaia-v2 .gaia-more-sheet__panel { position: relative; width: 100%; padding: 8px 12px calc(16px + env(safe-area-inset-bottom, 0px)); border-radius: 16px 16px 0 0; background: #0d1d14; border-top: 1px solid var(--gh-line-2); animation: gaia-more-up .18s ease-out; }
+@keyframes gaia-more-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+body.gaia-v2 .gaia-more-sheet__grip { width: 36px; height: 4px; margin: 2px auto 10px; border-radius: 2px; background: var(--gh-line-2); }
+body.gaia-v2 .gaia-more-sheet__link { display: flex; align-items: center; gap: 14px; height: 48px; padding: 0 12px; border-radius: var(--gh-r-ctrl); font-size: 15px; font-weight: 500; color: var(--gh-text); text-decoration: none; }
+body.gaia-v2 .gaia-more-sheet__link > .ph:first-child { font-size: 20px; color: var(--gh-text-2); }
+body.gaia-v2 .gaia-more-sheet__link span { flex: 1; }
+body.gaia-v2 .gaia-more-sheet__go { font-size: 14px; color: var(--gh-text-3); }
+body.gaia-v2 .gaia-more-sheet__link:hover, body.gaia-v2 .gaia-more-sheet__link:focus-visible { background: rgba(255, 255, 255, 0.05); outline: none; }
+body.gaia-v2 .gaia-more-sheet__link.is-active { background: rgba(183, 255, 98, 0.08); }
+body.gaia-v2 .gaia-more-sheet__link.is-active > .ph:first-child { color: var(--gh-accent); }
+@media (prefers-reduced-motion: reduce) { body.gaia-v2 .gaia-more-sheet__panel { animation: none; } }

@@ -77,6 +77,21 @@ def start(wait_seconds=40):
     workdir = tempfile.mkdtemp(prefix="testbed-")
     db = os.path.join(workdir, "event.db")
     shutil.copy(LIVE_DB, db)
+    # Re-entry starts off in every copy. The suites were written against one
+    # badge, one entry, and an organiser turning re-entry on for the real
+    # event (12 Nov 2026) made five fail on the copy -- a test must not pass
+    # or fail on how the live event happens to be set up today. Suites about
+    # re-entry switch it on themselves. Rehearsal is left as the live event
+    # has it: before opening day the door suites need it to admit anyone.
+    import sqlite3 as _sq0
+    _c = _sq0.connect(db)
+    try:
+        _cols = {r[1] for r in _c.execute("PRAGMA table_info(events)")}
+        if "allow_reentry" in _cols:
+            _c.execute("UPDATE events SET allow_reentry = 0")
+        _c.commit()
+    finally:
+        _c.close()
     # The delivery history (data/ticket-delivery.db) is the second database.
     # A suite that does not bring its own copy gets one here, so no test can
     # write audit rows into the live history (10 Nov 2026: the correction

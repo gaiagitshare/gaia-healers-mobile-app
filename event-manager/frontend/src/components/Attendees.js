@@ -683,7 +683,8 @@ function Attendees({ timezone }) {
                     <strong>{unmapped.pending} unmapped event {unmapped.pending === 1 ? 'sale' : 'sales'}</strong>
                     {' \u2014 '}paid, but the product is not mapped to a ticket, so no attendee or badge was created.
                     {showUnmapped && (
-                        <Table size="small" sx={{ mt: 1.5 }}>
+                        <TableContainer sx={{ mt: 1.5 }}>
+                        <Table size="small">
                             <TableHead>
                                 <TableRow>
                                     <TableCell>Paid</TableCell><TableCell>Buyer</TableCell>
@@ -724,6 +725,7 @@ function Attendees({ timezone }) {
                                 ))}
                             </TableBody>
                         </Table>
+                        </TableContainer>
                     )}
                     {showUnmapped && (
                         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
@@ -813,6 +815,7 @@ function Attendees({ timezone }) {
                                     ? 'Source is captured against the person, not the payment, so every payment they made counts under their one source.'
                                     : 'Grouped by what each payment itself recorded, so one person can appear in more than one row. Clicking a row filters to the people behind it.'}
                             </Typography>
+                            <TableContainer>
                             <Table size="small">
                                 <TableHead>
                                     <TableRow>
@@ -867,6 +870,7 @@ function Attendees({ timezone }) {
                                     })}
                                 </TableBody>
                             </Table>
+                            </TableContainer>
                         </Box>
                     )}
                 </Paper>
@@ -909,6 +913,7 @@ function Attendees({ timezone }) {
 
                     {showMetrics && (
                         <Box sx={{ mt: 2 }}>
+                            <TableContainer>
                             <Table size="small">
                                 <TableBody>
                                     <TableRow><TableCell>Original ticket purchases</TableCell>
@@ -933,13 +938,15 @@ function Attendees({ timezone }) {
                                         <TableCell align="right">{metrics.people.complimentary_or_unpaid}</TableCell></TableRow>
                                 </TableBody>
                             </Table>
+                            </TableContainer>
 
                             {metrics.needs_review.length > 0 && (
                                 <Alert severity="info" sx={{ mt: 2 }}>
                                     <strong>{metrics.needs_review.length} repeat {metrics.needs_review.length === 1 ? 'payment' : 'payments'} to look at.</strong>{' '}
                                     Someone paid twice for the same ticket. Minutes apart is usually a retry or a
                                     double charge; a refund is a decision for a person, not for this screen.
-                                    <Table size="small" sx={{ mt: 1 }}>
+                                    <TableContainer sx={{ mt: 1 }}>
+                                    <Table size="small">
                                         <TableHead><TableRow>
                                             <TableCell>Buyer</TableCell><TableCell>Gap</TableCell>
                                             <TableCell align="right">Amount</TableCell><TableCell>Reading</TableCell>
@@ -962,6 +969,7 @@ function Attendees({ timezone }) {
                                             ))}
                                         </TableBody>
                                     </Table>
+                                    </TableContainer>
                                 </Alert>
                             )}
                         </Box>
@@ -995,6 +1003,7 @@ function Attendees({ timezone }) {
                                         label={`${door.walk_ins.by_attendance_type[k]} ${k}`} />
                                 ))}
                             </Stack>
+                            <TableContainer>
                             <Table size="small">
                                 <TableBody>
                                     <TableRow><TableCell>Reconciled with a GHL order</TableCell>
@@ -1016,6 +1025,7 @@ function Attendees({ timezone }) {
                                     ))}
                                 </TableBody>
                             </Table>
+                            </TableContainer>
                         </Box>
                     )}
                 </Paper>

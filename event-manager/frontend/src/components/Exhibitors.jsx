@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    Box, Paper, Typography, Table, TableHead, TableBody, TableRow, TableCell,
+    Box, Paper, Typography, Table, TableHead, TableBody, TableContainer, TableRow, TableCell,
     Chip, Switch, Button, IconButton, Dialog, DialogTitle,
     DialogContent, DialogActions, TextField, MenuItem, Stack, Alert, Divider,
     CircularProgress, Tooltip, Checkbox, ToggleButton, ToggleButtonGroup,
@@ -401,6 +401,7 @@ export default function Exhibitors({ eventId, onCountChange }) {
                                                   label={`${b.stand} · ${b.scans}`} />
                                         ))}
                                     </Stack>
+                                    <TableContainer>
                                     <Table size="small">
                                         <TableHead>
                                             <TableRow>
@@ -421,6 +422,7 @@ export default function Exhibitors({ eventId, onCountChange }) {
                                             ))}
                                         </TableBody>
                                     </Table>
+                                    </TableContainer>
                                 </>
                             )}
                         </Paper>
@@ -447,6 +449,7 @@ export default function Exhibitors({ eventId, onCountChange }) {
                                 {scans.door_scans.total} scan{scans.door_scans.total === 1 ? '' : 's'} — an access
                                 decision, not a lead. Counted apart on purpose.
                             </Typography>
+                            <TableContainer>
                             <Table size="small">
                                 <TableHead>
                                     <TableRow>
@@ -469,6 +472,7 @@ export default function Exhibitors({ eventId, onCountChange }) {
                                     ))}
                                 </TableBody>
                             </Table>
+                            </TableContainer>
                         </Paper>
                     </Stack>
                 )

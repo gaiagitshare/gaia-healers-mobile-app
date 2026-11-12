@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
     Box, Card, CardContent, Typography, Button, TextField, IconButton, Chip,
-    Table, TableBody, TableCell, TableHead, TableRow, Dialog, DialogTitle,
+    Table, TableBody, TableContainer, TableCell, TableHead, TableRow, Dialog, DialogTitle,
     DialogContent, DialogActions, MenuItem, Select, FormControl, InputLabel,
     FormControlLabel, Switch, Alert, Stack, Rating,
 } from '@mui/material';
@@ -130,6 +130,7 @@ function EventSetup() {
                     {ticketTypes.length === 0
                         ? <Alert severity="info">No passes yet. Attendees without a pass hold no special access.</Alert>
                         : (
+                            <TableContainer>
                             <Table size="small">
                                 <TableHead>
                                     <TableRow>
@@ -166,6 +167,7 @@ function EventSetup() {
                                     ))}
                                 </TableBody>
                             </Table>
+                            </TableContainer>
                         )}
                 </CardContent>
             </Card>
@@ -222,6 +224,7 @@ function EventSetup() {
                     {places.length === 0
                         ? <Alert severity="info">No places yet — the app hides the Map tab until there is something to find.</Alert>
                         : (
+                            <TableContainer>
                             <Table size="small">
                                 <TableHead>
                                     <TableRow>
@@ -260,6 +263,7 @@ function EventSetup() {
                                     ))}
                                 </TableBody>
                             </Table>
+                            </TableContainer>
                         )}
                 </CardContent>
             </Card>

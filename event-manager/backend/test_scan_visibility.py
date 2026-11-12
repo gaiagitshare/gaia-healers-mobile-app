@@ -173,6 +173,9 @@ check((out or {}).get("success") is False and not (out or {}).get("attendee"),
       "an invalid scanner token gets no attendee at all", out)
 
 print("\nTHE ORGANISER CAN SEE WHO SCANNED WHOM")
+# One door scan of its own, so this does not depend on the live event still
+# holding old scans (12 Nov 2026: an organiser cleared them and this failed).
+call("POST", "/events/1/authorize", {"qr_code": token_for("VIP Pass")[1], "access_type": "EXHIBIT"}, STAFF)
 st, hist = call("GET", "/events/1/scan-history", None, ADMIN)
 check(st == 200, "the scan history loads", st)
 check("stand_scans" in hist and "door_scans" in hist,

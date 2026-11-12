@@ -88,6 +88,7 @@ try:
     db.add_all([staff, nobody]); db.flush()
     db.add(models.EventRole(event_id=EVENT, user_id=staff.id, role="checkin_staff"))
     ev = db.query(models.Event).filter(models.Event.id == EVENT).first(); ev.door_test_mode = True
+    ev.allow_reentry = False   # one badge, one entry -- whatever the live event is set to
     db.commit()
     STAFF, ADMIN, NOBODY = bearer(staff.id), bearer(admin.id), bearer(nobody.id)
     G = {"first_name": "Zz Partner", "last_name": "Visitor", "email": "zz.partner.visitor@example.invalid",

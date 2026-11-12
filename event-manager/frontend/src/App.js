@@ -112,6 +112,20 @@ const theme = createTheme({
                 },
             },
         },
+        // Headers stay put (12 Nov 2026): every table keeps its column names in
+        // view while the rows scroll. A sticky header only sticks inside the box
+        // that scrolls, so the box a table sits in alone is held to the screen's
+        // height and scrolls itself; with few rows nothing changes. :where()
+        // keeps this weaker than any height a screen sets for itself.
+        MuiTable: { defaultProps: { stickyHeader: true } },
+        MuiCssBaseline: {
+            styleOverrides: {
+                ':where(div:has(> .MuiTable-root:only-child))': {
+                    maxHeight: 'max(320px, calc(100dvh - 150px))',
+                    overflow: 'auto',
+                },
+            },
+        },
         MuiTableRow: { styleOverrides: { root: { '&.MuiTableRow-hover:hover': { backgroundColor: 'rgba(124,194,63,0.06)' } } } },
         MuiAlert: { styleOverrides: { root: { borderRadius: 10, alignItems: 'center' } } },
         MuiTabs: { styleOverrides: { indicator: { height: 3, borderRadius: 3 } } },

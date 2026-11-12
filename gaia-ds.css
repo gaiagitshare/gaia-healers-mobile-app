@@ -217,3 +217,226 @@ body.gaia-v2 .gaia-more-sheet__link:hover, body.gaia-v2 .gaia-more-sheet__link:f
 body.gaia-v2 .gaia-more-sheet__link.is-active { background: rgba(183, 255, 98, 0.08); }
 body.gaia-v2 .gaia-more-sheet__link.is-active > .ph:first-child { color: var(--gh-accent); }
 @media (prefers-reduced-motion: reduce) { body.gaia-v2 .gaia-more-sheet__panel { animation: none; } }
+
+/* =====================================================================
+ * Phase 3: Today, Energy, Academy, Community (12 Nov 2026)
+ * ===================================================================== */
+
+/* Banner header: the section's artwork on the right, text on the left. */
+body.gaia-v2 [data-ds-page] .g-page__head.g-ds-banner { position: relative; overflow: hidden; min-height: 148px; display: flex; flex-direction: column; justify-content: center;
+  padding: var(--gh-s5) 34% var(--gh-s5) var(--gh-s6) !important; border-radius: var(--gh-r-card) !important; background: var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; }
+body.gaia-v2 [data-ds-page] .g-ds-banner > :not(.g-ds-banner__art) { position: relative; z-index: 1; }
+body.gaia-v2 [data-ds-page] .g-ds-banner__art { position: absolute; top: 0; right: 0; width: 300px; height: 100%; object-fit: cover; object-position: 50% 40%; pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 55%); mask-image: linear-gradient(90deg, transparent 0%, #000 55%); }
+body.gaia-v2 [data-ds-page] .g-ds-banner--gold { background: radial-gradient(120% 140% at 100% 50%, rgba(232, 196, 106, 0.10), transparent 55%), var(--gh-surface) !important; }
+body.gaia-v2 [data-ds-page] .g-ds-banner--gold .g-page__kicker { color: #e8c46a !important; }
+@media (max-width: 699px) {
+  body.gaia-v2 [data-ds-page] .g-page__head.g-ds-banner { min-height: 128px; padding: var(--gh-s4) 38% var(--gh-s4) var(--gh-s4) !important; }
+  body.gaia-v2 [data-ds-page] .g-ds-banner__art { width: 62%; opacity: .8; }
+  body.gaia-v2 [data-ds-page] .g-ds-banner .g-page__sub { font-size: 13px !important; }
+}
+
+/* Shared quiet surfaces inside these screens. */
+body.gaia-v2 :is([data-screen="daily"], [data-screen="wellness"], [data-screen="academy"], [data-screen="community"]) :is(.g-card, .g-card--feature) {
+  border-radius: var(--gh-r-card) !important; background: var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; }
+body.gaia-v2 :is([data-screen="daily"], [data-screen="wellness"], [data-screen="academy"], [data-screen="community"]) :is(.g-card__label, .g-super-kicker, .g-sec-head__kicker) {
+  font-size: 11.5px !important; font-weight: 600 !important; letter-spacing: .12em !important; color: #a9cf86 !important; }
+body.gaia-v2 :is([data-screen="daily"], [data-screen="wellness"], [data-screen="academy"], [data-screen="community"]) :is(.g-super-section-head h2, .g-energy-intro h2, .g-section__title) {
+  font-family: inherit !important; font-size: var(--gh-fs-h2) !important; font-weight: 600 !important; letter-spacing: -0.01em !important; }
+body.gaia-v2 :is([data-screen="daily"], [data-screen="wellness"], [data-screen="academy"], [data-screen="community"]) .g-card__value--lg { font-family: inherit !important; font-size: 18px !important; font-weight: 600 !important; }
+body.gaia-v2 :is([data-screen="daily"], [data-screen="wellness"], [data-screen="academy"], [data-screen="community"]) .g-card__meta { font-size: var(--gh-fs-body) !important; color: var(--gh-text-2) !important; }
+/* Launch rows (Library, What's happening, Bio-Well research). */
+body.gaia-v2 [data-ds-page] .g-energy-launch { gap: var(--gh-s2) !important; }
+body.gaia-v2 [data-ds-page] .g-energy-launch__card { min-height: 0 !important; padding: var(--gh-s3) var(--gh-s4) !important; gap: var(--gh-s3) !important; border-radius: var(--gh-r-card) !important;
+  background: var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; transform: none !important; }
+body.gaia-v2 [data-ds-page] .g-energy-launch__card:hover { background: var(--gh-surface-2) !important; border-color: var(--gh-line-2) !important; }
+body.gaia-v2 [data-ds-page] .g-energy-launch__icon { width: 36px !important; height: 36px !important; border-radius: var(--gh-r-ctrl) !important; background: rgba(255, 255, 255, 0.04) !important; box-shadow: none !important; color: var(--gh-text-2) !important; font-size: 18px !important; }
+body.gaia-v2 [data-ds-page] .g-energy-launch__body strong { font-size: 14.5px !important; font-weight: 600 !important; }
+body.gaia-v2 [data-ds-page] .g-energy-launch__body small { font-size: 12.5px !important; color: var(--gh-text-2) !important; }
+body.gaia-v2 [data-ds-page] .g-energy-launch__go { color: var(--gh-text-3) !important; }
+body.gaia-v2 [data-ds-page] .g-super-section-head { margin: var(--gh-s6) 0 var(--gh-s3) !important; padding: 0 !important; }
+body.gaia-v2 [data-ds-page] .g-super-list { margin: 0 !important; padding: 0 !important; background: none !important; border: 0 !important; box-shadow: none !important; }
+
+/* ---------------- Today: calm and minimal ---------------- */
+body.gaia-v2 [data-screen="daily"] .g-super-today { max-width: 860px; }
+body.gaia-v2 [data-screen="daily"] .g-super-today__head { margin: 0 0 var(--gh-s5) !important; padding: 0 !important; background: none !important; border: 0 !important; }
+body.gaia-v2 [data-screen="daily"] .g-super-today__head h1 { margin: 2px 0 0 !important; font-family: var(--gh-serif) !important; font-weight: 500 !important; font-size: var(--gh-fs-greet) !important; letter-spacing: 0 !important; line-height: 1.1 !important; }
+body.gaia-v2 [data-screen="daily"] .g-super-today__head p:not(.g-super-kicker) { margin: var(--gh-s1) 0 0 !important; font-size: var(--gh-fs-body) !important; color: var(--gh-text-2) !important; }
+body.gaia-v2 [data-screen="daily"] .g-super-today > * + * { margin-top: var(--gh-s3) !important; }
+/* Daily energy: no glow, no aura; the chakra is a small calm dot. */
+body.gaia-v2 [data-screen="daily"] .g-de { padding: var(--gh-s5) !important; border-radius: var(--gh-r-card) !important; background: var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; overflow: hidden; }
+body.gaia-v2 [data-screen="daily"] .g-de__aura { display: none !important; }
+body.gaia-v2 [data-screen="daily"] .g-de__kicker { font-size: 11.5px !important; letter-spacing: .12em !important; color: #a9cf86 !important; }
+body.gaia-v2 [data-screen="daily"] .g-de__focus { gap: var(--gh-s3) !important; margin: var(--gh-s3) 0 !important; align-items: center !important; }
+body.gaia-v2 [data-screen="daily"] .g-de__orb { width: 14px !important; height: 14px !important; flex: none; box-shadow: none !important; filter: none !important; }
+body.gaia-v2 [data-screen="daily"] .g-de__orb-core { animation: none !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="daily"] .g-de__orb::before, body.gaia-v2 [data-screen="daily"] .g-de__orb::after { display: none !important; }
+body.gaia-v2 [data-screen="daily"] .g-de__title { font-family: inherit !important; font-size: 18px !important; font-weight: 600 !important; margin: 0 !important; }
+body.gaia-v2 [data-screen="daily"] .g-de__chakra { font-size: 13px !important; color: var(--gh-text-2) !important; margin: 0 !important; }
+body.gaia-v2 [data-screen="daily"] .g-de__practice { margin: 0 0 var(--gh-s4) !important; padding: var(--gh-s3) 0 0 !important; background: none !important; border: 0 !important; border-top: 1px solid var(--gh-line) !important; border-radius: 0 !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="daily"] .g-de__label { font-size: 12px !important; font-weight: 600 !important; letter-spacing: .04em !important; text-transform: none !important; color: var(--gh-text-3) !important; }
+body.gaia-v2 [data-screen="daily"] .g-de__practice p:not(.g-de__label) { font-size: 15px !important; line-height: 1.5 !important; color: var(--gh-text) !important; }
+body.gaia-v2 [data-screen="daily"] .g-de__actions { display: flex !important; flex-wrap: wrap; gap: var(--gh-s2) !important; }
+body.gaia-v2 [data-screen="daily"] .g-de__actions .g-btn { flex: 0 0 auto !important; width: auto !important; }
+body.gaia-v2 [data-screen="daily"] .g-de__source { margin-top: var(--gh-s3) !important; font-size: 12px !important; color: var(--gh-text-3) !important; }
+/* Today's sky: one quiet card, moon and numbers in a line. */
+body.gaia-v2 [data-ds-page] .g-sky { padding: var(--gh-s5) !important; border-radius: var(--gh-r-card) !important; background: var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; }
+body.gaia-v2 [data-ds-page] .g-sky::before, body.gaia-v2 [data-ds-page] .g-sky::after { display: none !important; }
+body.gaia-v2 [data-ds-page] .g-sky__kicker { font-size: 11.5px !important; letter-spacing: .12em !important; color: #a9cf86 !important; }
+body.gaia-v2 [data-ds-page] .g-sky__tofull { padding: 2px 8px !important; border-radius: 6px !important; font-size: 12px !important; font-weight: 500 !important; background: rgba(255, 255, 255, 0.05) !important; color: var(--gh-text-2) !important; border: 0 !important; box-shadow: none !important; }
+body.gaia-v2 [data-ds-page] .g-sky__row { gap: var(--gh-s3) !important; margin: var(--gh-s3) 0 !important; align-items: center !important; }
+body.gaia-v2 [data-ds-page] .g-sky__art { width: 44px !important; height: 44px !important; flex: none; filter: none !important; }
+body.gaia-v2 [data-ds-page] .g-sky__art svg { width: 100% !important; height: 100% !important; filter: none !important; }
+body.gaia-v2 [data-ds-page] .g-sky__phase { font-family: inherit !important; font-size: 17px !important; font-weight: 600 !important; margin: 0 !important; }
+body.gaia-v2 [data-ds-page] .g-sky__day { font-size: 12.5px !important; color: var(--gh-text-2) !important; margin: 0 !important; }
+body.gaia-v2 [data-ds-page] .g-sky__illum strong { font-family: inherit !important; font-size: 20px !important; font-weight: 600 !important; color: var(--gh-text) !important; }
+body.gaia-v2 [data-ds-page] .g-sky__illum strong i { color: var(--gh-text-3) !important; font-style: normal; font-size: 13px; }
+body.gaia-v2 [data-ds-page] .g-sky__illum span { color: var(--gh-text-3) !important; }
+body.gaia-v2 [data-ds-page] .g-sky__facts span { padding: 2px 8px !important; border-radius: 6px !important; font-size: 12px !important; background: rgba(255, 255, 255, 0.05) !important; color: var(--gh-text-2) !important; border: 0 !important; box-shadow: none !important; }
+body.gaia-v2 [data-ds-page] .g-sky__chakra { box-shadow: inset 2px 0 0 var(--ck) !important; }
+body.gaia-v2 [data-ds-page] .g-sky__theme { font-size: 15px !important; font-weight: 600 !important; color: var(--gh-text) !important; }
+body.gaia-v2 [data-ds-page] :is(.g-sky__invitation, .g-sky__practice, .g-sky__personal-line) { font-size: var(--gh-fs-body) !important; color: var(--gh-text-2) !important; }
+body.gaia-v2 [data-ds-page] .g-sky__practice { padding: var(--gh-s3) 0 0 !important; margin-top: var(--gh-s3) !important; border-top: 1px solid var(--gh-line) !important; background: none !important; border-radius: 0 !important; }
+
+/* ---------------- Energy: expressive art, compact tools ---------------- */
+body.gaia-v2 [data-screen="wellness"] .g-energy { max-width: 1240px; }
+/* The three tools as one segmented control. */
+body.gaia-v2 [data-screen="wellness"] .g-energy-switcher { display: inline-flex !important; width: auto !important; max-width: 100%; gap: 2px !important; padding: 3px !important; margin: 0 0 var(--gh-s4) !important;
+  border-radius: var(--gh-r-ctrl) !important; background: var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="wellness"] .g-energy-switcher button { flex: 0 0 auto !important; display: inline-flex !important; flex-direction: row !important; align-items: center; gap: 6px !important;
+  height: 34px !important; min-height: 0 !important; padding: 0 14px !important; border-radius: 8px !important; border: 0 !important; box-shadow: none !important;
+  background: transparent !important; color: var(--gh-text-2) !important; font-size: 13.5px !important; font-weight: 500 !important; }
+body.gaia-v2 [data-screen="wellness"] .g-energy-switcher button i { font-size: 15px !important; color: inherit !important; }
+body.gaia-v2 [data-screen="wellness"] .g-energy-switcher button span { font-size: inherit !important; }
+body.gaia-v2 [data-screen="wellness"] .g-energy-switcher button[aria-selected="true"] { background: rgba(183, 255, 98, 0.12) !important; color: var(--gh-text) !important; }
+body.gaia-v2 [data-screen="wellness"] .g-energy-switcher button[aria-selected="true"] i { color: var(--gh-accent) !important; }
+body.gaia-v2 [data-screen="wellness"] .g-energy-panel { margin: 0 !important; }
+body.gaia-v2 [data-screen="wellness"] .g-well { padding: var(--gh-s5) !important; }
+body.gaia-v2 [data-screen="wellness"] .g-well__lead { font-size: var(--gh-fs-body) !important; color: var(--gh-text-2) !important; max-width: 62ch; }
+body.gaia-v2 [data-screen="wellness"] .g-well__lead strong { color: var(--gh-text) !important; }
+body.gaia-v2 [data-screen="wellness"] .g-card__actions .g-btn { width: auto !important; }
+body.gaia-v2 [data-screen="wellness"] .g-hint { font-size: 12px !important; color: var(--gh-text-3) !important; }
+/* Explore more: a two-column grid of compact tool rows. */
+body.gaia-v2 [data-screen="wellness"] .g-energy-more { margin-top: var(--gh-s6) !important; padding: 0 !important; background: none !important; border: 0 !important; }
+body.gaia-v2 [data-screen="wellness"] .g-energy-intro { margin: 0 0 var(--gh-s3) !important; padding: 0 !important; background: none !important; border: 0 !important; }
+body.gaia-v2 [data-screen="wellness"] .g-energy-intro p:not(.g-sec-head__kicker) { margin: var(--gh-s1) 0 0 !important; font-size: var(--gh-fs-body) !important; color: var(--gh-text-2) !important; }
+body.gaia-v2 [data-screen="wellness"] .g-toolkit { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: var(--gh-s2) !important; align-items: start; }
+body.gaia-v2 [data-screen="wellness"] .g-tk { grid-column: auto !important; width: auto !important; border-radius: var(--gh-r-card) !important; background: var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; overflow: hidden; }
+body.gaia-v2 [data-screen="wellness"] .g-tk:has(.g-tk__head[aria-expanded="true"]) { grid-column: 1 / -1 !important; border-color: var(--gh-line-2) !important; }
+body.gaia-v2 [data-screen="wellness"] .g-tk__head { min-height: 0 !important; padding: var(--gh-s3) var(--gh-s4) !important; gap: var(--gh-s3) !important; background: none !important; }
+body.gaia-v2 [data-screen="wellness"] .g-tk__head:hover { background: rgba(255, 255, 255, 0.03) !important; }
+body.gaia-v2 [data-screen="wellness"] .g-tk__icon { width: 36px !important; height: 36px !important; border-radius: var(--gh-r-ctrl) !important; box-shadow: none !important;
+  background: color-mix(in srgb, var(--tint, #b7ff62) 16%, transparent) !important; color: color-mix(in srgb, var(--tint, #b7ff62) 70%, #fff) !important; font-size: 18px !important; }
+body.gaia-v2 [data-screen="wellness"] .g-tk__text strong { font-size: 14.5px !important; font-weight: 600 !important; }
+body.gaia-v2 [data-screen="wellness"] .g-tk__text small { font-size: 12.5px !important; color: var(--gh-text-2) !important; }
+body.gaia-v2 [data-screen="wellness"] .g-tk__chev { color: var(--gh-text-3) !important; }
+body.gaia-v2 [data-screen="wellness"] .g-tk__inner > * { margin: 0 !important; }
+body.gaia-v2 [data-screen="wellness"] .g-tk__inner .g-card { margin: 0 var(--gh-s4) var(--gh-s4) !important; background: rgba(255, 255, 255, 0.02) !important; }
+body.gaia-v2 [data-screen="wellness"] :is(.g-quiz__title) { font-family: inherit !important; font-size: 16px !important; font-weight: 600 !important; }
+body.gaia-v2 [data-screen="wellness"] .g-energy-more > .g-energy-launch { margin-top: var(--gh-s2) !important; }
+body.gaia-v2 [data-screen="wellness"] .g-energy-note { margin-top: var(--gh-s5) !important; padding: var(--gh-s3) var(--gh-s4) !important; border-radius: var(--gh-r-ctrl) !important; background: none !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; font-size: 12.5px !important; color: var(--gh-text-3) !important; }
+@media (max-width: 699px) {
+  body.gaia-v2 [data-screen="wellness"] .g-toolkit { grid-template-columns: minmax(0, 1fr) !important; }
+  body.gaia-v2 [data-screen="wellness"] .g-energy-switcher { display: flex !important; width: 100% !important; }
+  body.gaia-v2 [data-screen="wellness"] .g-energy-switcher button { flex: 1 1 0 !important; justify-content: center; padding: 0 6px !important; font-size: 13px !important; }
+}
+
+/* ---------------- Academy: books and gold light ---------------- */
+body.gaia-v2 [data-screen="academy"] .g-academy { max-width: 1240px; }
+body.gaia-v2 [data-screen="academy"] #member-academy > .g-page-sec + .g-page-sec,
+body.gaia-v2 [data-screen="academy"] #member-academy > * + * { margin-top: var(--gh-s5) !important; }
+/* "Your courses": a header line, then rows with a cover and a slim progress line. */
+body.gaia-v2 [data-screen="academy"] [data-acad-sync] > .g-card--feature { padding: 0 !important; background: none !important; border: 0 !important; margin: 0 0 var(--gh-s3) !important; }
+body.gaia-v2 [data-screen="academy"] [data-acad-sync] > .g-card--feature .g-card__label { color: #e8c46a !important; }
+body.gaia-v2 [data-screen="academy"] .g-sync-list { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: var(--gh-s2) !important; align-items: start; }
+@media (max-width: 699px) { body.gaia-v2 [data-screen="academy"] .g-sync-list { grid-template-columns: minmax(0, 1fr); } }
+body.gaia-v2 [data-screen="academy"] .g-sync { margin: 0 !important; border-radius: var(--gh-r-card) !important; background: var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; overflow: hidden; }
+body.gaia-v2 [data-screen="academy"] .g-sync[open] { grid-column: 1 / -1; border-color: rgba(232, 196, 106, 0.28) !important; }
+body.gaia-v2 [data-screen="academy"] .g-sync__head { min-height: 0 !important; padding: var(--gh-s3) !important; gap: var(--gh-s3) !important; background: none !important; }
+body.gaia-v2 [data-screen="academy"] .g-sync__head:hover { background: rgba(255, 255, 255, 0.03) !important; }
+body.gaia-v2 [data-screen="academy"] :is(.g-sync__poster, .g-access__img) { flex: none; width: 64px !important; height: 64px !important; border-radius: var(--gh-r-ctrl) !important; object-fit: cover; background: var(--gh-surface-2); box-shadow: inset 0 0 0 1px var(--gh-line); }
+body.gaia-v2 [data-screen="academy"] :is(.g-sync__poster--art, .g-access__img--art) { object-position: 50% 45%; filter: saturate(.9); }
+body.gaia-v2 [data-screen="academy"] .g-sync__meta strong { font-size: 14.5px !important; font-weight: 600 !important; line-height: 1.3 !important; }
+body.gaia-v2 [data-screen="academy"] .g-sync__meta small { font-size: 12.5px !important; color: var(--gh-text-2) !important; }
+body.gaia-v2 [data-screen="academy"] .g-acadprog { height: 3px !important; margin-top: 6px !important; border-radius: 2px !important; background: rgba(255, 255, 255, 0.07) !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="academy"] .g-acadprog span { border-radius: 2px !important; background: #e8c46a !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="academy"] .g-sync__chev { color: var(--gh-text-3) !important; }
+body.gaia-v2 [data-screen="academy"] .g-sync__lessons { padding: 0 var(--gh-s3) var(--gh-s3) !important; border-top: 1px solid var(--gh-line); }
+body.gaia-v2 [data-screen="academy"] .g-sync__lesson { min-height: 0 !important; padding: 10px var(--gh-s2) !important; border-radius: 8px !important; background: none !important; border: 0 !important; }
+body.gaia-v2 [data-screen="academy"] .g-sync__lesson:hover { background: rgba(255, 255, 255, 0.04) !important; }
+body.gaia-v2 [data-screen="academy"] .g-sync__lplay { color: #e8c46a !important; }
+/* Catalogue shelves */
+body.gaia-v2 [data-screen="academy"] .g-shelf__lead { font-size: var(--gh-fs-body) !important; color: var(--gh-text-2) !important; }
+body.gaia-v2 [data-screen="academy"] .g-access-grid { gap: var(--gh-s2) !important; }
+body.gaia-v2 [data-screen="academy"] .g-access { min-height: 0 !important; padding: var(--gh-s3) !important; gap: var(--gh-s3) !important; border-radius: var(--gh-r-card) !important; background: var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="academy"] .g-access:hover { background: var(--gh-surface-2) !important; }
+body.gaia-v2 [data-screen="academy"] .g-access__name { font-size: 14px !important; font-weight: 600 !important; }
+body.gaia-v2 [data-screen="academy"] .g-access__meta { font-size: 12.5px !important; color: var(--gh-text-2) !important; }
+body.gaia-v2 [data-screen="academy"] .g-chip { padding: 2px 8px !important; border-radius: 6px !important; font-size: 11.5px !important; font-weight: 500 !important; background: rgba(255, 255, 255, 0.05) !important; color: var(--gh-text-2) !important; border: 0 !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="academy"] .g-chip--on { background: rgba(232, 196, 106, 0.12) !important; color: #e8c46a !important; }
+
+/* ---------------- Community: warm and human ---------------- */
+body.gaia-v2 [data-screen="community"] .g-community { max-width: 1240px; }
+body.gaia-v2 .gaia-main [data-screen="community"] .g-page__head--community, body.gaia-v2 [data-screen="community"] .gaia-main .g-page__head.g-page__head--community { padding: var(--gh-s5) var(--gh-s6) !important; border-radius: var(--gh-r-card) !important;
+  background: radial-gradient(90% 160% at 100% 0%, rgba(232, 168, 106, 0.12), transparent 60%), var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; }
+body.gaia-v2 [data-screen="community"] .g-page__head--community .g-page__kicker { color: #e8b48a !important; }
+body.gaia-v2 [data-screen="community"] #community-body > * + * { margin-top: var(--gh-s4) !important; }
+body.gaia-v2 [data-screen="community"] .g-stats { display: none !important; }
+/* Your circles: people, not records. */
+body.gaia-v2 [data-screen="community"] .g-access-grid { gap: var(--gh-s2) !important; }
+body.gaia-v2 [data-screen="community"] .g-circles-mine { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important; }
+body.gaia-v2 [data-screen="community"] .g-access--unlocked { display: flex !important; align-items: center; gap: var(--gh-s3) !important; min-height: 0 !important; padding: var(--gh-s3) var(--gh-s4) !important; border-radius: var(--gh-r-card) !important;
+  background: linear-gradient(90deg, rgba(232, 168, 106, 0.07), transparent 60%), var(--gh-surface) !important; border: 1px solid var(--gh-line) !important; box-shadow: none !important; }
+body.gaia-v2 [data-screen="community"] .g-access--unlocked .g-access__body { flex: 1 1 auto; min-width: 0; }
+body.gaia-v2 [data-screen="community"] .g-access--unlocked .g-access__act { flex: none; }
+body.gaia-v2 [data-screen="community"] .g-access--unlocked::before { content: ""; position: static !important; flex: none; width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(232, 168, 106, 0.14) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e8b48a' stroke-width='1.6' stroke-linecap='round'%3E%3Ccircle cx='9' cy='8' r='3'/%3E%3Cpath d='M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5'/%3E%3Ccircle cx='17' cy='9' r='2.4'/%3E%3Cpath d='M15.5 14.3c2.6-.4 4.6 1.2 5 4.2'/%3E%3C/svg%3E") center / 20px no-repeat; }
+body.gaia-v2 [data-screen="community"] .g-access--unlocked .g-access__body :is(strong, .g-access__name) { font-size: 15px !important; font-weight: 600 !important; }
+body.gaia-v2 [data-screen="community"] .g-access__meta { font-size: 12.5px !important; color: var(--gh-text-2) !important; }
+/* More circles: one list, said once. */
+body.gaia-v2 [data-screen="community"] .g-circles { padding: var(--gh-s4) var(--gh-s5); border-radius: var(--gh-r-card); background: var(--gh-surface); border: 1px solid var(--gh-line); }
+body.gaia-v2 [data-screen="community"] .g-circles__head { display: flex; align-items: center; justify-content: space-between; gap: var(--gh-s3); margin-bottom: var(--gh-s3); }
+body.gaia-v2 [data-screen="community"] .g-circles__title { margin: 0; font-size: 16px; font-weight: 600; color: var(--gh-text); }
+body.gaia-v2 [data-screen="community"] .g-circles__lead { margin: 2px 0 0; font-size: 13px; color: var(--gh-text-2); }
+body.gaia-v2 [data-screen="community"] .g-circles__head .g-btn { flex: none; }
+body.gaia-v2 [data-screen="community"] .g-circles__list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+body.gaia-v2 [data-screen="community"] .g-circles__item { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 8px; font-size: 13px; color: var(--gh-text-2); background: rgba(255, 255, 255, 0.03); border: 1px solid var(--gh-line); }
+body.gaia-v2 [data-screen="community"] .g-circles__tag { padding: 0 6px !important; border-radius: 4px !important; font-size: 11px !important; background: rgba(255, 255, 255, 0.06) !important; color: var(--gh-text-3) !important; border: 0 !important; }
+body.gaia-v2 [data-screen="community"] .g-circles__tag.g-chip--pending { background: rgba(232, 168, 106, 0.14) !important; color: #e8b48a !important; }
+body.gaia-v2 [data-screen="community"] .g-energy-launch { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)) !important; }
+@media (max-width: 699px) {
+  body.gaia-v2 .gaia-main [data-screen="community"] .g-page__head--community, body.gaia-v2 [data-screen="community"] .gaia-main .g-page__head.g-page__head--community { padding: var(--gh-s4) !important; }
+  body.gaia-v2 [data-screen="community"] .g-circles__head { flex-wrap: wrap; }
+  body.gaia-v2 [data-screen="community"] .g-energy-launch { grid-template-columns: minmax(0, 1fr) !important; }
+}
+
+/* Phase 3 rhythm: one gap per screen, no stacked margins. */
+body.gaia-v2 :is([data-screen="wellness"], [data-screen="academy"], [data-screen="community"]) main.g-page { row-gap: var(--gh-s4) !important; }
+body.gaia-v2 :is([data-screen="wellness"], [data-screen="academy"], [data-screen="community"]) main.g-page > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+body.gaia-v2 :is([data-screen="wellness"], [data-screen="academy"], [data-screen="community"]) main.g-page > .g-page__head { margin-bottom: var(--gh-s1) !important; }
+body.gaia-v2 [data-screen="wellness"] main.g-page > .g-energy-more { margin-top: var(--gh-s4) !important; }
+body.gaia-v2 [data-screen="wellness"] .g-energy-switcher { justify-self: start; }
+body.gaia-v2 [data-screen="daily"] .g-super-today { row-gap: var(--gh-s3) !important; }
+body.gaia-v2 [data-screen="daily"] .g-super-today > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+body.gaia-v2 [data-screen="daily"] .g-super-today > :empty { display: none !important; }
+body.gaia-v2 [data-screen="daily"] .g-super-today > .g-super-today__head { margin-bottom: var(--gh-s2) !important; }
+body.gaia-v2 [data-screen="daily"] .g-de__practice p:empty { display: none !important; }
+@media (max-width: 699px) { body.gaia-v2 [data-screen="wellness"] .g-energy-switcher { justify-self: stretch; } }
+
+/* Academy shelves: tighter heading rhythm, sentence-case tags. */
+body.gaia-v2 [data-screen="academy"] .g-section { margin: 0 0 var(--gh-s1) !important; padding: 0 !important; }
+body.gaia-v2 [data-screen="academy"] .g-shelf__lead { margin: 0 0 var(--gh-s3) !important; }
+body.gaia-v2 [data-screen="academy"] #member-academy .g-page-sec { margin: 0 !important; padding: 0 !important; }
+body.gaia-v2 [data-screen="academy"] #member-academy > * + * { margin-top: var(--gh-s6) !important; }
+body.gaia-v2 [data-screen="academy"] :is(.g-chip, .g-access__act) { text-transform: none !important; letter-spacing: 0 !important; }
+body.gaia-v2 [data-screen="academy"] .g-access { align-items: flex-start !important; }
+body.gaia-v2 [data-screen="community"] .g-chip { text-transform: none !important; letter-spacing: 0 !important; }
+body.gaia-v2 [data-screen="community"] .g-page__kicker { overflow: visible !important; text-indent: 0 !important; }
+body.gaia-v2 [data-screen="academy"] [data-acad-sync] > .g-card--feature { overflow: visible !important; }
+body.gaia-v2 [data-screen="community"] .g-access--unlocked .g-access__body { display: flex !important; flex-direction: column !important; align-items: flex-start !important; gap: 1px !important; }
+body.gaia-v2 [data-screen="community"] .g-access--unlocked .g-access__name { white-space: normal !important; }
+@media (max-width: 699px) {
+  body.gaia-v2 [data-screen="wellness"] .g-energy-switcher button { white-space: nowrap !important; gap: 4px !important; font-size: 12.5px !important; }
+  body.gaia-v2 [data-screen="wellness"] .g-energy-switcher button i { display: none !important; }
+}
+body.gaia-v2 [data-ds-page] .g-sky__theme { text-transform: none !important; letter-spacing: 0 !important; margin: var(--gh-s3) 0 var(--gh-s1) !important; }

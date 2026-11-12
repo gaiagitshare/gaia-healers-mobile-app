@@ -961,7 +961,7 @@ body.gaia-booking-open{overflow:hidden;}
         + '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-sync-portal="' + esc(portalFor(c)) + '" data-sync-title="' + esc(c.title) + '">Open in the Academy →</button>';
       return '<details class="g-sync" data-course="' + esc(c.id) + '">'
         + '<summary class="g-sync__head">'
-        + (c.poster ? '<img class="g-sync__poster" src="' + esc(c.poster) + '" alt="" loading="lazy"/>' : '<span class="g-sync__poster g-sync__poster--ph"><i class="ph ph-graduation-cap" aria-hidden="true"></i></span>')
+        + courseCover(c.poster || catalogImage(c.title), 'g-sync__poster')
         + '<span class="g-sync__meta"><strong>' + esc(c.title) + '</strong>'
         + '<small>' + (lessons.length ? lessons.length + ' video' + (lessons.length === 1 ? '' : 's') + (pct ? ' · ' + pct + '% complete' : '') : 'Opens in the Academy') + '</small>'
         + (lessons.length ? '<span class="g-acadprog"><span style="width:' + pct + '%"></span></span>' : '') + '</span>'
@@ -981,6 +981,22 @@ body.gaia-booking-open{overflow:hidden;}
       const course = data.courses.find((c) => c.id === cid);
       if (course) window.GaiaAcademyPlayer?.openLesson?.(course, b.dataset.lid);
     }));
+  }
+
+  // A course's cover: its own image when GHL or the catalogue has one, else
+  // the Academy's book artwork (never an invented thumbnail). Full redesign,
+  // Phase 3 (12 Nov 2026).
+  var BOOK_ART = 'assets/home3/ref-book.webp?v=kit1';
+  function catalogImage(title) {
+    const cat = state.catalog && Array.isArray(state.catalog.courses) ? state.catalog.courses : [];
+    const k = acadKey(title); if (!k) return '';
+    const hit = cat.find((x) => x.image && acadKey(x.title || x.name) === k);
+    return (hit && hit.image) || '';
+  }
+  function courseCover(src, cls) {
+    return src
+      ? '<img class="' + cls + '" src="' + esc(src) + '" alt="" loading="lazy" />'
+      : '<img class="' + cls + ' ' + cls + '--art" src="' + BOOK_ART + '" alt="" loading="lazy" />';
   }
 
   // Distinctive-token normalizer, matches the Academy player's acadKey so the
@@ -1074,8 +1090,7 @@ body.gaia-booking-open{overflow:hidden;}
       const tags = badge || countChip ? '<span class="g-access__tags">' + badge + countChip + '</span>' : '';
       // A course without artwork gets a plain tile, so every title in the
       // grid starts at the same line.
-      const img = t.image ? '<img src="' + esc(t.image) + '" alt="" class="g-access__img" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0" />'
-        : '<span class="g-access__img g-access__img--ph" aria-hidden="true"><i class="ph ph-graduation-cap"></i></span>';
+      const img = courseCover(t.image, 'g-access__img');
       return openable
         ? '<button type="button" class="g-access g-access--unlocked g-access--link" data-course-open="' + esc(url) + '"' + (isFree && !owned ? ' data-course-free="1"' : '') + ' data-course-title="' + esc(t.name) + '">'
           + img
@@ -1229,22 +1244,28 @@ body.gaia-booking-open{overflow:hidden;}
     const m = acc.member || {};
     if (sub) sub.textContent = 'Your circles, what is on, and the people who can help.';
 
-    const parts = [announcementsHtml(state.announcements), '<div class="g-stats">'
-      + '<div class="g-stat"><span class="g-stat__n g-stat__n--accent">' + unlocked.length + '</span><span class="g-stat__l">Unlocked</span></div>'
-      + '<div class="g-stat"><span class="g-stat__n">' + locked.length + '</span><span class="g-stat__l">To unlock</span></div>'
-      + '<div class="g-stat"><span class="g-stat__n">' + soon.length + '</span><span class="g-stat__l">Coming soon</span></div></div>'];
+    const parts = [announcementsHtml(state.announcements)];
 
     if (unlocked.length) {
-      parts.push(gSec('Your communities', '<div class="g-access-grid">' + unlocked.map((x) => accessItem(x, 'unlocked')).join('') + '</div>'));
+      // "Your circles" above is the heading; no second one.
+      parts.push('<div class="g-access-grid g-circles-mine">' + unlocked.map((x) => accessItem(x, 'unlocked')).join('') + '</div>');
     } else {
-      parts.push('<article class="g-card"><p class="g-card__label">Your communities</p><p class="g-card__meta">You are not in a circle yet. Each circle below shows how it opens.</p></article>');
+      parts.push('<article class="g-card"><p class="g-card__meta">You are not in a circle yet. The circles below open with a membership.</p></article>');
     }
-    if (locked.length) {
-      parts.push(gSec('Unlock with membership', '<div class="g-access-grid">' + locked.map((x) => accessItem(x, 'locked')).join('') + '</div>',
-        '<button type="button" class="g-btn g-btn--ghost g-btn--sm g-section__action" data-membership-cta>See plans →</button>'));
-    }
-    if (soon.length) {
-      parts.push(gSec('Coming soon', '<div class="g-access-grid">' + soon.map((x) => accessItem(x, 'soon')).join('') + '</div>'));
+    // One list, said once: a row of "Not in your plan" badges read as a wall
+    // of refusals (full redesign, Phase 3).
+    const circleRow = (x, soonOne) => '<li class="g-circles__item">'
+      + '<span class="g-circles__name">' + esc(x.name) + '</span>'
+      + (soonOne ? '<span class="g-chip g-circles__tag">Soon</span>'
+        : (x.state === 'interested' ? '<span class="g-chip g-chip--pending g-circles__tag">Requested</span>' : ''))
+      + '</li>';
+    if (locked.length || soon.length) {
+      parts.push('<section class="g-circles">'
+        + '<div class="g-circles__head"><div><h3 class="g-circles__title">More circles with membership</h3>'
+        + '<p class="g-circles__lead">' + (locked.length + soon.length) + (locked.length + soon.length === 1 ? ' circle' : ' circles') + ' open with a Gaia Healers plan.</p></div>'
+        + (locked.length ? '<button type="button" class="g-btn g-btn--secondary g-btn--sm" data-membership-cta>See plans</button>' : '') + '</div>'
+        + '<ul class="g-circles__list">' + locked.map((x) => circleRow(x, false)).join('') + soon.map((x) => circleRow(x, true)).join('') + '</ul>'
+        + '</section>');
     }
     box.innerHTML = parts.join('');
     box.querySelector('[data-membership-cta]')?.addEventListener('click', () => window.GaiaMembership?.open?.());

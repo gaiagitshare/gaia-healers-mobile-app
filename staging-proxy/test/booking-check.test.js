@@ -112,7 +112,8 @@ test('only online and unknown count as bookable', () => {
 test('the directory API carries the status, and the server schedules the check safely', () => {
   const src = (f) => fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8');
   const dir = src('directory-router.js');
-  assert.match(dir, /booking: booking\.statusFor\(p\.id\)/);
+  assert.match(dir, /booking: b\.status/);
+  assert.match(dir, /const b = booking\.bookingFor\(id\)/);
   assert.match(dir, /scanTeam: booking\.scanTeamStatus\(\)/);
   assert.match(dir, /\/api\/directory\/booking-status/);
   const server = src('server.js');

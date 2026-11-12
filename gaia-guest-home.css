@@ -462,3 +462,13 @@ body.gaia-v2 .g-super-home.g-guest-today > .gg-join { margin-top: var(--gg-secti
   container-name: gg;
   margin-top: clamp(28px, 4vw, 44px);
 }
+
+/* Reserve a biofield scan (12 Nov 2026): right under the hero, for everyone. */
+.g-guest .gg-scan { display: grid; grid-template-columns: auto 1fr; gap: 14px 16px; align-items: start; margin: 18px 0 8px; padding: 18px;
+  border-radius: 20px; border: 1px solid var(--g-line, rgba(190,240,170,0.16)); background: linear-gradient(135deg, rgba(166,232,75,0.10), rgba(255,255,255,0.03)); }
+.g-guest .gg-scan__icon { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: rgba(166,232,75,0.16); color: var(--g-accent, #A6E84B); font-size: 22px; }
+.g-guest .gg-scan__copy h2 { margin: 2px 0 4px; font-size: 20px; line-height: 1.2; }
+.g-guest .gg-scan__copy p:last-child { margin: 0; color: var(--g-text-dim, #93A597); font-size: 14px; line-height: 1.45; }
+.g-guest .gg-scan__actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px; }
+.g-guest .gg-scan__actions .g-btn { flex: 1 1 200px; justify-content: center; min-height: 48px; }
+@media (min-width: 900px) { .g-guest .gg-scan { grid-template-columns: auto 1fr auto; align-items: center; } .g-guest .gg-scan__actions { grid-column: auto; } .g-guest .gg-scan__actions .g-btn { flex: 0 0 auto; } }

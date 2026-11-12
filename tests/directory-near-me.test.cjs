@@ -88,3 +88,23 @@ test('"scan" words mean a Bio-Well practitioner, the rest still narrows (12 Nov 
   assert.strictEqual(t.scanQuery('reiki'), null);
   assert.strictEqual(t.scanQuery('scandinavia'), null);
 });
+
+test('next open time reads like a person would say it (12 Nov 2026)', () => {
+  const t = load('en-US');
+  const now = new Date(2026, 10, 12, 9, 0).getTime();
+  const at = (d, h, m) => new Date(2026, 10, d, h, m).toISOString();
+  assert.match(t.fmtSlot(at(12, 16, 30), now), /^Today 4:30 pm$/);
+  assert.match(t.fmtSlot(at(13, 9, 0), now), /^Tomorrow 9:00 am$/);
+  assert.match(t.fmtSlot(at(16, 10, 0), now), /^Mon 10:00 am$/);
+  assert.match(t.fmtSlot(at(25, 10, 0), now), /^Wed, (25 Nov|Nov 25), 10:00 am$/);
+  assert.strictEqual(t.fmtSlot('nonsense', now), '');
+});
+
+test('a US zip in the search box is a place (12 Nov 2026)', () => {
+  const t = load('en-US');
+  assert.strictEqual(t.zipIn('32801'), '32801');
+  assert.strictEqual(t.zipIn('scan 32801'), '32801');
+  assert.strictEqual(t.zipIn('10001-1234'), '10001');
+  assert.strictEqual(t.zipIn('reiki'), '');
+  assert.strictEqual(t.zipIn('1234'), '');
+});

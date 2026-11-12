@@ -1115,48 +1115,71 @@
   /** Home v3 hero: search the real directory, or start from where you are. */
   function home3Hero() {
     return '<section class="g-home3__hero" aria-labelledby="home3-hero-title">'
+      + '<img class="g-home3__hero-art" src="assets/home3/hero-energy.svg" alt="" width="900" height="360" decoding="async" />'
       + '<div class="g-home3__hero-copy"><h2 id="home3-hero-title">Find the right practitioner for you</h2>'
       + '<form class="g-home3__search" data-home3-search role="search">'
       + '<label class="g-home3__field"><span class="sr-only">Search practitioners</span>' + icon('magnifying-glass') + '<input type="search" name="q" placeholder="Search Bio-Well scans, practitioners, or city" autocomplete="off" enterkeyhint="search" /></label>'
-      + '<button type="submit" class="g-btn g-btn--primary">Find a practitioner ' + icon('arrow-right') + '</button>'
-      + '<button type="button" class="g-btn g-btn--secondary" data-home3-near>' + icon('map-pin') + ' Near me</button>'
+      + '<button type="submit" class="g-home3__btn g-home3__btn--lime">Find a practitioner ' + icon('arrow-right') + '</button>'
+      + '<button type="button" class="g-home3__btn g-home3__btn--outline" data-home3-near>' + icon('map-pin') + ' Near me</button>'
       + '</form></div></section>';
   }
-  /** The three things people come for. Price is the owner's (all scans $99). */
+  /** The three things people come for, each with its own artwork. Price is the owner's (all scans $99). */
   function home3Actions() {
     const course = courseGrants()[0];
     const learn = course && course.openUrl
-      ? '<button type="button" class="g-btn g-btn--ghost g-btn--sm" data-super-course="' + esc(course.openUrl) + '" data-super-course-title="' + esc(course.title || course.name || 'Gaia Healers Academy') + '">Continue course ' + icon('arrow-right') + '</button>'
-      : '<a class="g-btn g-btn--ghost g-btn--sm" href="home.html?view=academy">View courses ' + icon('arrow-right') + '</a>';
-    const card = (cls, art, title, text, action) => '<article class="g-home3__card ' + cls + '"><span class="g-home3__art" aria-hidden="true">' + art + '</span><div class="g-home3__card-copy"><h3>' + title + '</h3><p>' + text + '</p>' + action + '</div></article>';
+      ? '<button type="button" class="g-home3__btn g-home3__btn--outline g-home3__btn--sm" data-super-course="' + esc(course.openUrl) + '" data-super-course-title="' + esc(course.title || course.name || 'Gaia Healers Academy') + '">Continue course ' + icon('arrow-right') + '</button>'
+      : '<a class="g-home3__btn g-home3__btn--outline g-home3__btn--sm" href="home.html?view=academy">View courses ' + icon('arrow-right') + '</a>';
+    const card = (cls, art, title, text, action) => '<article class="g-home3__card ' + cls + '"><img class="g-home3__card-art" src="assets/home3/' + art + '" alt="" width="160" height="160" loading="lazy" decoding="async" /><div class="g-home3__card-copy"><h3>' + title + '</h3><p>' + text + '</p>' + action + '</div></article>';
     return '<section class="g-home3__cards" aria-label="Start here">'
-      + card('g-home3__card--scan', '<span class="g-home3__aura"></span>' + icon('person-simple'), 'Book a Bio-Well Scan', 'Measure your energy and get a personalised biofield report.', '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-dir-intent="scan">Find a scan · $99 ' + icon('arrow-right') + '</button>')
-      + card('g-home3__card--energy', icon('leaf'), 'Explore Energy', 'Daily energy check, breathing, chakra and colour tools.', '<a class="g-btn g-btn--ghost g-btn--sm" href="home.html?view=wellness">Explore ' + icon('arrow-right') + '</a>')
-      + card('g-home3__card--learn', icon('book-open-text'), course ? 'Continue Learning' : 'Start Learning', course ? esc(course.title || course.name || 'Your course') : 'Courses and certifications to deepen your practice.', learn)
+      + card('g-home3__card--scan', 'aura.svg', 'Book a Bio-Well Scan', 'Measure your energy and get a personalised biofield report.', '<button type="button" class="g-home3__btn g-home3__btn--lime g-home3__btn--sm" data-dir-intent="scan">From $99 ' + icon('arrow-right') + '</button>')
+      + card('g-home3__card--energy', 'stones.svg', 'Explore Energy Studio', 'Daily energy check, breathing, chakra and colour practices.', '<a class="g-home3__btn g-home3__btn--outline g-home3__btn--sm" href="home.html?view=wellness">' + icon('play-circle') + ' Explore ' + icon('arrow-right') + '</a>')
+      + card('g-home3__card--learn', 'book.svg', 'Continue Learning', course ? esc(course.title || course.name || 'Your course') : 'Courses and certifications to deepen your practice.', learn)
       + '</section>';
   }
-  /** Your journey: the course they are on, their next booking, or a first step. No invented progress. */
+  /** Your journey: the course they are on and their next booking. No invented progress. */
   function home3Journey() {
     const course = courseGrants()[0];
     const appt = upcomingAppointments()[0];
-    let body = '';
-    if (course) {
-      body += '<div class="g-home3__j-item"><span class="g-home3__j-icon">' + icon('graduation-cap') + '</span><div><small>Continue learning</small><strong>' + esc(course.title || course.name || 'Your course') + '</strong></div></div>';
-    }
-    if (appt) {
-      body += '<a class="g-home3__j-item" href="home.html?view=bookings"><span class="g-home3__j-icon">' + icon('calendar-check') + '</span><div><small>Coming up</small><strong>' + esc(appt.title || 'Appointment') + '</strong><span>' + esc(appointmentWhen(appt)) + '</span></div></a>';
-    }
+    const title = course ? esc(course.title || course.name || 'Your course') : (appt ? esc(appt.title || 'Your next session') : 'Start your journey');
+    const line = course ? 'Pick up where you left off in the Academy.' : (appt ? esc(appointmentWhen(appt)) : 'Book a Bio-Well scan or start a course, and your next steps appear here.');
+    const next = course && appt ? '<a class="g-home3__j-next" href="home.html?view=bookings">' + icon('calendar-check') + '<span><small>Coming up</small>' + esc(appt.title || 'Appointment') + ' · ' + esc(appointmentWhen(appt)) + '</span></a>' : '';
     const action = course && course.openUrl
-      ? '<button type="button" class="g-btn g-btn--primary g-home3__j-cta" data-super-course="' + esc(course.openUrl) + '" data-super-course-title="' + esc(course.title || course.name || 'Gaia Healers Academy') + '">Continue ' + icon('arrow-right') + '</button>'
-      : '<a class="g-btn g-btn--primary g-home3__j-cta" href="home.html?view=academy">Find a course ' + icon('arrow-right') + '</a>';
-    if (!body) body = '<p class="g-home3__muted">Start with a course or a Bio-Well scan, and your next steps will appear here.</p>';
-    return '<h2>Your journey</h2>' + body + action;
+      ? '<button type="button" class="g-home3__btn g-home3__btn--lime g-home3__j-cta" data-super-course="' + esc(course.openUrl) + '" data-super-course-title="' + esc(course.title || course.name || 'Gaia Healers Academy') + '">Continue ' + icon('arrow-right') + '</button>'
+      : (appt ? '<a class="g-home3__btn g-home3__btn--lime g-home3__j-cta" href="home.html?view=bookings">My appointments ' + icon('arrow-right') + '</a>'
+        : '<button type="button" class="g-home3__btn g-home3__btn--lime g-home3__j-cta" data-dir-intent="scan">Reserve a scan · $99 ' + icon('arrow-right') + '</button>');
+    return '<h2>Your journey</h2>'
+      + '<div class="g-home3__j-main"><span class="g-home3__j-ring" aria-hidden="true">' + icon(course ? 'target' : 'calendar-check') + '</span>'
+      + '<div><strong>' + title + '</strong><p>' + line + '</p></div></div>'
+      + next + action;
   }
   /** Membership: what they hold, or Gaia 2.0 when they hold nothing. */
   function home3Plan() {
     const m = activeMembership();
-    if (m) return '<a class="g-home3__plan" href="home.html?view=profile"><span class="g-home3__plan-icon">' + icon('diamond') + '</span><h3>' + esc(m.label || m.key || 'Member') + ' member</h3><p>Your pass, access and billing live in Profile.</p><span class="g-btn g-btn--secondary g-btn--sm">Open Profile ' + icon('arrow-right') + '</span></a>';
-    return '<a class="g-home3__plan" href="home.html?view=store&tab=membership"><span class="g-home3__plan-icon">' + icon('diamond') + '</span><h3>Gaia 2.0 Membership</h3><p>Certifications, practitioner communities, a directory listing, CRM tools and more.</p><span class="g-btn g-btn--secondary g-btn--sm">Explore membership ' + icon('arrow-right') + '</span></a>';
+    const art = '<img class="g-home3__plan-art" src="assets/home3/leaves.svg" alt="" width="400" height="240" loading="lazy" decoding="async" />';
+    if (m) return '<a class="g-home3__plan" href="home.html?view=profile">' + art + '<span class="g-home3__plan-icon">' + icon('diamond') + '</span><h3>' + esc(m.label || m.key || 'Member') + ' member</h3><p>Your pass, access and billing live in Profile.</p><span class="g-home3__btn g-home3__btn--outline">Open Profile ' + icon('arrow-right') + '</span></a>';
+    return '<a class="g-home3__plan" href="home.html?view=store&tab=membership">' + art + '<span class="g-home3__plan-icon">' + icon('diamond') + '</span><h3>Gaia 2.0 Membership</h3><p>Certifications, practitioner communities, a directory listing, CRM tools and more.</p><span class="g-home3__btn g-home3__btn--outline">Explore membership ' + icon('arrow-right') + '</span></a>';
+  }
+  /** A blurb cut at a word, not mid-word; the first sentence when it fits. */
+  function shortText(t, n) {
+    const v = String(t || '').replace(/\s+/g, ' ').trim();
+    if (v.length <= n) return v;
+    const first = v.match(/^.{40,}?[.!?](\s|$)/);
+    if (first && first[0].length <= n) return first[0].trim();
+    return v.slice(0, n).replace(/\s+\S*$/, '') + '…';
+  }
+  /** The upcoming event as the design's wide banner: real event data and its approved artwork. */
+  function home3Event() {
+    loadEventsList();
+    const event = upcomingFeatureEvents()[0] || eventData();
+    if (!event?.name) return '';
+    const art = event.heroImageUrl || 'assets/gaia-elevate-hero.webp';
+    const when = eventDate(event), location = event.location || event.venue || '';
+    const blurb = event.summary || event.description || '';
+    return '<section class="g-home3__event" aria-label="Upcoming event"><img class="g-home3__event-art" src="' + esc(art) + '" alt="" width="426" height="358" loading="lazy" decoding="async" />'
+      + '<div class="g-home3__event-body"><p class="g-home3__eyebrow">Upcoming event</p><h2>' + esc(event.name) + '</h2>'
+      + ((when || location) ? '<p class="g-home3__event-meta">' + (when ? icon('calendar-blank') + ' ' + esc(when) : '') + (location ? '<span>' + icon('map-pin') + ' ' + esc(location) + '</span>' : '') + '</p>' : '')
+      + (blurb ? '<p class="g-home3__event-blurb">' + esc(shortText(blurb, 150)) + '</p>' : '')
+      + '<a class="g-home3__btn g-home3__btn--lime" href="home.html?view=events">View event ' + icon('arrow-right') + '</a></div></section>';
   }
   function renderHomeMember(root, greeting) {
     const d = memberState().data || {};
@@ -1176,17 +1199,20 @@
     // (state, path row, Your Gaia, Book a session) -- re-ordered, not removed.
     root.innerHTML = '<div class="g-super-home g-super-home--v2 g-home2 g-home3">'
       + '<div id="home-announcements"></div>'
-      + '<header class="g-home2__greet g-home3__greet"><h1>' + greeting + '</h1><p>' + esc(homeLine()) + '</p></header>'
+      + '<header class="g-home2__greet g-home3__greet"><h1>' + greeting + '</h1><p>Your space to learn, connect and feel better.</p></header>'
       + home3Hero()
       + home3Actions()
       + '<div class="g-home3__split">'
-      +   '<section class="g-home3__recs" id="home3-recs" aria-labelledby="home3-recs-title"><div class="g-home3__recs-head"><h2 id="home3-recs-title">Recommended for you</h2><a class="g-home3__more" href="home.html?view=directory">View all practitioners ' + icon('arrow-right') + '</a></div><div class="g-home3__recs-body" data-home3-recs><p class="g-home3__muted">Loading practitioners…</p></div></section>'
+      +   '<section class="g-home3__recs" id="home3-recs" aria-labelledby="home3-recs-title"><div class="g-home3__recs-head"><h2 id="home3-recs-title">Recommended for you</h2><span class="g-home3__where-slot" data-home3-where></span><a class="g-home3__more" href="home.html?view=directory">View all practitioners ' + icon('arrow-right') + '</a></div><div class="g-home3__recs-body" data-home3-recs><p class="g-home3__muted">Loading practitioners…</p></div></section>'
       +   '<aside class="g-home3__journey" aria-label="Your journey">' + home3Journey() + '</aside>'
       + '</div>'
-      + stateHero()
-      + '<section class="g-home2__gaia" aria-label="Your Gaia"><p class="g-super-kicker">Your Gaia</p><div class="g-home2__rows">' + rows + '</div></section>'
-      + bookActions()
-      + '<div class="g-home3__split g-home3__split--bottom">' + upcoming() + home3Plan() + '</div>'
+      + '<div class="g-home3__split g-home3__split--bottom">' + home3Event() + home3Plan() + '</div>'
+      // Secondary, kept and compact: today's check / readings, the places in
+      // your Gaia (also in the sidebar on wide screens) and Book a session.
+      + '<section class="g-home3__more-row" aria-label="More for you"><p class="g-home3__eyebrow">More for you</p>'
+      +   '<div class="g-home3__more-grid">' + stateHero() + bookActions() + '</div>'
+      +   '<div class="g-home2__gaia"><div class="g-home2__rows">' + rows + '</div></div>'
+      + '</section>'
       + sync
       + '<div id="home-book" hidden></div>'   // gaia-member still writes its booking card here; Today copies it
       + '</div>';

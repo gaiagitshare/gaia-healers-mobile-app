@@ -52,7 +52,7 @@ test('the daily energy check and the sky render on Today only; the member Home i
   // what is happening for me (course, booking, gathering), then my places.
   // Home v3 (12 Nov 2026): find a practitioner first; the course/booking tiles
   // live in Your journey and the plan card replaces the strip. Every block is kept.
-  for (const part of ['home3Hero()', 'home3Actions()', 'home3Journey()', 'stateHero()', "serviceLink(v, i, t, m)", 'bookActions()', 'upcoming()', 'home3Plan()']) assert.ok(member.includes(part), part);
+  for (const part of ['home3Hero()', 'home3Actions()', 'home3Journey()', 'stateHero()', "serviceLink(v, i, t, m)", 'bookActions()', 'home3Event()', 'home3Plan()']) assert.ok(member.includes(part), part);
   assert.ok(member.indexOf('home3Hero()') < member.indexOf('home3Actions()') && member.indexOf('home3Journey()') < member.indexOf('stateHero()'), 'discovery leads, then the three ways in, then my journey and state');
   const fy = sa.slice(sa.indexOf('function forYou()'), sa.indexOf('function upcoming()'));
   assert.doesNotMatch(fy, /eventCompact\(\)/, 'For you is only the member\'s own things; the gathering is not personalised');

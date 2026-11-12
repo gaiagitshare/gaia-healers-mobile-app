@@ -5,13 +5,19 @@
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
   if (!window.location.hash) window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
 
+  // rail: shown in the tablet rail and desktop sidebar only. The phone bar
+  // keeps its six slots (Discover, Bookings and Events are on Home and in
+  // Community there), so nothing gets cramped (12 Nov 2026).
   const tabs = [
     { id: 'daily', href: 'home.html?view=daily', label: 'Today', icon: 'ph-sun' },
+    { id: 'directory', href: 'home.html?view=directory', label: 'Discover', icon: 'ph-magnifying-glass', rail: true },
     { id: 'wellness', href: 'home.html?view=wellness', label: 'Energy', icon: 'ph-sparkle' },
     { id: 'academy', href: 'home.html?view=academy', label: 'Academy', icon: 'ph-graduation-cap' },
     { id: 'community', href: 'home.html?view=community', label: 'Community', icon: 'ph-users-three' },
+    { id: 'bookings', href: 'home.html?view=bookings', label: 'Bookings', icon: 'ph-calendar-check', rail: true },
+    { id: 'events', href: 'home.html?view=events', label: 'Events', icon: 'ph-calendar-dots', rail: true },
     { id: 'store', href: 'home.html?view=store', label: 'Shop', icon: 'ph-shopping-bag' },
-    { id: 'profile', href: 'home.html?view=profile', label: 'You', icon: 'ph-user' },
+    { id: 'profile', href: 'home.html?view=profile', label: 'Profile', icon: 'ph-user' },
   ];
 
   // Compatibility map: which bottom-tab lights up for every current view.
@@ -24,8 +30,8 @@
     daily: 'daily',
     wellness: 'wellness', biowell: 'wellness', chakras: 'wellness',
     academy: 'academy',
-    community: 'community', events: 'community', directory: 'community', inbox: 'community',
-    profile: 'profile', bookings: 'profile', journey: 'profile',
+    community: 'community', events: 'events', directory: 'directory', inbox: 'community',
+    profile: 'profile', bookings: 'bookings', journey: 'profile',
     store: 'store',
   };
 
@@ -42,7 +48,7 @@
 
   function tabLink(t, on) {
     return `
-      <a href="${t.href}" data-app-nav="${t.id}" class="gaia-tabbar__link ${on ? 'is-active' : ''}" ${on ? 'aria-current="page"' : ''}>
+      <a href="${t.href}" data-app-nav="${t.id}" class="gaia-tabbar__link${t.rail ? ' gaia-tabbar__link--rail' : ''} ${on ? 'is-active' : ''}" ${on ? 'aria-current="page"' : ''}>
         <i class="ph ${t.icon} gaia-tabbar__icon" aria-hidden="true"></i>
         <span class="gaia-tabbar__label">${t.label}</span>
       </a>`;
@@ -58,8 +64,9 @@
   // rail on tablets, a sidebar with labels on desktop. The brand and the Home
   // and Practice labels only show where there is room for them.
   function buildTabbar(inner, active) {
-    const left = tabs.slice(0, 3);
-    const right = tabs.slice(3);
+    const main = tabs.filter((t) => !t.rail), rail = tabs.filter((t) => t.rail);
+    const left = main.slice(0, 3).concat(rail.slice(0, 1));
+    const right = main.slice(3).concat(rail.slice(1));
     inner.innerHTML = `
       <a class="gaia-rail__brand" href="home.html?view=today" aria-label="Gaia Healers home">
         <img src="assets/gaia-mark.svg" alt="" aria-hidden="true" width="32" height="32" />

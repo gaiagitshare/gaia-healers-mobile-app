@@ -47,11 +47,13 @@ test('the daily energy check and the sky render on Today only; the member Home i
   assert.doesNotMatch(home, /data-daily-host/, 'Home no longer carries the daily check'); assert.doesNotMatch(home, /data-sky-host/, 'nor the sky');
   const member = sa.slice(sa.indexOf('function renderHomeMember('), sa.indexOf('function homeLine()'));
   assert.doesNotMatch(member, /g-super-hero|g-super-services|g-super-sync|upgradeCard\(\)|primaryMemberAction\(\)/, 'no hero, no second access grid, no permanent sync notice, no giant upgrade card');
-  assert.match(member, /<header class="g-home2__greet"><h1>' \+ greeting \+ '<\/h1>/, 'the greeting is the page heading');
+  assert.match(member, /<header class="g-home2__greet[^"]*"><h1>' \+ greeting \+ '<\/h1>/, 'the greeting is the page heading');
   // 6 Oct 2026 hierarchy: my own state first (readings or today's check), then
   // what is happening for me (course, booking, gathering), then my places.
-  for (const part of ['stateHero()', 'forYou()', "serviceLink(v, i, t, m)", 'bookActions()', 'upcoming()', 'membershipStrip()']) assert.ok(member.includes(part), part);
-  assert.ok(member.indexOf('stateHero()') < member.indexOf('forYou()'), 'my state leads');
+  // Home v3 (12 Nov 2026): find a practitioner first; the course/booking tiles
+  // live in Your journey and the plan card replaces the strip. Every block is kept.
+  for (const part of ['home3Hero()', 'home3Actions()', 'home3Journey()', 'stateHero()', "serviceLink(v, i, t, m)", 'bookActions()', 'home3Event()', 'home3Plan()']) assert.ok(member.includes(part), part);
+  assert.ok(member.indexOf('home3Hero()') < member.indexOf('home3Actions()') && member.indexOf('home3Journey()') < member.indexOf('stateHero()'), 'discovery leads, then the three ways in, then my journey and state');
   const fy = sa.slice(sa.indexOf('function forYou()'), sa.indexOf('function upcoming()'));
   assert.doesNotMatch(fy, /eventCompact\(\)/, 'For you is only the member\'s own things; the gathering is not personalised');
   assert.match(sa, /function upcoming\(\)[\s\S]*eventCompact\(\)/, 'the gathering sits under Upcoming');
@@ -106,8 +108,8 @@ test('the in-app window always has a reachable Close, and bookings send a member
   // Bio-Well scan: the practitioner first, then a time on THEIR calendar (gaiapractitioners.com publishes meetingLink)
   const dir = read('gaia-directory.js');
   assert.match(dir, /function isBioWell\(p\) \{ return \/bio-\?well\/i\.test/, 'Bio-Well practitioners are found by their listed specialty');
-  assert.match(dir, /window\.GaiaDirectory = \{ open: openWith \}/);
-  assert.match(dir, /Book a Bio-Well scan/); assert.match(dir, /SCAN_FALLBACK = 'https:\/\/api\.leadconnectorhq\.com\/widget\/bookings\/scans'/, 'a practitioner without a calendar still books through the Gaia scan calendar, in the app');
+  assert.match(dir, /window\.GaiaDirectory = \{ open: openWith[,} ]/);
+  assert.match(dir, /Reserve a Bio-Well scan/); assert.match(dir, /SCAN_FALLBACK = 'https:\/\/api\.leadconnectorhq\.com\/widget\/bookings\/scans'/, 'a practitioner without a calendar still books through the Gaia scan calendar, in the app');
   assert.match(dir, /function nearMe\(\)/); assert.match(dir, /navigator\.geolocation\.getCurrentPosition/, 'near me sorts by distance, only when tapped');
   assert.doesNotMatch(dir.slice(dir.indexOf('async function load()')), /getCurrentPosition/, 'never on load');
   assert.match(dir, /Bio-Well practitioners'\)/, 'the count names what is shown');

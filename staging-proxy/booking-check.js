@@ -40,7 +40,8 @@ export function bookingFor(id, now = Date.now()) {
   const s = state.byId[String(id)];
   if (!s) return { status: 'unknown' };
   const out = { status: s.status };
-  if (s.next && Date.parse(s.next) > now) out.next = s.next;
+  const nx = (Array.isArray(s.slots) && s.slots.length ? s.slots : (s.next ? [s.next] : [])).find((t) => Date.parse(t) > now);
+  if (nx) out.next = nx;
   if (s.durationMin) out.durationMin = s.durationMin;
   if (typeof s.autoConfirm === 'boolean') out.autoConfirm = s.autoConfirm;
   return out;
@@ -93,8 +94,10 @@ export async function calendarStatus(cal, ghlRequest, now) {
     if (!dayKeys.length) return Object.assign({ status: 'full', days: 0 }, meta);
     // The earliest open time still ahead -- GHL already sent it; keeping it lets
     // the directory say "Next: Thu 4:30 pm" instead of only "Books online".
-    const next = dayKeys.flatMap((k) => j[k].slots).map((t) => Date.parse(t)).filter((t) => Number.isFinite(t) && t > now).sort((a, b) => a - b)[0];
-    return Object.assign({ status: 'online', days: dayKeys.length }, next ? { next: new Date(next).toISOString() } : {}, meta);
+    // The next few, not one: the check runs hourly, and a single time that
+    // passed left the practitioner showing none until the next run.
+    const upcoming = dayKeys.flatMap((k) => j[k].slots).map((t) => Date.parse(t)).filter((t) => Number.isFinite(t) && t > now).sort((a, b) => a - b).slice(0, 8);
+    return Object.assign({ status: 'online', days: dayKeys.length }, upcoming.length ? { next: new Date(upcoming[0]).toISOString(), slots: upcoming.map((t) => new Date(t).toISOString()) } : {}, meta);
   }
   // 400/404/422 ("No users found in the calendar") — this calendar cannot take a booking.
   return { status: 'unavailable', why: String((r.json && r.json.message) || ('http ' + r.status)).slice(0, 80) };
@@ -135,7 +138,7 @@ export async function runOnce(deps, opts = {}) {
     const byId = {};
     for (const [id, url] of Object.entries(state.links)) {
       const r = await check(url);
-      byId[id] = r ? { status: r.status, days: r.days, why: r.why, at: now, next: r.next, durationMin: r.durationMin, autoConfirm: r.autoConfirm }
+      byId[id] = r ? { status: r.status, days: r.days, why: r.why, at: now, next: r.next, slots: r.slots, durationMin: r.durationMin, autoConfirm: r.autoConfirm }
         : (state.byId[id] || { status: 'unknown', at: now });
     }
     state.byId = byId;

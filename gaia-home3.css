@@ -250,7 +250,7 @@ body.gaia-v2 .g-appt-empty .g-btn { width: auto !important; display: inline-flex
   body.gaia-v2 { --shell-rail: 236px; }
   body.gaia-v2 .gaia-tabbar { border-right: 1px solid var(--gh-line) !important; background:
       linear-gradient(180deg, #0a1a10 0%, #0a1a10 60%, rgba(10, 26, 16, 0.72) 78%, rgba(10, 26, 16, 0.55) 100%),
-      url("assets/home3/ref-forest.webp") center bottom / 100% auto no-repeat, #0a1a10 !important; }
+      url("assets/home3/ref-forest.webp?v=kit1") center bottom / 100% auto no-repeat, #0a1a10 !important; }
   body.gaia-v2 .gaia-tabbar__inner { padding: 20px 12px 140px !important; gap: 2px; }
   body.gaia-v2 .gaia-tabbar .gaia-rail__brand { padding: 0 10px 18px; gap: 10px; }
   body.gaia-v2 .gaia-tabbar .gaia-rail__brand img { width: 30px !important; height: 30px !important; filter: none; }

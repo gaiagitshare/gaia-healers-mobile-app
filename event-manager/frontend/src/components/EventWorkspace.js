@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Box, Typography, Chip, Stack } from '@mui/material';
 import { getEvent, getMyCapabilities } from '../utils/api';
+import { venueTimeLabel } from '../utils/datetime';
 import EventNav from './EventNav';
 import EventDetail from './EventDetail';
 import LiveAdmin from './LiveAdmin';
@@ -137,7 +138,8 @@ function EventWorkspace() {
                         <Chip size="small" color={event.is_published ? 'primary' : 'default'}
                               label={event.is_published ? 'Published' : 'Draft'} />
                         {event.live_enabled && <Chip size="small" color="secondary" label="Live" />}
-                        {event.timezone && <Chip size="small" variant="outlined" label={event.timezone} />}
+                        {event.timezone && <Chip size="small" variant="outlined" title={event.timezone}
+                                              label={venueTimeLabel(event.timezone, event.location)} />}
                     </>
                 )}
             </Stack>

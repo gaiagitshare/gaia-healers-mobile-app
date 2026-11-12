@@ -1,0 +1,104 @@
+/* Gaia — warmer, lighter-weight surfaces (12 Nov 2026).
+ *
+ * The owner found the app's frames "so big and very cold": near-black green
+ * pages, mint-tinted borders on every block, 22-26px radii and generous
+ * padding on everything. This file only re-tunes tokens and spacing, loaded
+ * last, so it can be adjusted or removed in one place. No layout, markup or
+ * behaviour changes.
+ */
+
+body.gaia-v2 {
+  /* Warm forest instead of blue-black green; sand-tinted text and lines. */
+  --v3-page: #0f120d;
+  --v3-card: #181b14;
+  --v3-card-2: #1f231a;
+  --v3-text: #f6f3ea;
+  --v3-text-2: #bdb7a6;
+  --v3-muted: #9a9482;
+  --v3-border: rgba(240, 226, 190, 0.10);
+  --v3-border-strong: rgba(214, 228, 150, 0.34);
+  --v3-label: #cdbb8a;
+  --v3-radius: 14px;
+  --v3-radius-lg: 18px;
+  --v3-card-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+
+  --g-bg: var(--v3-page);
+  --g-surface: var(--v3-card);
+  --g-surface-hi: var(--v3-card-2);
+  --g-card-bg: var(--v3-card);
+  --g-line: var(--v3-border);
+  --g-line-strong: rgba(240, 226, 190, 0.18);
+  --g-text: var(--v3-text);
+  --g-text-muted: var(--v3-text-2);
+  --g-text-dim: var(--v3-text-2);
+  --g-text-faint: #8a8574;
+  background-color: var(--v3-page);
+}
+
+/* The page itself, the side menu / tab bar and the top bar: older rules set
+   these to near-black (#050807) with more specific selectors. */
+html, html body.gaia-v2, html body.gaia-v2.gaia-app { background-color: #0d100b !important; }
+body.gaia-v2 .gaia-tabbar { background-color: #12150f !important; border-color: rgba(240, 226, 190, 0.08) !important; }
+body.gaia-v2 .g-topbar { background-color: rgba(13, 16, 11, 0.82) !important; }
+body.gaia-v2 .gaia-tabbar :is(a, button)[aria-current="page"], body.gaia-v2 .gaia-tabbar .is-active { background-color: rgba(232, 214, 160, 0.08); }
+
+/* A faint warm light from the top of the page, so it does not read as a void. */
+body.gaia-v2 .gaia-app-main,
+body.gaia-v2 main {
+  background-image: radial-gradient(1200px 520px at 70% -120px, rgba(232, 190, 120, 0.06), transparent 70%);
+}
+
+/* ---- Home (member) ---------------------------------------------------- */
+body.gaia-v2 .g-home2__greet { margin-bottom: 12px; }
+body.gaia-v2 .g-home2__state {
+  padding: clamp(18px, 2.4vw, 24px);
+  border-radius: 18px;
+  background:
+    radial-gradient(110% 140% at 100% 0%, rgba(232, 196, 120, 0.12), transparent 55%),
+    radial-gradient(90% 120% at 0% 100%, rgba(157, 225, 119, 0.08), transparent 60%),
+    var(--v3-card-2);
+  border-color: rgba(214, 228, 150, 0.20);
+}
+body.gaia-v2 .g-home2__state h2 { font-size: clamp(22px, 2.4vw, 28px); }
+body.gaia-v2 .g-home2__state .g-home2__actions { margin-top: 14px; }
+body.gaia-v2 .g-home2__for { margin-top: 20px; }
+body.gaia-v2 .g-home2__upcoming { margin-top: 20px; }
+body.gaia-v2 .g-home2__tile { padding: 12px 14px; border-radius: 14px; }
+body.gaia-v2 .g-home2__tile-icon { width: 38px; height: 38px; border-radius: 12px; font-size: 19px; background: rgba(232, 196, 120, 0.10); color: #e6c98a; }
+body.gaia-v2 :is(.g-home2__gaia, .g-home2__book) { margin-top: 20px; }
+body.gaia-v2 :is(.g-home2__rows > *, .g-home2__action, .g-super-row) { border-radius: 14px; }
+body.gaia-v2 .g-home2__action { padding: 12px 14px; }
+body.gaia-v2 .g-super-kicker { color: var(--v3-label); letter-spacing: 0.12em; }
+
+/* ---- Guest Home ------------------------------------------------------- */
+body.gaia-v2 .g-guest .gg-hero { border-radius: 20px; }
+body.gaia-v2 .g-guest .gg-scan {
+  padding: 16px; border-radius: 16px;
+  background: linear-gradient(135deg, rgba(232, 196, 120, 0.10), rgba(157, 225, 119, 0.06));
+  border-color: rgba(232, 214, 160, 0.18);
+}
+body.gaia-v2 .g-guest .gg-scan__icon { background: rgba(232, 196, 120, 0.14); color: #e6c98a; }
+
+/* ---- Cards and panels everywhere: smaller radius, softer edges -------- */
+body.gaia-v2 :is(.g-card, .gaia-card, .g-dir-card, .gaia-dirprofile__panel, .gaia-booking-modal__sheet) { border-color: var(--v3-border); }
+body.gaia-v2 .g-card { border-radius: 16px; }
+body.gaia-v2 .gaia-booking-modal__sheet { background: var(--v3-card) !important; border-color: rgba(240, 226, 190, 0.14) !important; border-radius: 18px; }
+body.gaia-v2 .gaia-booking-modal__head { background: var(--v3-card-2); }
+
+/* ---- Directory: compact controls, shorter map, warm cards ------------- */
+body.gaia-v2 .g-dir__intent { padding: 10px 12px; border-radius: 14px; border-color: rgba(232, 214, 160, 0.22); background: rgba(232, 196, 120, 0.07); }
+body.gaia-v2 .g-dir__search input { padding: 10px 14px 10px 38px; border-radius: 12px; background: rgba(255, 246, 225, 0.04); border-color: var(--v3-border); }
+body.gaia-v2 :is(.g-dir-fchip, .g-dir-schip, .g-dir-rchip) { padding: 6px 11px; font-size: 12px; border-color: var(--v3-border); }
+body.gaia-v2 .g-dir__map { height: 220px; border-radius: 14px; border-color: var(--v3-border); }
+@media (max-width: 640px) { body.gaia-v2 .g-dir__map { height: 180px; } }
+body.gaia-v2 .g-dir-card { padding: 10px 12px; border-radius: 14px; background: var(--v3-card); transition: border-color .15s ease, transform .15s ease, background .15s ease; }
+body.gaia-v2 .g-dir-card:hover { background: var(--v3-card-2); border-color: rgba(214, 228, 150, 0.28); transform: translateY(-1px); }
+body.gaia-v2 .g-dir-chip { background: rgba(255, 246, 225, 0.06); color: var(--v3-text-2); }
+body.gaia-v2 .gaia-dirprofile__panel { max-width: 380px; padding: 18px 18px calc(16px + env(safe-area-inset-bottom, 0px)); border-radius: 18px; background: var(--v3-card); }
+body.gaia-v2 .gaia-dirprofile__note { background: rgba(232, 196, 120, 0.07); border-color: rgba(232, 214, 160, 0.16); }
+body.gaia-v2 .gaia-dirprofile-modal { background: rgba(10, 9, 6, 0.70); }
+
+/* The scan price, where the scan is offered. */
+.g-dir-card__price, .gaia-dirprofile__price { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700;
+  background: rgba(232, 196, 120, 0.14); color: #ecd59c; white-space: nowrap; }
+.gaia-dirprofile__price { font-size: 12.5px; padding: 3px 10px; margin-left: 4px; }

@@ -31,6 +31,8 @@
   // meetingLink). The intent arrives from Home / You, never from a model.
   var intent = '';
   var SCAN_FALLBACK = 'https://api.leadconnectorhq.com/widget/bookings/scans';
+  // Every Bio-Well scan booked through Gaia Healers is $99 (owner, 12 Nov 2026).
+  var SCAN_PRICE = '$99';
   // A scan practitioner is one who LISTS Bio-Well as a specialty. A loose
   // "biowell" tag alone (21 profiles in Nov 2026) is not a promise of a scanner.
   function isBioWell(p) { return /bio-?well/i.test((p.specialty || []).join(' ')); }
@@ -195,6 +197,7 @@
     var loc = [p.city, p.state].filter(Boolean).join(', ');
     var d = distanceOf(p); if (d != null) loc = (loc ? loc + ' · ' : '') + fmtDist(d);
     var specs = p.specialty.slice(0, 3).map(function (s) { return '<span class="g-dir-chip">' + esc(s) + '</span>'; }).join('');
+    if (scanMode() && isBioWell(p)) specs = '<span class="g-dir-card__price">Scan ' + SCAN_PRICE + '</span>' + specs;
     return '<button type="button" class="g-dir-card" data-dir-open="' + esc(p.id) + '">'
       + '<span class="g-dir-card__photo">' + photoHtml(p, 'g-dir-card__img') + '</span>'
       + '<span class="g-dir-card__body">'
@@ -216,7 +219,7 @@
       return '<button type="button" class="g-dir-schip' + (filters.specialty === s ? ' is-on' : '') + '" data-dir-spec="' + esc(s) + '">' + esc(s) + '</button>';
     }).join('');
     var intro = intent === 'scan'
-      ? '<div class="g-dir__intent"><i class="ph ph-pulse"></i><div><strong>Book a Bio-Well scan</strong><span>Choose a Bio-Well practitioner near you, then take a time on their calendar.</span></div><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-dir-near><i class="ph ph-crosshair"></i> Near me</button><button type="button" class="g-dir__intent-x" data-dir-intent-clear aria-label="Show all practitioners">×</button></div>'
+      ? '<div class="g-dir__intent"><i class="ph ph-pulse"></i><div><strong>Reserve a Bio-Well scan · ' + SCAN_PRICE + '</strong><span>Choose a Bio-Well practitioner near you, then take a time on their calendar.</span></div><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-dir-near><i class="ph ph-crosshair"></i> Near me</button><button type="button" class="g-dir__intent-x" data-dir-intent-clear aria-label="Show all practitioners">×</button></div>'
       : '';
     return intro + '<div class="g-dir__controls">'
       + '<div class="g-dir__search"><i class="ph ph-magnifying-glass"></i>'
@@ -370,13 +373,15 @@
     var what = scanMode() ? 'Reserve a Bio-Well scan' : 'Book a session';
     var nxt = (bk === 'online' && (p.nextSlot || base.nextSlot)) ? fmtSlot(p.nextSlot || base.nextSlot) : '';
     if (nxt && own) what = (scanMode() ? 'Reserve ' : 'Book ') + nxt;
+    var scanOffer = scanMode() || isBioWell(p);
+    if (own && scanMode()) what += ' · ' + SCAN_PRICE;
     var profileFirst = false;
     if (own) {
       actions += bookButton(p.meetingLink, bk === 'full' ? 'See their calendar' : what, (scanMode() ? 'Bio-Well scan · ' : 'Session · ') + p.name);
       if (bk !== 'full') {
         // Only what is certain: GHL's session length and confirmation settings
         // disagree with what many calendars tell the visitor (12 Nov 2026).
-        note = '<p class="gaia-dirprofile__note gaia-dirprofile__facts"><i class="ph ph-calendar-check"></i>' + (nxt ? 'Next open time ' + esc(nxt) + '. ' : '') + 'Pick any time on their calendar; the price is shown before you pay.</p>';
+        note = '<p class="gaia-dirprofile__note gaia-dirprofile__facts"><i class="ph ph-calendar-check"></i>' + (nxt ? 'Next open time ' + esc(nxt) + '. ' : '') + (scanOffer ? 'Bio-Well scan ' + SCAN_PRICE + '. ' : '') + 'Pick any time on their calendar.</p>';
       }
       if (bk === 'full') note = '<p class="gaia-dirprofile__note"><i class="ph ph-info"></i>' + esc(p.name) + '\'s calendar has no open times in the next 30 days. You can still look, or reach them through their full profile.</p>';
     } else if (intent === 'scan' && scanTeamOk()) {

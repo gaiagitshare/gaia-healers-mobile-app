@@ -2584,12 +2584,34 @@ def _blocked_reason(attendee):
         "revoked": "This ticket was revoked and is no longer valid",
     }.get(_ticket_status(attendee))
 
+def _snap(db, key, compute):
+    """Memoised read for one read-only snapshot build, else computed fresh.
+
+    The Email Center rebuilds every booking at once and asked the same
+    event-wide questions hundreds of times -- "which seats are there", "what
+    does pass 7 rank" -- about 8,700 queries and four seconds a build (12 Nov
+    2026). A build that only READS turns this on for its own session
+    (db.info["read_snapshot"] = {}); every other caller, including anything
+    that writes, gets exactly what it got before: a fresh query each time.
+    """
+    memo = db.info.get("read_snapshot") if hasattr(db, "info") else None
+    if memo is None:
+        return compute()
+    if key not in memo:
+        memo[key] = compute()
+    return memo[key]
+
+
+def _tt_by_id(db, tt_id):
+    return _snap(db, ("tt", tt_id), lambda: db.query(models.TicketType).filter(models.TicketType.id == tt_id).first())
+
+
 def _tt_rank(db, tt_id) -> int:
     """Upgrade precedence rank from ticket_types.sort_order (higher = better).
     Unknown/unset ranks as 0; no ticket ranks as -1 so any real tier beats none."""
     if not tt_id:
         return -1
-    tt = db.query(models.TicketType).filter(models.TicketType.id == tt_id).first()
+    tt = _tt_by_id(db, tt_id)
     if not tt:
         return -1
     return tt.upgrade_rank if tt.upgrade_rank is not None else 0
@@ -2770,7 +2792,7 @@ def _held_tiers(db, attendee):
         if i in seen:
             continue
         seen.add(i)
-        t = db.query(models.TicketType).filter(models.TicketType.id == i).first()
+        t = _tt_by_id(db, i)
         if t:
             out.append(t)
     return sorted(out, key=lambda t: _tt_rank(db, t.id), reverse=True)
@@ -2826,7 +2848,7 @@ def _effective_access(db, attendee):
             admin_won = True
     if base_tt is None:
         base_tt = attendee.ticket_type_id
-    base = db.query(models.TicketType).filter(models.TicketType.id == base_tt).first() if base_tt else None
+    base = _tt_by_id(db, base_tt) if base_tt else None
     # add-ons (dedup by code, keep the first paid one)
     #
     # An add-on that the base tier already covers is not shown. Somebody who
@@ -2862,7 +2884,7 @@ def _effective_access(db, attendee):
         if e.get("addon_code"):
             lbl = _addon_label(e.get("addon_code")); kind = "add-on"
         else:
-            tt = db.query(models.TicketType).filter(models.TicketType.id == e.get("ticket_type_id")).first()
+            tt = _tt_by_id(db, e.get("ticket_type_id"))
             lbl = (tt.name if tt else "Ticket"); kind = ("upgrade" if e.get("is_upgrade") else "base ticket")
         hist.append({"label": lbl, "kind": kind, "status": e.get("status") or "paid",
                      "order_id": e.get("order_id"), "day": e.get("day"), "ts": e.get("ts")})
@@ -3040,9 +3062,10 @@ def _pass_includes(db, attendee, event=None) -> str:
     base = eff.get("base_ticket") or None
     if not eff.get("active") or not base:
         return ""
-    tt = db.query(models.TicketType).filter(models.TicketType.id == base.get("id")).first()
+    tt = _tt_by_id(db, base.get("id"))
     if event is None:
-        event = db.query(models.Event).filter(models.Event.id == attendee.event_id).first()
+        event = _snap(db, ("event", attendee.event_id),
+                      lambda: db.query(models.Event).filter(models.Event.id == attendee.event_id).first())
 
     days = eff.get("valid_days") or []
     if eff.get("unrestricted_days") or not days:
@@ -3319,7 +3342,7 @@ def _sold_rank(db, pe, mapping_for):
     m = mapping_for(pe)
     rank = 0
     if m and m.ticket_type_id:
-        tt = db.query(models.TicketType).filter(models.TicketType.id == m.ticket_type_id).first()
+        tt = _tt_by_id(db, m.ticket_type_id)
         rank = (tt.upgrade_rank or 0) if tt else 0
     names = pe.product_names if isinstance(pe.product_names, (list, tuple)) else None
     if names is None:
@@ -3336,6 +3359,27 @@ def _sold_rank(db, pe, mapping_for):
     return rank
 
 
+def _paid_payments(db, event_id, attendee_id):
+    """This person's paid payments on the event, oldest first."""
+    memo = db.info.get("read_snapshot") if hasattr(db, "info") else None
+    if memo is None:
+        return db.query(models.PaymentEvent).filter(
+            models.PaymentEvent.event_id == event_id,
+            models.PaymentEvent.attendee_id == attendee_id,
+            models.PaymentEvent.status == "paid").order_by(models.PaymentEvent.occurred_at,
+                                                           models.PaymentEvent.id).all()
+
+    def everyone():
+        by = {}
+        for pe in db.query(models.PaymentEvent).filter(
+                models.PaymentEvent.event_id == event_id,
+                models.PaymentEvent.status == "paid").order_by(models.PaymentEvent.occurred_at,
+                                                               models.PaymentEvent.id).all():
+            by.setdefault(pe.attendee_id, []).append(pe)
+        return by
+    return _snap(db, ("paid_by_attendee", event_id), everyone).get(attendee_id, [])
+
+
 def _surplus_seats(db, buyer):
     """Tickets this person PAID for that nobody is standing in yet.
 
@@ -3350,8 +3394,9 @@ def _surplus_seats(db, buyer):
     that is the one case this must not count, and it is judged on what the
     product sold rather than on its price.
     """
-    maps = {m.external_product_id: m for m in db.query(models.TicketMapping).filter(
-        models.TicketMapping.event_id == buyer.event_id).all() if m.external_product_id}
+    maps = _snap(db, ("maps", buyer.event_id), lambda: {
+        m.external_product_id: m for m in db.query(models.TicketMapping).filter(
+            models.TicketMapping.event_id == buyer.event_id).all() if m.external_product_id})
 
     def mapping_for(pe):
         ids = pe.product_ids if isinstance(pe.product_ids, (list, tuple)) else None
@@ -3361,11 +3406,7 @@ def _surplus_seats(db, buyer):
         return next((maps[i] for i in ids if i in maps), None)
 
     rows = []
-    for pe in db.query(models.PaymentEvent).filter(
-            models.PaymentEvent.event_id == buyer.event_id,
-            models.PaymentEvent.attendee_id == buyer.id,
-            models.PaymentEvent.status == "paid").order_by(models.PaymentEvent.occurred_at,
-                                                           models.PaymentEvent.id).all():
+    for pe in _paid_payments(db, buyer.event_id, buyer.id):
         m = mapping_for(pe)
         if not m or m.is_upgrade:
             continue                                   # an upgrade is never a seat
@@ -3386,12 +3427,13 @@ def _party_members(db, attendee):
     cd = attendee.custom_data or {}
     buyer_id = int(cd.get("bought_by_attendee") or 0) or attendee.id
     buyer = (attendee if buyer_id == attendee.id
-             else db.query(models.Attendee).filter(models.Attendee.id == buyer_id).first())
+             else _snap(db, ("attendee", buyer_id),
+                        lambda: db.query(models.Attendee).filter(models.Attendee.id == buyer_id).first()))
     if not buyer:
         return None
-    seats = [a for a in db.query(models.Attendee).filter(
+    seats = [a for a in _snap(db, ("party_seats", buyer.event_id), lambda: db.query(models.Attendee).filter(
                  models.Attendee.event_id == buyer.event_id,
-                 models.Attendee.registration_source.in_(PARTY_SEAT_SOURCES)).all()
+                 models.Attendee.registration_source.in_(PARTY_SEAT_SOURCES)).all())
              if int((a.custom_data or {}).get("bought_by_attendee") or 0) == buyer.id]
     # Seats paid for that nobody holds yet. A booking is a booking from the
     # moment the money arrives, not from the moment somebody gets named.
@@ -3417,9 +3459,11 @@ def _party_members(db, attendee):
     # -- otherwise naming the people a booking paid for would keep asking for
     # them for ever.
     if slots:
-        _filled = sum(1 for _s in seats if not db.query(models.PaymentEvent).filter(
-            models.PaymentEvent.attendee_id == _s.id,
-            models.PaymentEvent.status == "paid").first())
+        _filled = sum(1 for _s in seats if not (
+            _paid_payments(db, _s.event_id, _s.id) if db.info.get("read_snapshot") is not None
+            else db.query(models.PaymentEvent).filter(
+                models.PaymentEvent.attendee_id == _s.id,
+                models.PaymentEvent.status == "paid").first()))
         slots = max(0, slots - _filled)
     if not seats and not waiting and slots < 1:
         return None
@@ -6919,7 +6963,8 @@ def identity_my_events(
 
     rows = []
     for attendee in attendees:
-        event = db.query(models.Event).filter(models.Event.id == attendee.event_id).first()
+        event = _snap(db, ("event", attendee.event_id),
+                      lambda: db.query(models.Event).filter(models.Event.id == attendee.event_id).first())
         if not event:
             continue
         rows.append(_attendee_event_payload(attendee, event, db))

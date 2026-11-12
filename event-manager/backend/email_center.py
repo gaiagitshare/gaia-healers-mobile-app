@@ -356,6 +356,19 @@ def booking_delivery(units):
 
 
 def _build(db, event_id, s, only_buyer=None):
+    """Every booking, built read-only. Its repeated event-wide lookups are
+    answered once per build (main._snap) -- the build writes nothing, so a
+    snapshot of the event for the length of one build is exactly right."""
+    if db.info.get("read_snapshot") is not None:
+        return _build_inner(db, event_id, s, only_buyer)
+    db.info["read_snapshot"] = {}
+    try:
+        return _build_inner(db, event_id, s, only_buyer)
+    finally:
+        db.info.pop("read_snapshot", None)
+
+
+def _build_inner(db, event_id, s, only_buyer=None):
     event = db.query(models.Event).filter(models.Event.id == event_id).first()
     rows = db.query(models.Attendee).filter(models.Attendee.event_id == event_id).all()
     by_id = {a.id: a for a in rows}

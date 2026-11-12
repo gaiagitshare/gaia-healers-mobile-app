@@ -153,6 +153,11 @@ body.gaia-booking-open{overflow:hidden;}
   document.addEventListener('gaia:member', () => { document.dispatchEvent(new CustomEvent('gaia:prefs-changed', { detail: { prefs: { ...((state.data.prefs && state.data.prefs.prefs) || {}) } } })); });
   async function loadMember() {
     if (window.GaiaJourney && !await window.GaiaJourney.check()) return;
+    // Signed in, data on its way: Community says "checking", not "sign in".
+    state.memberLoading = true; renderCommunity();
+    try { await loadMemberData(); } finally { state.memberLoading = false; renderCommunity(); }
+  }
+  async function loadMemberData() {
     const [profile, access, appts, notif, devices, purchases, forms, courses, products, activity, events, prefs] = await Promise.all([
       getJson('/api/member/profile'), getJson('/api/member/access'),
       getJson('/api/member/appointments'), getJson('/api/member/notifications'),
@@ -1222,6 +1227,22 @@ body.gaia-booking-open{overflow:hidden;}
     const sub = el('community-sub');
     const acc = state.data.access;
 
+    // Signed in, but the circles are not known yet or could not be checked:
+    // say so and offer a retry. Never tell a member they are "not in a circle"
+    // (or list their own circle as locked) because a lookup failed.
+    if (state.memberLoading && !state.authed) {
+      if (sub) sub.textContent = 'Your circles, what is on, and the people who can help.';
+      box.innerHTML = announcementsHtml(state.announcements)
+        + '<article class="g-card g-circles-status" aria-busy="true"><p class="g-card__meta">Checking your circles…</p></article>';
+      return;
+    }
+    if (state.authed && !(acc && acc.communities)) {
+      if (sub) sub.textContent = 'Your circles, what is on, and the people who can help.';
+      box.innerHTML = announcementsHtml(state.announcements) + circlesRetryCard('We could not load your circles just now.');
+      bindCirclesRetry(box);
+      return;
+    }
+
     if (!(state.authed && acc && acc.communities)) {
       if (sub) sub.textContent = 'Sign in to see which circles your membership opens.';
       const preview = ['All Gaia Healers', 'Bio-Well Practitioners', 'BioPulsar Practitioners', 'BioTekna Practitioners', 'ASEA Community', 'BrainTap Community', 'LifeWave Community', 'Golden Practitioner Circle']
@@ -1245,6 +1266,14 @@ body.gaia-booking-open{overflow:hidden;}
     if (sub) sub.textContent = 'Your circles, what is on, and the people who can help.';
 
     const parts = [announcementsHtml(state.announcements)];
+    // The live GHL read failed (or is stale): what we have is the last known
+    // state, which may be missing circles.
+    const unsure = acc.source === 'session-fallback' || !!(acc.meta && acc.meta.degraded);
+    if (unsure && !unlocked.length) {
+      box.innerHTML = parts.join('') + circlesRetryCard('We could not check your circles just now.');
+      bindCirclesRetry(box);
+      return;
+    }
 
     if (unlocked.length) {
       // "Your circles" above is the heading; no second one.
@@ -1267,8 +1296,33 @@ body.gaia-booking-open{overflow:hidden;}
         + '<ul class="g-circles__list">' + locked.map((x) => circleRow(x, false)).join('') + soon.map((x) => circleRow(x, true)).join('') + '</ul>'
         + '</section>');
     }
+    if (unsure) parts.splice(2, 0, circlesRetryCard('Some circles may be missing: we could not re-check them just now.'));
     box.innerHTML = parts.join('');
     box.querySelector('[data-membership-cta]')?.addEventListener('click', () => window.GaiaMembership?.open?.());
+    bindCirclesRetry(box);
+  }
+
+  function circlesRetryCard(msg) {
+    return '<article class="g-card g-circles-status" role="status"><p class="g-card__meta">' + esc(msg) + '</p>'
+      + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--secondary g-btn--sm" data-circles-retry>Try again</button></div></article>';
+  }
+  // Re-reads only /api/member/access; one request per tap, never automatic.
+  function bindCirclesRetry(box) {
+    const btn = box.querySelector('[data-circles-retry]'); if (!btn) return;
+    btn.addEventListener('click', async () => {
+      btn.disabled = true; btn.textContent = 'Checking…';
+      const access = await getJson('/api/member/access');
+      const sure = access && access.ok && access.communities
+        && access.source !== 'session-fallback' && !(access.meta && access.meta.degraded);
+      if (sure) {
+        state.data = { ...state.data, access };
+        render();
+      } else {
+        btn.disabled = false; btn.textContent = 'Try again';
+        const meta = box.querySelector('.g-circles-status .g-card__meta');
+        if (meta) meta.textContent = 'Still could not load your circles. Please try again in a moment.';
+      }
+    });
   }
 
   /* ---------- Public, no-login features ---------- */

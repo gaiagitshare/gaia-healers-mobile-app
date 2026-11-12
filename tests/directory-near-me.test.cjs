@@ -77,3 +77,14 @@ test('scan bookings from Bookings and the voice assistant start at the directory
   const voice = fs.readFileSync(path.join(__dirname, '..', 'gaia-realtime-voice.js'), 'utf8');
   assert.match(voice, /key === 'scan' && window\.GaiaDirectory/);
 });
+
+test('"scan" words mean a Bio-Well practitioner, the rest still narrows (12 Nov 2026)', () => {
+  const t = load('en-US');
+  assert.strictEqual(t.scanQuery('scan'), '');
+  assert.strictEqual(t.scanQuery('Scanner'), '');
+  assert.strictEqual(t.scanQuery('biofield scan'), '');
+  assert.strictEqual(t.scanQuery('Bio-Well'), '');
+  assert.strictEqual(t.scanQuery('scan orlando'), 'orlando');
+  assert.strictEqual(t.scanQuery('reiki'), null);
+  assert.strictEqual(t.scanQuery('scandinavia'), null);
+});

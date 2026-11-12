@@ -1,3 +1,4 @@
+import contextlib
 from fastapi import FastAPI, Depends, HTTPException, status, File, Form, UploadFile, Body
 from fastapi import Request as FastAPIRequest  # urllib.request.Request is imported below and would shadow this
 from fastapi.middleware.cors import CORSMiddleware
@@ -1374,8 +1375,9 @@ def get_attendees(
     attendees = db.query(models.Attendee).filter(
         models.Attendee.event_id == event_id
     ).offset(skip).limit(limit).all()
-    for _a in attendees:
-        _a.effective_access = _effective_access(db, _a)
+    with _read_snapshot(db):                 # read only: one lookup per question
+        for _a in attendees:
+            _a.effective_access = _effective_access(db, _a)
     _stamp_card_state(db, attendees)
     return attendees
 
@@ -2600,6 +2602,20 @@ def _snap(db, key, compute):
     if key not in memo:
         memo[key] = compute()
     return memo[key]
+
+
+@contextlib.contextmanager
+def _read_snapshot(db):
+    """Turn the _snap memo on for a read-only stretch, and off after it.
+    Nested use keeps the outer snapshot."""
+    if db.info.get("read_snapshot") is not None:
+        yield
+        return
+    db.info["read_snapshot"] = {}
+    try:
+        yield
+    finally:
+        db.info.pop("read_snapshot", None)
 
 
 def _tt_by_id(db, tt_id):
@@ -6337,11 +6353,12 @@ def search_attendees(
     if response is not None:
         response.headers["X-Search-Total"] = str(len(scored))
         response.headers["X-Search-Truncated"] = "1" if len(scored) > 50 else "0"
-    for _a in out:
-        _a.effective_access = _effective_access(db, _a)
-        _booking, _seat = _party_of(_a)
-        _a.paid_by = _booking or _payer_label(payers.get(_a.id, ()), _a)
-        _a.party_seat = _seat or None
+    with _read_snapshot(db):                 # read only: one lookup per question
+        for _a in out:
+            _a.effective_access = _effective_access(db, _a)
+            _booking, _seat = _party_of(_a)
+            _a.paid_by = _booking or _payer_label(payers.get(_a.id, ()), _a)
+            _a.party_seat = _seat or None
     _stamp_card_state(db, out)
     return out
 

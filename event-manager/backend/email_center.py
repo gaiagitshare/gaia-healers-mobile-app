@@ -359,13 +359,8 @@ def _build(db, event_id, s, only_buyer=None):
     """Every booking, built read-only. Its repeated event-wide lookups are
     answered once per build (main._snap) -- the build writes nothing, so a
     snapshot of the event for the length of one build is exactly right."""
-    if db.info.get("read_snapshot") is not None:
+    with M._read_snapshot(db):
         return _build_inner(db, event_id, s, only_buyer)
-    db.info["read_snapshot"] = {}
-    try:
-        return _build_inner(db, event_id, s, only_buyer)
-    finally:
-        db.info.pop("read_snapshot", None)
 
 
 def _build_inner(db, event_id, s, only_buyer=None):

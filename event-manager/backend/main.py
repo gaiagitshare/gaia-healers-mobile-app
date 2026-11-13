@@ -1379,6 +1379,17 @@ def get_attendees(
         for _a in attendees:
             _a.effective_access = _effective_access(db, _a)
     _stamp_card_state(db, attendees)
+    # Ticket email status, read from the delivery history. The list must load
+    # even when that second database cannot be read, so a failure here only
+    # leaves the column empty.
+    try:
+        import email_center as _ec
+        _mail = _ec.attendee_email_status(db, event_id, attendees)
+    except Exception as exc:                           # noqa: BLE001
+        logging.getLogger("event").warning("attendee list: ticket email status unavailable: %s", exc)
+        _mail = {}
+    for _a in attendees:
+        _a.ticket_email = _mail.get(_a.id)
     return attendees
 
 @app.post("/events/{event_id}/attendees/import", response_model=schemas.AttendeeImportResponse)

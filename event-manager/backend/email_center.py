@@ -347,6 +347,40 @@ def unit_status(d):
     return "unknown"
 
 
+def attendee_email_status(db, event_id, attendees):
+    """The ticket email of each attendee, for the attendee list: the same
+    evidence and the same words as Email Center's Tickets tab.
+
+    -> {attendee_id: {"status", "at", "to"}}. status is unit_status() of the
+    email that carried the ticket, "held" for a ticket held back from sending,
+    "not_sent" for a ticket Email Center sends but has not, and nothing at all
+    for a badge Email Center never emails (crew, speakers, walk-ins)."""
+    s = _store()
+    try:
+        deliv = _delivery_rows(s, event_id)
+    finally:
+        s.close()
+    of_ticket = {}
+    for d in deliv.values():
+        for t in d["ticket_ids"]:
+            old = of_ticket.get(t)
+            if old is None or str(d.get("updated_at") or "") > str(old.get("updated_at") or ""):
+                of_ticket[t] = d
+    held = {h.attendee_id for h in db.query(models.EmailHold).filter(
+        models.EmailHold.event_id == event_id, models.EmailHold.state == "held").all()}
+    out = {}
+    for a in attendees:
+        d = of_ticket.get(a.id)
+        if d:
+            out[a.id] = {"status": unit_status(d), "at": d.get("updated_at"), "to": d.get("recipient")}
+        elif a.id in held:
+            out[a.id] = {"status": "held", "at": None, "to": None}
+        elif M._ticket_active(a) and ((a.registration_source or "") in PAID_SOURCES + tuple(M.PARTY_SEAT_SOURCES)
+                                      or (a.attendance_type or "") == "paid"):
+            out[a.id] = {"status": "not_sent", "at": None, "to": None}
+    return out
+
+
 def retry_kind(u, now=None):
     """Can this email be retried, and how? -> (kind, wait_until).
 

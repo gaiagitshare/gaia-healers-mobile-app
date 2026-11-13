@@ -42,6 +42,29 @@ const LIFECYCLE_LABELS = {
 };
 const KIND_COLOR = { 'base ticket': 'primary', 'add-on': 'success', upgrade: 'secondary' };
 
+
+// Ticket email status words (Email Center's own), and how they look.
+const MAIL_LOOK = {
+    clicked: { label: 'Opened ✓', color: 'success' },
+    opened: { label: 'Opened ✓', color: 'success' },
+    delivered: { label: 'Delivered ✓', color: 'success', variant: 'outlined' },
+    accepted: { label: 'Sent', color: 'info', variant: 'outlined' },
+    unknown: { label: 'Check in Email Center', color: 'warning', variant: 'outlined' },
+    failed: { label: 'Failed ✗', color: 'error' },
+    bounced: { label: 'Bounced ✗', color: 'error' },
+    held: { label: 'Held', color: 'warning', variant: 'outlined', tip: 'Held back from sending in Email Center' },
+    not_sent: { label: 'Not sent', color: 'default', variant: 'outlined', tip: 'No ticket email has gone out yet' },
+};
+const MAIL_GROUPS = { reached: 'Delivered or opened', sent: 'Sent, no delivery news', failed: 'Failed or bounced', waiting: 'Not sent or held', none: 'No ticket email' };
+const mailGroup = (a) => {
+    const s = a.ticket_email?.status;
+    if (!s) return 'none';
+    if (['delivered', 'opened', 'clicked'].includes(s)) return 'reached';
+    if (['failed', 'bounced'].includes(s)) return 'failed';
+    if (['not_sent', 'held'].includes(s)) return 'waiting';
+    return 'sent';
+};
+
 function Attendees({ timezone }) {
     const { id: eventId } = useParams();
     const compact = useMediaQuery(useTheme().breakpoints.down('md'));
@@ -98,6 +121,7 @@ function Attendees({ timezone }) {
     const [feedback, setFeedback] = useState(null);
     // filters
     const [fCheck, setFCheck] = useState('');
+    const [fMail, setFMail] = useState('');
     const [fStatus, setFStatus] = useState('');
     const [fBase, setFBase] = useState('');
     const [fAddon, setFAddon] = useState('');
@@ -291,6 +315,15 @@ function Attendees({ timezone }) {
     };
 
     const checkedInAt = (attendee) => formatVenueTime(attendee.checked_in_at, timezone);
+    // The ticket email, exactly as Email Center's Tickets tab reports it.
+    const mailChip = (attendee) => {
+        const m = attendee.ticket_email;
+        if (!m) return <Typography variant="caption" color="text.disabled" title="Email Center does not email this kind of badge">—</Typography>;
+        const look = MAIL_LOOK[m.status] || { label: m.status, color: 'default' };
+        const when = m.at ? formatVenueTime(m.at, timezone) : '';
+        const tip = m.to ? `${look.label} · to ${m.to}${when ? ` · ${when}` : ''}` : look.tip || look.label;
+        return <Chip size="small" color={look.color} variant={look.variant || 'filled'} label={look.label} title={tip} />;
+    };
     const statusChip = (attendee) => {
         const st = (attendee.registration_status || 'active').toLowerCase();
         if (st === 'refunded' || st === 'cancelled' || st === 'revoked') return <Chip size="small" color="error" label={LIFECYCLE_LABELS[st] || st} />;
@@ -366,6 +399,7 @@ function Attendees({ timezone }) {
     const applyFilters = (list) => list.filter((a) => {
         const ea = a.effective_access || {};
         if (fCheck === 'in' && !a.is_checked_in) return false;
+        if (fMail && mailGroup(a) !== fMail) return false;
         if (fCheck === 'out' && a.is_checked_in) return false;
         if (fStatus && (ea.status || ticketStatusOf(a)) !== fStatus) return false;
         if (fBase && (ea.base_ticket?.code || 'none') !== fBase) return false;
@@ -475,7 +509,7 @@ function Attendees({ timezone }) {
         else { setSortBy(key); setSortDir(key === 'purchased' || key === 'last' ? 'desc' : 'asc'); }
     };
     const uniq = (key) => Array.from(new Set((attendees || []).map((a) => a[key]).filter(Boolean))).sort();
-    const anyFilter = Boolean(fCheck || fStatus || fBase || fAddon || fFunnel || fDomain
+    const anyFilter = Boolean(fCheck || fMail || fStatus || fBase || fAddon || fFunnel || fDomain
         || fUtm || fPage || fSource || fProduct || fFrom || fTo);
     const addonCodes = counts ? Object.keys(counts.by_addon || {}) : [];
 
@@ -508,6 +542,7 @@ function Attendees({ timezone }) {
     const moreCount = moreFilterDefs.filter((f) => f[1]).length;
     const activeFilters = [
         ['Checked in', fCheck ? (fCheck === 'in' ? 'yes' : 'no') : '', () => setFCheck('')],
+        ['Ticket email', fMail ? MAIL_GROUPS[fMail] : '', () => setFMail('')],
         ['Status', fStatus ? (STATUS_LABELS[fStatus] || fStatus) : '', () => setFStatus('')],
         ['Ticket', fBase ? ticketName(fBase) : '', () => setFBase('')],
         ...moreFilterDefs,
@@ -516,7 +551,7 @@ function Attendees({ timezone }) {
         setFAddon(''); setFFunnel(''); setFDomain(''); setFProduct('');
         setFPage(''); setFSource(''); setFUtm(''); setFFrom(''); setFTo('');
     };
-    const clearAllFilters = () => { setFCheck(''); setFStatus(''); setFBase(''); clearMoreFilters(); };
+    const clearAllFilters = () => { setFCheck(''); setFMail(''); setFStatus(''); setFBase(''); clearMoreFilters(); };
 
     // One summary line for the whole reporting section, so the numbers are
     // visible without opening it. Each figure still comes from its own source.
@@ -599,6 +634,10 @@ function Attendees({ timezone }) {
                         </TextField>
                         <TextField select size="small" label="Checked in" value={fCheck} onChange={(e) => setFCheck(e.target.value)} sx={{ minWidth: 130 }}>
                             <MenuItem value="">Any</MenuItem><MenuItem value="in">Checked in</MenuItem><MenuItem value="out">Not checked in</MenuItem>
+                        </TextField>
+                        <TextField select size="small" label="Ticket email" value={fMail} onChange={(e) => setFMail(e.target.value)} sx={{ minWidth: 150 }}>
+                            <MenuItem value="">Any</MenuItem>
+                            {Object.entries(MAIL_GROUPS).map(([k, v]) => <MenuItem key={k} value={k}>{v}</MenuItem>)}
                         </TextField>
                         <Button size="small" variant={moreCount ? 'contained' : 'outlined'} color={moreCount ? 'primary' : 'inherit'}
                             startIcon={<FilterListIcon />} endIcon={<ExpandMoreIcon />}
@@ -1069,6 +1108,7 @@ function Attendees({ timezone }) {
                             <Box sx={{ mt: 1 }}>{accessCell(attendee)}</Box>
                             <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
                                 {statusChip(attendee)}
+                                {attendee.ticket_email && mailChip(attendee)}
                                 <Chip size="small" variant="outlined" onClick={() => openAcq(attendee)}
                                     label={attendee.acq_funnel_name || sourceOf(attendee) || 'Not captured'} />
                             </Stack>
@@ -1085,6 +1125,7 @@ function Attendees({ timezone }) {
                                 <TableCell>Attendee</TableCell>
                                 <TableCell>Ticket</TableCell>
                                 <TableCell>Status</TableCell>
+                                <TableCell>Ticket email</TableCell>
                                 <TableCell sx={{ whiteSpace: 'nowrap' }}>
                                     <TableSortLabel active={sortBy === 'purchased'}
                                         direction={sortBy === 'purchased' ? sortDir : 'desc'}
@@ -1113,8 +1154,8 @@ function Attendees({ timezone }) {
                                         <Typography variant="body2" sx={{ fontWeight: 600 }}>{attendee.first_name} {attendee.last_name}</Typography>
                                         <Typography variant="caption" color="text.secondary" noWrap
                                             sx={{ display: 'block' }}
-                                            title={`${attendee.email}${attendee.phone ? ` \u00b7 ${attendee.phone}` : ''}`}>
-                                            {attendee.email}{attendee.phone ? ` \u00b7 ${attendee.phone}` : ''}
+                                            title={`${attendee.email || "No email"}${attendee.phone ? ` \u00b7 ${attendee.phone}` : ''}`}>
+                                            {attendee.email || "No email"}{attendee.phone ? ` \u00b7 ${attendee.phone}` : ''}
                                         </Typography>
                                     </TableCell>
                                     <TableCell>{accessCell(attendee)}</TableCell>
@@ -1122,6 +1163,7 @@ function Attendees({ timezone }) {
                                         {statusChip(attendee)}
                                         {attendee.is_checked_in && checkedInAt(attendee) && <Typography variant="caption" display="block" color="text.secondary">{checkedInAt(attendee)}</Typography>}
                                     </TableCell>
+                                    <TableCell>{mailChip(attendee)}</TableCell>
                                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
                                         <Typography variant="body2">{fmtWhen(attendee.acq_purchased_at) || 'Not captured'}</Typography>
                                         {attendee.acq_purchase_count > 1 && (

@@ -160,6 +160,9 @@ class AttendeeUpdate(BaseModel):
     share_phone_with_exhibitors: Optional[bool] = None
 
 class Attendee(AttendeeBase):
+    # A speaker badge has no email (13 Nov 2026: nobody guesses an address),
+    # so what the API returns may lack one; what it accepts still needs one.
+    email: Optional[str] = None
     id: int
     event_id: int
     qr_code: str
@@ -174,6 +177,9 @@ class Attendee(AttendeeBase):
     card_url: Optional[str] = None
     card_state: Optional[str] = None
     card_active: Optional[bool] = None
+    # The ticket email, as Email Center sees it: {status, at, to}; None when
+    # this badge is not one Email Center emails.
+    ticket_email: Optional[Dict[str, Any]] = None
     # How they arrived (immutable), why they get a badge, and any money taken
     # at our own desk — never GHL-verified revenue.
     registration_source: Optional[str] = None

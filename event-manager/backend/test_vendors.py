@@ -202,10 +202,15 @@ check(int(real[1] or 0) >= 94500 and int(real[2] or 0) >= 94500,
 # directory, and never reaches a stand that has not settled.
 _scan = sql("SELECT company_name, stage, payment_status, is_published FROM exhibitors"
             " WHERE event_id=1 AND can_scan_leads=1")
-_unsettled = [(n, st, p) for n, st, p, _pub in _scan if st != "confirmed" or p not in ("paid", "comp")]
-check(not _unsettled, "no stand can scan a badge unless it is confirmed and settled", _unsettled)
-_listed_no_scan = sql("SELECT COUNT(*) FROM exhibitors WHERE event_id=1 AND is_published=1 AND can_scan_leads=0")[0][0]
-check(_listed_no_scan > 0, "and being in the directory still does not carry a scanner with it", _listed_no_scan)
+# Babak, 13 Nov 2026: scanning is free for every attending stand; what is
+# paid is seeing the leads (leads_unlocked / full_list_access). So the rules
+# that survive are: only a confirmed stand scans, and no stand that has not
+# settled has its leads opened or the full list.
+_unsettled = [(n, st) for n, st, p, _pub in _scan if st != "confirmed"]
+check(not _unsettled, "no stand can scan a badge unless it is confirmed", _unsettled)
+_open = sql("SELECT company_name, payment_status FROM exhibitors WHERE event_id=1 AND "
+            "(coalesce(leads_unlocked,0)=1 OR coalesce(full_list_access,0)=1) AND payment_status NOT IN ('paid','comp')")
+check(not _open, "and no unsettled stand has its leads opened or the full list", _open)
 # Publication, unlike scanning, HAS been decided: twenty stands were reviewed
 # and listed on 2026-09-06, and three were deliberately held back. One of the
 # three -- Vibroacoustic Solutions -- was released on 2026-09-26 once its
@@ -431,7 +436,8 @@ for i, em in enumerate(("zz-roster-a@example.invalid", "zz-roster-b@example.inva
 st, r = call("GET", "/scan/roster/%s" % TOK4)
 check(st == 404, "a stand with no scanning grant cannot read the roster at all", st)
 
-call("PUT", "/exhibitors/%d" % V4, {"can_scan_leads": True}, ADMIN)
+# A stand that has bought its leads (13 Nov 2026: scanned leads are paid).
+call("PUT", "/exhibitors/%d" % V4, {"can_scan_leads": True, "leads_unlocked": True}, ADMIN)
 st, r = call("GET", "/scan/roster/%s" % TOK4)
 check(st == 200 and r.get("attendees_total", 0) >= 2,
       "once granted, it learns HOW MANY people are at the event", r.get("attendees_total"))

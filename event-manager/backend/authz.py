@@ -401,3 +401,32 @@ def full_list_view(attendee) -> dict:
     v = lead_view(attendee)
     v.pop("consent", None)
     return v
+
+
+# ── Scanned leads: free to scan, contact details paid ───────────────────────
+#
+# Babak, 13 Nov 2026 (later the same day): a stand without the full list scans
+# for free, but every lead it scans stays fully blurred -- no name, company,
+# role, email or phone -- until it buys its leads (`leads_unlocked`, set by an
+# organiser when paid) or has the full list. It can still rate and note each
+# scan. Unlocking is retroactive: every lead already scanned opens. Locked
+# fields are never sent, so the blur in the browser is over nothing. The
+# organiser's own views are not affected.
+
+LOCKED_LEAD = {"locked": True, "first_name": "", "last_name": "", "company": "",
+               "job_title": "", "email": None, "phone": None}
+
+
+def stand_leads_unlocked(exhibitor) -> bool:
+    return bool(getattr(exhibitor, "leads_unlocked", False)) or stand_has_full_list(exhibitor)
+
+
+def for_stand(exhibitor, view):
+    """A lead view as THIS stand may see it now."""
+    if view is None:
+        return None
+    if stand_leads_unlocked(exhibitor):
+        v = dict(view)
+        v["locked"] = False
+        return v
+    return dict(LOCKED_LEAD)

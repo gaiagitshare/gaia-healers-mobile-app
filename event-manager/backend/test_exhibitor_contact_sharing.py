@@ -53,7 +53,7 @@ ORG = {"Authorization": "Bearer " + main.create_access_token({"sub": str(cur.las
 def stand(name):
     tok = "EXH-" + secrets.token_hex(8).upper()
     c = db.execute("insert into exhibitors(event_id,company_name,booth_number,contact_email,access_token,created_at,"
-                   "is_published,can_scan_leads,stage,payment_status) values(?,?,?,?,?,?,1,1,'confirmed','paid')",
+                   "is_published,can_scan_leads,leads_unlocked,stage,payment_status) values(?,?,?,?,?,?,1,1,1,'confirmed','paid')",  # leads bought (13 Nov 2026)
                    (EV, name, "99", "stand@example.invalid", tok, now))
     db.commit()
     return c.lastrowid, tok

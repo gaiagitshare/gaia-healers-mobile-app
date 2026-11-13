@@ -37,8 +37,9 @@ def row(stage, pay, scan, pub):
 so = vendor_sync.switch_offs
 check(so(row("confirmed", "paid", 1, 1), {}) == {}, "confirmed and paid keeps both")
 check(so(row("confirmed", "comp", 1, 1), {}) == {}, "confirmed and comp keeps both")
-check(so(row("confirmed", "paid", 1, 1), {"payment_status": "unpaid"}) == {"can_scan_leads": 0},
-      "confirmed but now unpaid: scanner off, still listed")
+# Babak, 13 Nov 2026: scanning is free; payment unlocks the leads, not the scanner.
+check(so(row("confirmed", "paid", 1, 1), {"payment_status": "unpaid"}) == {},
+      "confirmed but unpaid: keeps its scanner and listing (scanning is free)")
 check(so(row("confirmed", "paid", 1, 1), {"stage": "not_attending"}) == {"can_scan_leads": 0, "is_published": 0},
       "dropped out: scanner off and unlisted")
 check(so(row("waiting", "paid", 1, 0), {}) == {"can_scan_leads": 0}, "a stand that is not confirmed cannot keep a scanner")

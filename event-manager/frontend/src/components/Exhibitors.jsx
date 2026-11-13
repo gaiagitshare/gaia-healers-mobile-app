@@ -706,13 +706,25 @@ function RosterCards({ rows, sel, patch, onEdit, onLeads, onSetup, onDelete, onR
                                 onClick={() => patch(ex, { can_scan_leads: !ex.can_scan_leads })}
                                 sx={{ height: 24 }} />
                         </Tooltip>
+                        {!ex.full_list_access && (
+                            <Tooltip title={ex.leads_unlocked
+                                ? 'They paid for their leads: contact details of the people they scan are open. Click to lock again.'
+                                : 'Scanning is free; contact details of the people they scan stay locked until they pay. Click once paid.'}>
+                                <Chip size="small"
+                                    color={ex.leads_unlocked ? 'success' : 'default'}
+                                    variant={ex.leads_unlocked ? 'filled' : 'outlined'}
+                                    label={ex.leads_unlocked ? 'Leads unlocked' : 'Leads locked'}
+                                    onClick={() => patch(ex, { leads_unlocked: !ex.leads_unlocked })}
+                                    sx={{ height: 24 }} />
+                            </Tooltip>
+                        )}
                         <Tooltip title={ex.full_list_access
                             ? 'Their package includes the full attendee list (no scanning needed). Click to remove.'
                             : 'They see people they scan; the rest stay blurred until they buy the list. Click to include the full list.'}>
                             <Chip size="small"
                                 color={ex.full_list_access ? 'warning' : 'default'}
                                 variant={ex.full_list_access ? 'filled' : 'outlined'}
-                                label={ex.full_list_access ? 'Full list' : 'Scanned only'}
+                                label={ex.full_list_access ? 'Full list' : 'No full list'}
                                 onClick={() => patch(ex, ex.full_list_access ? { full_list_access: false } : { full_list_access: true, can_scan_leads: true })}
                                 sx={{ height: 24 }} />
                         </Tooltip>

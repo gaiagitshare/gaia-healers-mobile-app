@@ -1272,15 +1272,24 @@ def _leads_block(leads):
                 "<p>See every attendee&rsquo;s name, company and contact details, download them as a "
                 "spreadsheet, and scan badges at your stand to mark who you met.</p>"
                 + go % (_h(leads["scanner_url"]), "Open attendee list &amp; scanner") + "</div>")
-    price = leads.get("price")
-    buy = ("<b>Want everyone&rsquo;s details?</b>The full attendee list is available to buy for "
-           "$%s. Ask the Gaia Healers team at the registration desk." % (("%.2f" % price).rstrip("0").rstrip("."))
-           if price else
-           "<b>Want everyone&rsquo;s details?</b>The full attendee list will be available to buy "
-           "on your stand page. Price to be announced.")
-    return ("<div class=\"leads\"><h2>Collect leads at your stand</h2>"
-            "<p>Scan a visitor&rsquo;s badge with your phone and their name, company and contact "
-            "details are saved to your list, ready to download.</p>"
+    def money(p):
+        return ("$%s" % (("%.2f" % p).rstrip("0").rstrip("."))) if p else "price to be announced"
+    lists = leads.get("lists") or []
+    more = ("".join("<br>%s: %s." % (_h(o["title"]), money(o.get("price"))) for o in lists)
+            if lists else "<br>More attendee-list options are coming; details and prices to be announced.")
+    if leads.get("unlocked"):
+        what = ("<p>Scan a visitor&rsquo;s badge with your phone: their name, company and contact "
+                "details are saved to your list, ready to download.</p>")
+        buy = ("<b>Want more of the attendees?</b>%s<br>Ask the Gaia Healers team at the registration desk."
+               % more[4:])
+    else:
+        what = ("<p>Scanning is free. Every badge you scan is saved to your list, where you can add "
+                "a note and a rating. The list stays blurred until you buy your leads; then every "
+                "name, company, email and phone opens, including the ones you scanned before.</p>")
+        buy = ("<b>Unlock your leads</b>"
+               "Your scanned leads: %s. Every lead you scan now opens the moment you buy.%s<br>"
+               "Ask the Gaia Healers team at the registration desk." % (money(leads.get("leads_price")), more))
+    return ("<div class=\"leads\"><h2>Collect leads at your stand</h2>" + what
             + go % (_h(leads["scanner_url"]), "Open my badge scanner")
             + "<div class=\"buy\">%s</div></div>" % buy)
 

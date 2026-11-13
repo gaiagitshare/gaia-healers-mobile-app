@@ -110,13 +110,18 @@ def _ensure_event_columns():
                        ("setup_expires_at", "DATETIME"), ("activated_at", "DATETIME"),
                        ("contact_name", "VARCHAR"), ("sheet_notes", "TEXT"), ("sheet_synced_at", "DATETIME"),
                        ("site_name", "VARCHAR"), ("site_synced_at", "DATETIME"),
-                       ("vendor_fields", "TEXT"), ("full_list_access", "BOOLEAN DEFAULT 0")):
+                       ("vendor_fields", "TEXT"), ("full_list_access", "BOOLEAN DEFAULT 0"),
+                       ("leads_unlocked", "BOOLEAN DEFAULT 0")):
         if _ex and _col not in _ex:
             stmts.append("ALTER TABLE exhibitors ADD COLUMN %s %s" % (_col, _ddl))
     if "door_test_mode" not in cols:
         stmts.append("ALTER TABLE events ADD COLUMN door_test_mode BOOLEAN DEFAULT 0")
     if "lead_list_price" not in cols:
         stmts.append("ALTER TABLE events ADD COLUMN lead_list_price FLOAT")
+    if "scanned_leads_price" not in cols:
+        stmts.append("ALTER TABLE events ADD COLUMN scanned_leads_price FLOAT")
+    if "lead_offers" not in cols:
+        stmts.append("ALTER TABLE events ADD COLUMN lead_offers JSON")
     try:
         _tm = {c["name"] for c in inspector.get_columns("ticket_mappings")}
     except Exception:
@@ -4121,11 +4126,12 @@ def scan_qr_code(
             db.commit()
     # What the stand may see of THIS person: name, company, job title and their own
     # email/phone unless they opted out. Never the ticket tier (Babak, 9 Nov 2026).
-    view = dict(authz.lead_public_view(lead) or {})
+    view = authz.for_stand(exhibitor, authz.lead_public_view(lead))
     return schemas.QRScanResponse(
         success=True,
-        message=(f"Lead captured for {attendee.first_name} {attendee.last_name}" if captured_now
-                 else "Lead already captured"),
+        message=((("Lead captured for %s %s" % (view.get("first_name") or "", view.get("last_name") or "")).strip()
+                  if not view.get("locked") else "Lead captured")
+                 if captured_now else "Lead already captured"),
         attendee=view,
         lead_id=lead.id if lead else None
     )
@@ -4161,7 +4167,7 @@ def get_public_exhibitor_leads(
             "attendee_id": lead.attendee_id, "scanned_at": lead.scanned_at,
             "notes": lead.notes, "rating": lead.rating,
             # Never the ticket tier: stands get the person, not the ticket (9 Nov 2026).
-            "attendee": (dict(authz.lead_public_view(lead) or {})
+            "attendee": (authz.for_stand(exhibitor, authz.lead_public_view(lead))
                          if lead.attendee is not None else None),
         }
         for lead in leads
@@ -4198,7 +4204,7 @@ def update_public_lead(
         "id": lead.id, "exhibitor_id": lead.exhibitor_id,
         "attendee_id": lead.attendee_id, "scanned_at": lead.scanned_at,
         "notes": lead.notes, "rating": lead.rating,
-        "attendee": authz.lead_public_view(lead),
+        "attendee": authz.for_stand(lead.exhibitor, authz.lead_public_view(lead)),
     }
 
 @app.post("/leads/{lead_id}/notes")
@@ -4405,6 +4411,10 @@ def export_stand_leads(access_token: str, db: Session = Depends(get_db)):
     exhibitor = authz.exhibitor_for_token(db, access_token)
     if not exhibitor:
         raise HTTPException(status_code=404, detail="Invalid access token")
+    if not authz.stand_leads_unlocked(exhibitor):
+        # Contact details are what the stand buys; a download of locked rows
+        # would be a list of first names (Babak, 13 Nov 2026).
+        raise HTTPException(status_code=402, detail="Unlock your leads to download them.")
     return _leads_csv(db, exhibitor)
 
 # Badge generation
@@ -5030,6 +5040,8 @@ def update_exhibitor(
         # Who may scan attendees is a separate permission from editing a stand
         # (audit 7 Nov 2026: exhibitor managers could switch it on).
         authz.require_cap(db, current_user, exhibitor.event_id, "exhibitor.grant_scanning")
+    if "leads_unlocked" in _changes and bool(_changes["leads_unlocked"]) != bool(exhibitor.leads_unlocked):
+        authz.require_cap(db, current_user, exhibitor.event_id, "exhibitor.grant_scanning")
     if "full_list_access" in _changes and bool(_changes["full_list_access"]) != bool(exhibitor.full_list_access):
         # The whole attendee list is a bigger grant than scanning: same gate.
         authz.require_cap(db, current_user, exhibitor.event_id, "exhibitor.grant_scanning")
@@ -5306,20 +5318,41 @@ def exhibitor_roster(access_token: str, db: Session = Depends(get_db)):
         "shown": len(leads),
         "leads": [{
             "id": l.id, "scanned_at": l.scanned_at, "rating": l.rating,
-            "notes": l.notes, "attendee": authz.lead_public_view(l),
+            "notes": l.notes, "attendee": authz.for_stand(exhibitor, authz.lead_public_view(l)),
         } for l in leads],
         # Babak, 13 Nov 2026: top packages see everyone; the rest see a count
         # and an offer to buy the list (price set later; null = to be announced).
         "full_list": full,
+        "leads_unlocked": authz.stand_leads_unlocked(exhibitor),
     }
     if full:
         people = holders.order_by(func.lower(models.Attendee.last_name),
                                   func.lower(models.Attendee.first_name)).all()
         out["attendees"] = [authz.full_list_view(a) for a in people]
     else:
-        price = getattr(event, "lead_list_price", None) if event else None
-        out["list_offer"] = {"price": price, "currency": "USD",
-                             "status": "price_set" if price else "coming_soon"}
+        # What this stand can buy (Babak, 13 Nov 2026). No payment flow yet:
+        # a price shows once set; empty means "to be announced".
+        def _offer(price):
+            return {"price": price, "currency": "USD", "status": "price_set" if price else "coming_soon"}
+        out["offers"] = {"lists": lead_offers_public(event)}
+        if not out["leads_unlocked"]:
+            out["offers"]["scanned_leads"] = _offer(getattr(event, "scanned_leads_price", None) if event else None)
+    return out
+
+
+def lead_offers_public(event):
+    """The organiser's list offers, cleaned for a stand's screen. Empty list =
+    options not decided yet ("more options coming")."""
+    out = []
+    for o in ((getattr(event, "lead_offers", None) if event else None) or []):
+        if not isinstance(o, dict) or not str(o.get("title") or "").strip():
+            continue
+        try:
+            price = float(o["price"]) if o.get("price") not in (None, "") else None
+        except (TypeError, ValueError):
+            price = None
+        out.append({"title": str(o["title"]).strip()[:80], "note": str(o.get("note") or "").strip()[:240],
+                    "price": price, "currency": "USD", "status": "price_set" if price else "coming_soon"})
     return out
 
 
@@ -5374,7 +5407,9 @@ def vendor_setup_page(token: str, db: Session = Depends(get_db)):
     if ex.access_token and authz.exhibitor_for_token(db, ex.access_token):
         leads = {"scanner_url": STAND_SCANNER_BASE + ex.access_token,
                  "full": authz.stand_has_full_list(ex),
-                 "price": getattr(event, "lead_list_price", None) if event else None}
+                 "unlocked": authz.stand_leads_unlocked(ex),
+                 "lists": lead_offers_public(event),
+                 "leads_price": getattr(event, "scanned_leads_price", None) if event else None}
     return HTMLResponse(badge_card.vendor_setup_html(ex, event.name if event else "", token, leads))
 
 

@@ -26,7 +26,18 @@ import { getExhibitorRoster, scanQR, updatePublicLead, standLeadsCsvUrl, standFu
  * Babak, 13 Nov 2026: stands whose package includes the full attendee list get
  * it here (the server sends it only to them, same person-level rules). Every
  * other stand keeps the count below and an offer to buy the list.
+ *
+ * Later on 13 Nov: scanning is free, the leads are paid. A stand without the
+ * full list sees each scan as a blurred row it can rate and note; the server
+ * sends no name, company or contact until its leads are unlocked, so the blur
+ * is over placeholder bars, not over data.
  */
+const Locked = ({ when }) => (
+    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.6 }}>
+        &#128274; Locked{when ? ` · scanned ${new Date(when).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : ''}
+    </Typography>
+);
+
 function ExhibitorScan() {
     const { token } = useParams();
     const [roster, setRoster] = useState(null);
@@ -95,7 +106,8 @@ function ExhibitorScan() {
     const captured = roster.captured ?? leads.length;
     const remaining = Math.max(0, (roster.attendees_total || 0) - captured);
     const full = !!roster.full_list;
-    const offer = roster.list_offer;
+    const unlocked = !!roster.leads_unlocked;
+    const offers = roster.offers || {};
 
     return (
         <Box sx={{ maxWidth: 560, mx: 'auto', p: 2, pb: 8 }}>
@@ -108,7 +120,7 @@ function ExhibitorScan() {
                 </Box>
                 <Stack direction="row" spacing={1} alignItems="center">
                     <Chip color="success" label={`${captured} captured`} />
-                    {captured > 0 && (
+                    {captured > 0 && unlocked && (
                         <Button size="small" href={standLeadsCsvUrl(token)} download>Download CSV</Button>
                     )}
                 </Stack>
@@ -138,8 +150,10 @@ function ExhibitorScan() {
             {justScanned && (
                 <Alert severity="success" sx={{ mt: 2 }}
                     action={<IconButton size="small" onClick={() => setJustScanned(null)}><CloseIcon fontSize="small" /></IconButton>}>
-                    <strong>{justScanned.attendee?.first_name} {justScanned.attendee?.last_name}</strong>
-                    {justScanned.message ? ` — ${justScanned.message}` : ' added to your leads.'}
+                    {justScanned.attendee?.locked
+                        ? <strong>Badge scanned and saved to your leads.</strong>
+                        : <strong>{justScanned.attendee?.first_name} {justScanned.attendee?.last_name}</strong>}
+                    {!justScanned.attendee?.locked && (justScanned.message ? ` — ${justScanned.message}` : ' added to your leads.')}
                     {/* What this stand may keep of the person: their own details, nothing about the ticket. */}
                     {[justScanned.attendee?.job_title, justScanned.attendee?.company].filter(Boolean).length > 0 && (
                         <div>{[justScanned.attendee?.job_title, justScanned.attendee?.company].filter(Boolean).join(' · ')}</div>
@@ -150,7 +164,10 @@ function ExhibitorScan() {
                     {justScanned.attendee?.phone && (
                         <div><a style={{ color: "inherit", fontWeight: 600 }} href={`tel:${justScanned.attendee.phone}`}>{justScanned.attendee.phone}</a></div>
                     )}
-                    {!justScanned.attendee?.email && !justScanned.attendee?.phone && (
+                    {justScanned.attendee?.locked && (
+                        <div>Their details unlock when you buy your leads. Add a note now so you remember them.</div>
+                    )}
+                    {!justScanned.attendee?.locked && !justScanned.attendee?.email && !justScanned.attendee?.phone && (
                         <div>No contact details shared.</div>
                     )}
                 </Alert>
@@ -203,16 +220,42 @@ function ExhibitorScan() {
                 </>
             )}
 
-            {!full && offer && (
+            {!full && (
                 <Paper variant="outlined" sx={{ mt: 2, p: 2, borderStyle: 'dashed', borderColor: 'success.light' }}>
-                    <Typography variant="subtitle2">Want everyone&rsquo;s details?</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                        {offer.status === 'price_set' && offer.price
-                            ? `The full attendee list is available to buy for $${Number(offer.price).toLocaleString('en-US')}. Ask the Gaia Healers team at the registration desk.`
-                            : 'The full attendee list will be available to buy here on your stand page. Price to be announced.'}
+                    <Typography variant="subtitle2">
+                        {unlocked ? 'Want more of the attendees?' : 'Unlock your leads'}
+                    </Typography>
+                    {offers.scanned_leads && (
+                        <OfferLine title="Your scanned leads" offer={offers.scanned_leads}
+                            note="Name, company, email and phone of everyone you scan, plus a download. Leads you scan now open too." />
+                    )}
+                    {(offers.lists || []).map((o, i) => (
+                        <OfferLine key={i} title={o.title} offer={o} note={o.note} />
+                    ))}
+                    {(offers.lists || []).length === 0 && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                            More attendee-list options are coming. Details and prices to be announced.
+                        </Typography>
+                    )}
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                        To buy, ask the Gaia Healers team at the registration desk.
                     </Typography>
                 </Paper>
             )}
+        </Box>
+    );
+}
+
+function OfferLine({ title, offer, note }) {
+    const price = offer?.status === 'price_set' && offer.price
+        ? `$${Number(offer.price).toLocaleString('en-US')}` : 'Price to be announced';
+    return (
+        <Box sx={{ mt: 1 }}>
+            <Stack direction="row" justifyContent="space-between" gap={1}>
+                <Typography variant="body2" fontWeight={600}>{title}</Typography>
+                <Typography variant="body2" fontWeight={600} color="success.main">{price}</Typography>
+            </Stack>
+            <Typography variant="caption" color="text.secondary">{note}</Typography>
         </Box>
     );
 }
@@ -301,15 +344,26 @@ function LeadRow({ lead, token, onSaved }) {
                 <Box sx={{ width: 34, height: 34, borderRadius: '50%', bgcolor: 'primary.main', color: '#fff',
                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13,
                            fontWeight: 700, flex: '0 0 auto' }}>
-                    {(name[0] || 'A').toUpperCase()}
+                    {a.locked ? '?' : (name[0] || 'A').toUpperCase()}
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" fontWeight={600}>{name}</Typography>
-                    {a.company && <Typography variant="caption" color="text.secondary" display="block">{a.company}</Typography>}
+                    {a.locked ? (
+                        <Box aria-label="Locked lead" sx={{ filter: 'blur(4px)', userSelect: 'none' }}>
+                            {/* Placeholder bars: the server sent no details for a locked lead. */}
+                            <Box sx={{ height: 12, width: '55%', bgcolor: 'text.disabled', opacity: 0.5, borderRadius: 1, mt: 0.4 }} />
+                            <Box sx={{ height: 9, width: '38%', bgcolor: 'text.disabled', opacity: 0.3, borderRadius: 1, mt: 0.8 }} />
+                        </Box>
+                    ) : (
+                        <>
+                            <Typography variant="body2" fontWeight={600}>{name}</Typography>
+                            {a.company && <Typography variant="caption" color="text.secondary" display="block">{a.company}</Typography>}
+                        </>
+                    )}
                     {/* Only what the attendee agreed to share reaches this screen. */}
+                    {a.locked && <Locked when={lead.scanned_at} />}
                     {a.email && <Typography variant="caption" display="block" sx={{ overflowWrap: 'anywhere' }}>{a.email}</Typography>}
                     {a.phone && <Typography variant="caption" display="block">{a.phone}</Typography>}
-                    {!a.email && !a.phone && (
+                    {!a.locked && !a.email && !a.phone && (
                         <Typography variant="caption" color="text.secondary" display="block">
                             Contact details not shared
                         </Typography>

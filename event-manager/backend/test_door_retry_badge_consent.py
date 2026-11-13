@@ -193,6 +193,8 @@ check(dup == 0, "no two live tickets in the event share a badge token after all 
 
 print("\n== 3. consent belongs to the current holder ==")
 ex = db.execute("select access_token from exhibitors where event_id=? and can_scan_leads=1 and stage='confirmed' and access_token is not null limit 1", (EV,)).fetchone()
+# On this copy only: a stand that has bought its leads (scanned leads are paid, 13 Nov 2026).
+db.execute("update exhibitors set leads_unlocked=1 where access_token=?", (ex[0],)); db.commit()
 t = ticket("consent-old", phone="+10000000001")
 call("POST", "/events/%d/attendees/%d/sharing" % (EV, t["id"]), {"share_email": True, "share_phone": True, "reason": "synthetic yes"})
 st, l1 = call("POST", "/scan", {"qr_code": t["qr_code"], "access_token": ex[0]}, headers={})

@@ -110,9 +110,12 @@ def switch_offs(r, diff):
     """What this stand must lose, given its state after the sheet's changes.
     Off only: nothing here ever grants a scanner or a listing."""
     stage = diff.get("stage", r["stage"])
-    pay = diff.get("payment_status", r["payment_status"])
     off = {}
-    if r["can_scan_leads"] and not (stage == "confirmed" and pay in SETTLED):
+    # Babak, 13 Nov 2026: scanning is free for every attending stand; what is
+    # paid is seeing the leads (leads_unlocked / full_list_access, granted by
+    # an organiser). So a scanner goes off only when the stand stops attending,
+    # never for an unsettled payment (that turned 4 stands' scanners off).
+    if r["can_scan_leads"] and stage != "confirmed":
         off["can_scan_leads"] = 0
     if r["is_published"] and stage != "confirmed":
         off["is_published"] = 0

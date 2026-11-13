@@ -64,7 +64,7 @@ def stand(name, stage="confirmed", scan=True):
     tok = "EXH-" + secrets.token_hex(8).upper()
     # No sort_order, as the sheet and package syncs create them.
     cur = db.execute("insert into exhibitors(event_id,company_name,booth_number,contact_email,access_token,created_at,"
-                     "is_published,can_scan_leads,stage,payment_status) values(?,?,?,?,?,?,1,?,?,'paid')",
+                     "is_published,can_scan_leads,leads_unlocked,stage,payment_status) values(?,?,?,?,?,?,1,?,1,?,'paid')",  # leads bought (13 Nov 2026)
                      (EV, name, "99", "stand@example.invalid", tok, now, 1 if scan else 0, stage))
     db.commit()
     return cur.lastrowid, tok

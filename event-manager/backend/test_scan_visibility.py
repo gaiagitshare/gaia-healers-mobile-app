@@ -83,6 +83,12 @@ stand = db.execute("""select id, company_name, access_token from exhibitors
                       limit 1""").fetchone()
 check(stand is not None, "an exhibitor has scanning switched on", stand and stand["company_name"])
 if stand:
+    # On the served copy only: a stand that has bought its leads (13 Nov 2026:
+    # scanning is free, the scanned leads are paid). This suite checks what a
+    # paying stand sees; test_stand_full_list.py checks the locked case.
+    _w = sqlite3.connect(_DB); _w.execute("update exhibitors set leads_unlocked=1 where id=?", (stand["id"],))
+    _w.commit(); _w.close()
+if stand:
     print("     scanning as: %s" % stand["company_name"])
     for pass_name in PASSES:
         _t, qr, aid = token_for(pass_name)

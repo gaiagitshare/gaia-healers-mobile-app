@@ -105,9 +105,15 @@ class Event(Base):
     # taken this way is recorded as a rehearsal so it can never be mistaken for
     # real attendance.
     door_test_mode = Column(Boolean, default=False)
-    # Price of the full attendee list for a stand without it (USD). Empty
-    # means "price to be announced": the offer shows, nothing can be bought.
+    # Superseded the same day by lead_offers (kept: the column is live).
     lead_list_price = Column(Float, nullable=True)
+    # What else a stand can buy beyond its own scanned leads -- the whole list,
+    # part of it, packages -- as [{"title", "note", "price"}] (USD, price may
+    # be empty = to be announced). Babak, 13 Nov 2026: not decided yet, so it
+    # is data the organiser fills in later, not code. Empty = "coming soon".
+    lead_offers = Column(JSON, nullable=True)
+    # Price to unlock a stand's own scanned leads (USD); empty = to be announced.
+    scanned_leads_price = Column(Float, nullable=True)
     # One badge, more than one entry. Off is the secure default; a multi-day
     # conference turns it on.
     allow_reentry = Column(Boolean, default=False)
@@ -287,6 +293,11 @@ class Exhibitor(Base):
     # (Babak, 13 Nov 2026). Granted by an organiser like scanning, never
     # inferred from the package text. Such a stand can still scan.
     full_list_access = Column(Boolean, default=False)
+    # Contact details of the people THIS stand scanned (Babak, 13 Nov 2026):
+    # scanning is free, but a stand without the full list sees who it met
+    # (first name, company, role) and their last name, email and phone only
+    # once it has bought its leads. Set by an organiser when paid.
+    leads_unlocked = Column(Boolean, default=False)
     # What they bought, and whether they have paid for it.
     #
     # This lived in a spreadsheet column of free text and a green highlight,

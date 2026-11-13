@@ -180,7 +180,9 @@ function ExhibitorScan() {
             {leads.length === 0 ? (
                 <Paper variant="outlined" sx={{ p: 2.5, textAlign: 'center', color: 'text.secondary' }}>
                     <Typography variant="body2">
-                        Nobody yet. Scan a badge and they appear here, at the top.
+                        {unlocked
+                            ? 'Nobody yet. Scan a badge and they appear here, at the top.'
+                            : 'Nobody yet. Every badge you scan is saved here, blurred until you unlock your leads.'}
                     </Typography>
                 </Paper>
             ) : (
@@ -214,7 +216,9 @@ function ExhibitorScan() {
                     </Paper>
                     <Alert severity="info" icon={false} sx={{ mt: 1.5 }}>
                         <Typography variant="body2">
-                            Scan someone&rsquo;s badge and their details move up into your list.
+                            {unlocked
+                                ? 'Scan someone\u2019s badge and their details move up into your list.'
+                                : 'Scan someone\u2019s badge and they are saved to your list, blurred until you unlock your leads.'}
                         </Typography>
                     </Alert>
                 </>

@@ -10,6 +10,7 @@ SUBJECTS = {
     "setup": "Set up your stand profile — Gaia Healers ELEVATE 2026",
     "scanner": "Your badge scanner for the stand — Gaia Healers ELEVATE 2026",
     "reminder": "Reminder: set up your stand profile — Gaia Healers ELEVATE 2026",
+    "leads_update": "Update: your badge scanner and leads — Gaia Healers ELEVATE 2026",
 }
 
 
@@ -97,6 +98,22 @@ def render_scanner(ex, url):
              + '. Share it only with '
                'your own stand staff; if it is ever shared by mistake, reply and we will replace it.</p>')
     return {"subject": SUBJECTS["scanner"], "html": _frame(SUBJECTS["scanner"], inner)}
+
+
+def render_leads_update(ex, url):
+    """A short correction for stands whose scanner email predates the 13 Nov
+    rule (scanning free, scanned leads blurred until bought)."""
+    inner = (_head(ex)
+             + '<p style="line-height:1.55;margin:0 0 8px">A quick update to our earlier email about your badge scanner. '
+               'Your scanner link has not changed, and scanning visitors\' badges is <strong>free</strong>.</p>'
+               '<p style="line-height:1.55;margin:0 0 8px">Every badge you scan is saved to your lead list, where you can add '
+               'notes and a rating. The list stays blurred until you unlock your leads. Then every name, company, email '
+               'and phone opens, including everyone you scanned before, ready to download. To unlock, ask the Gaia Healers '
+               'team at the registration desk (price to be announced).</p>'
+             + _button(url, "Open my stand scanner")
+             + '<p style="line-height:1.5;margin:0 0 8px;font-size:14px">Sorry for any confusion, and thank you for '
+               'exhibiting with us.</p>')
+    return {"subject": SUBJECTS["leads_update"], "html": _frame(SUBJECTS["leads_update"], inner)}
 
 
 def render_reminder(ex, url, expires_text=""):

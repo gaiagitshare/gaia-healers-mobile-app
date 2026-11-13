@@ -993,7 +993,7 @@ def exhibitor_rows(db, event_id, s):
     return out
 
 
-EX_KINDS = ("setup", "scanner", "reminder")
+EX_KINDS = ("setup", "scanner", "reminder", "leads_update")
 REMIND_AFTER_HOURS = 48
 
 # The one thing an admin should do next for a stand, in priority order.
@@ -1136,8 +1136,15 @@ def send_exhibitor(db, event_id, ex_id, kind, actor, resend_reason=None, gw=None
                 return {"id": ex_id, "kind": kind, "state": "refused", "reason": "setup_not_sent_yet"}
             if not _setup_link(db, s, ex, mint_if_missing=False)[0]:
                 return {"id": ex_id, "kind": kind, "state": "refused", "reason": "setup_link_expired"}
-        if kind == "scanner" and not (ex.can_scan_leads and ex.access_token):
+        if kind in ("scanner", "leads_update") and not (ex.can_scan_leads and ex.access_token):
             return {"id": ex_id, "kind": kind, "state": "refused", "reason": "scanning_not_enabled"}
+        if kind == "leads_update":
+            # Only for a stand whose scanner email went out, and whose leads
+            # are actually locked (13 Nov 2026 rule).
+            if (ec_store.exhibitor_rows(s.db, event_id).get((ex_id, "scanner")) or {}).get("state") != "accepted":
+                return {"id": ex_id, "kind": kind, "state": "refused", "reason": "scanner_email_not_sent"}
+            if authz.stand_leads_unlocked(ex):
+                return {"id": ex_id, "kind": kind, "state": "refused", "reason": "leads_not_locked"}
         if kind == "setup" and ex.activated_at and not resend_reason:
             return {"id": ex_id, "kind": kind, "state": "refused", "reason": "profile_already_set_up"}
         gw = gw or gateway()
@@ -1161,6 +1168,8 @@ def send_exhibitor(db, event_id, ex_id, kind, actor, resend_reason=None, gw=None
             elif kind == "reminder":
                 url, exp, _ = _setup_link(db, s, ex, mint_if_missing=False)
                 payload = exhibitor_email.render_reminder(_ex_view(ex), url, exp[:10] if exp else "")
+            elif kind == "leads_update":
+                payload = exhibitor_email.render_leads_update(_ex_view(ex), _scanner_url(ex))
             else:
                 payload = exhibitor_email.render_scanner(_ex_view(ex), _scanner_url(ex))
             body = {"subject": payload["subject"], "html": payload["html"]}
@@ -1840,6 +1849,10 @@ def ec_ex_preview(event_id: int, ex_id: int, kind: str, db: Session = Depends(M.
             if not authz.can(db, current_user, event_id, "exhibitor.grant_scanning"):
                 raise HTTPException(status_code=403, detail="Not permitted for this event")
             p = exhibitor_email.render_scanner(_ex_view(ex), _scanner_url(ex) or "(scanning is not enabled for this stand)")
+        elif kind == "leads_update":
+            if not authz.can(db, current_user, event_id, "exhibitor.grant_scanning"):
+                raise HTTPException(status_code=403, detail="Not permitted for this event")
+            p = exhibitor_email.render_leads_update(_ex_view(ex), _scanner_url(ex) or "(scanning is not enabled for this stand)")
         else:
             raise HTTPException(status_code=400, detail="Unknown email type")
     finally:

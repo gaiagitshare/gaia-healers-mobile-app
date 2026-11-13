@@ -59,6 +59,13 @@ PAID_SOURCES = ("ghl_order", "ghl_invoice", "ghl_webhook")
 BATCH_LIMIT = 500
 STALE_SECONDS = 90          # a running batch whose heartbeat is older than this was interrupted
 SEND_PAUSE_SECONDS = float(os.environ.get("EMAIL_CENTER_SEND_PAUSE", "0.6"))
+# A retry batch goes to inboxes that just refused or deferred us (13 Nov 2026:
+# Microsoft 4.3.2/4.7.0 throttling). Space those sends out: 20s apart got
+# throttled mail through where 0.6s did not.
+RETRY_PAUSE_SECONDS = float(os.environ.get("EMAIL_CENTER_RETRY_PAUSE", "20"))
+# An email GHL accepted but the receiving server then failed may be retried,
+# but not straight away: a deferral needs time to clear.
+RETRY_COOLDOWN_MINUTES = float(os.environ.get("EMAIL_CENTER_RETRY_COOLDOWN_MIN", "30"))
 
 CAP_READ, CAP_REVIEW, CAP_SEND, CAP_EXPORT = ("ticket_email.read", "ticket_email.review",
                                               "ticket_email.send", "ticket_email.export")
@@ -340,6 +347,47 @@ def unit_status(d):
     return "unknown"
 
 
+def retry_kind(u, now=None):
+    """Can this email be retried, and how? -> (kind, wait_until).
+
+      'rejected'        GHL refused it outright: nothing went out.
+      'provider_failed' GHL accepted it, then the receiving server failed it
+                        (a deferral, a full inbox). A bounce is NOT retried:
+                        the address is wrong and must be fixed first.
+    wait_until is set while a provider failure is still cooling down."""
+    d = u.get("delivery_record") or {}
+    if u.get("delivery") == "failed" and d.get("state") == "rejected":
+        return "rejected", None
+    if u.get("delivery") == "failed" and d.get("state") in ("accepted", "delivered"):
+        last = _parse_ts(d.get("updated_at"))
+        if last and RETRY_COOLDOWN_MINUTES > 0:
+            ready = last + timedelta(minutes=RETRY_COOLDOWN_MINUTES)
+            if ready > (now or datetime.now(timezone.utc)):
+                return "provider_failed", ready.isoformat()
+        return "provider_failed", None
+    return None, None
+
+
+def _parse_ts(v):
+    if not v:
+        return None
+    try:
+        x = datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return x if x.tzinfo else x.replace(tzinfo=timezone.utc)
+
+
+def _retry_units(units):
+    """The emails a retry would send now (cooling-down ones are left out)."""
+    out = []
+    for u in units:
+        kind, wait = retry_kind(u)
+        if kind and not wait:
+            out.append(u)
+    return out
+
+
 _DELIVERY_ORDER = ["failed", "bounced", "unknown", "sending", "accepted", "delivered", "opened", "clicked"]
 
 
@@ -548,7 +596,8 @@ def _build_inner(db, event_id, s, only_buyer=None):
         effective = "pending_review" if changed else state
         delivery = booking_delivery(bunits)
         unsent = [u for u in bunits if u["delivery"] == "not_sent"]
-        retryable = [u for u in bunits if u["delivery"] == "failed" and (u["delivery_record"] or {}).get("state") == "rejected"]
+        retryable = _retry_units(bunits)
+        retry_waits = [w for w in (retry_kind(u)[1] for u in bunits) if w]
         blockers = list(critical)
         out.append({
             "key": key, "buyer_ticket_id": buyer_id, "order_ids": order_ids,
@@ -570,6 +619,7 @@ def _build_inner(db, event_id, s, only_buyer=None):
             "can_approve": not blockers and bool(unsent),
             "sendable": (effective == "approved" and not blockers and bool(unsent)),
             "retryable": (effective == "approved" and not blockers and bool(retryable)),
+            "retry_after": (min(retry_waits) if retry_waits and not retryable else None),
             "last_sent": max([(u["delivery_record"] or {}).get("updated_at") or "" for u in bunits] or [""]) or None,
             "attempts": sum((u["delivery_record"] or {}).get("attempts") or 0 for u in bunits),
             "last_error": next(((u["delivery_record"] or {}).get("result") for u in bunits
@@ -736,7 +786,7 @@ def send_booking(db, event_id, key, actor, resend_reason=None, retry=False, gw=N
             todo = [u for u in b["units"] if u["delivery"] in ("accepted", "delivered", "opened", "clicked", "bounced")
                     and (u["delivery_record"] or {}).get("state") in ("accepted", "delivered")]
         elif retry:
-            todo = [u for u in b["units"] if (u["delivery_record"] or {}).get("state") == "rejected"]
+            todo = _retry_units(b["units"])
         else:
             todo = [u for u in b["units"] if u["delivery"] == "not_sent"]
         if not todo:
@@ -755,14 +805,21 @@ def send_booking(db, event_id, key, actor, resend_reason=None, retry=False, gw=N
             prepared.append(order)
         results = []
         sha = "ec:" + b["fingerprint"][:20]
+        kinds = {u["unit_key"]: retry_kind(u)[0] for u in todo} if retry else {}
         for order in prepared:
             payload = _render(order)
+            why = resend_reason
+            if kinds.get(order["order_id"]) == "provider_failed":
+                # Accepted by GHL, failed at the receiving server: the history
+                # claim treats this as a resend of an accepted email.
+                rec = next(u for u in todo if u["unit_key"] == order["order_id"])["delivery_record"] or {}
+                why = "retry after delivery failure (%s)" % (rec.get("provider_status") or "failed")
 
             def transport(o, p, _to=order["recipient"]):
                 return gw.send(o["contact_id"], {"subject": p["subject"], "html": p["html"], "_to": _to}
                                if gw.fake else {"subject": p["subject"], "html": p["html"]})
             r = st.deliver(order, s, sha, lambda o: (True, ""), transport, lambda o, _p=payload: _p,
-                           retry_rejected=retry, resend_reason=resend_reason, allow_changed=retry)
+                           retry_rejected=retry, resend_reason=why, allow_changed=retry)
             results.append(r)
         states = [r["state"] for r in results]
         overall = ("sent" if all(x == "accepted" for x in states) else
@@ -1102,7 +1159,8 @@ def _batch_plan(db, event_id, keys=None, all_approved=False, mode="send"):
         elif b["critical"]:
             why = "blocked: " + "; ".join(c["detail"] for c in b["critical"])
         elif mode == "retry" and not b["retryable"]:
-            why = "no failed email to retry"
+            why = ("failed email can be retried after %s" % b["retry_after"][:16].replace("T", " ") + " UTC"
+                   if b.get("retry_after") else "no failed email to retry")
         elif mode == "send" and not b["sendable"]:
             why = "already sent (%s)" % b["delivery"].replace("_", " ")
         if why:
@@ -1113,8 +1171,8 @@ def _batch_plan(db, event_id, keys=None, all_approved=False, mode="send"):
     for k in (keys or []):
         if k not in built["by_key"]:
             exclude.append({"key": k, "reason": "not found"})
-    units = [u for b in include for u in b["units"]
-             if (u["delivery"] == "not_sent" if mode == "send" else (u.get("delivery_record") or {}).get("state") == "rejected")]
+    units = [u for b in include for u in (
+        [x for x in b["units"] if x["delivery"] == "not_sent"] if mode == "send" else _retry_units(b["units"]))]
     warnings = [{"key": b["key"], "detail": w["detail"]} for b in include for w in b["warnings"]]
     token = _sha({"mode": mode, "items": sorted((b["key"], b["fingerprint"]) for b in include), "t": built["template_sha"]})
     return {"mode": mode, "orders": len(include), "emails": len(units), "tickets": sum(len(u["ticket_ids"]) for u in units),
@@ -1205,7 +1263,7 @@ def _run_batch(batch_id, event_id):
                              (type(e).__name__, ec_store.now(), iid))
             finally:
                 db.close()
-            time.sleep(SEND_PAUSE_SECONDS)
+            time.sleep(RETRY_PAUSE_SECONDS if kind == "retry" else SEND_PAUSE_SECONDS)
     finally:
         s.close()
 

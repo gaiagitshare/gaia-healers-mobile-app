@@ -111,7 +111,9 @@ export default function EmailCenterReview({ eventId, bookingKey, me, onClose, on
     const units = d?.units || [];
     const unknownUnits = units.filter((u) => u.delivery === 'unknown');
     const pendingUnits = units.filter((u) => u.delivery === 'not_sent');
-    const failedUnits = units.filter((u) => ['failed', 'bounced'].includes(u.delivery));
+    // A bounce is not retried (the address must be fixed first); a failure is,
+    // whether GHL refused it or the receiving server deferred it after GHL took it.
+    const failedUnits = units.filter((u) => u.delivery === 'failed');
     const canResend = RESENDABLE.has(d?.delivery);
     const match = d && d.paid_for === d.tickets_generated;
 
@@ -178,6 +180,8 @@ export default function EmailCenterReview({ eventId, bookingKey, me, onClose, on
                                                  reason={sBlock || (!d.sendable ? (d.review_state !== 'approved' ? 'Approve the order first.' : 'This order cannot be sent right now.') : '')}
                                                  onClick={() => setSendAsk('send')}>Send email</GatedButton>)}
                                 {d.retryable && <GatedButton variant="contained" color="warning" disabled={busy} reason={sBlock} onClick={() => setSendAsk('retry')}>Retry</GatedButton>}
+                                {!d.retryable && d.retry_after && (
+                                    <GatedButton variant="contained" color="warning" disabled reason={`The receiving mail server failed it. Retry is possible after ${gst(d.retry_after)}, so the deferral can clear.`}>Retry</GatedButton>)}
                                 {canResend && <GatedButton variant="outlined" disabled={busy} reason={sBlock} onClick={() => setNoteAsk({ kind: 'resend' })}>Resend</GatedButton>}
                                 {unknownUnits.length > 0 && (
                                     <Button variant="outlined" color="warning" disabled={busy} onClick={() => setNoteAsk({ kind: 'outcome' })}>Settle uncertain outcome</Button>)}
@@ -345,6 +349,8 @@ export default function EmailCenterReview({ eventId, bookingKey, me, onClose, on
                         <Typography key={u.unit_key} variant="body2">• {u.recipient} — {(u.ticket_ids || []).length} ticket{(u.ticket_ids || []).length === 1 ? '' : 's'}</Typography>
                     ))}
                     {!confirmUnits.length && <Typography variant="body2">Every email of this order that can be sent.</Typography>}
+                    {sendAsk === 'retry' && d?.last_error && <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Last result: {d.last_error}</Typography>}
+                    {sendAsk === 'retry' && <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>The same ticket email is sent again to the same address. If it keeps failing, check the address with the attendee.</Typography>}
                     <Typography variant="body2" sx={{ mt: 1 }}>
                         <b>{confirmUnits.length || '—'}</b> email(s), <b>{confirmUnits.reduce((a, u) => a + (u.ticket_ids || []).length, 0)}</b> ticket(s) in total.
                     </Typography>

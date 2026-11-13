@@ -33,7 +33,7 @@ FAKE = os.path.join(WORK, "fake-ghl.json")
 OUTBOX = os.path.join(WORK, "outbox.jsonl")
 json.dump({}, open(FAKE, "w"))
 os.environ.update(TICKET_DELIVERY_DB=TD, EMAIL_CENTER_FAKE=FAKE, EMAIL_CENTER_FAKE_OUTBOX=OUTBOX,
-                  EMAIL_CENTER_SEND_PAUSE="0.05", EMAIL_CENTER_CACHE_SECONDS="0")
+                  EMAIL_CENTER_SEND_PAUSE="0.05", EMAIL_CENTER_RETRY_PAUSE="0.05", EMAIL_CENTER_CACHE_SECONDS="0")
 os.environ.pop("EMAIL_CENTER_DISABLED", None)
 
 os.environ["TESTBED_RAW_APPROVALS"] = "1"
@@ -334,6 +334,48 @@ st_, r = call("POST", E + "/bookings/%s/outcome" % KA, {"unit_key": ba["units"][
 check(st_ == 200, "Settle after checking GHL: not sent", r)
 st_, r = call("POST", E + "/bookings/%s/send" % KA, {"retry": True, "fingerprint": booking(KA)[1]["fingerprint"]}, ORG)
 check(r.get("state") == "sent" and len(outbox()) == n0 + 1, "Then retry sends once", r)
+
+# 13 Nov 2026: GHL accepted, then the receiving server failed it (Microsoft
+# 4.3.2/4.7.0 deferrals). Retryable after a cool-down; a bounce is not.
+def provider(unit_key, status, minutes_ago):
+    tdx = sqlite3.connect(TD)
+    tdx.execute("update order_ticket_delivery set provider_status=?,provider_checked_at=?,updated_at=? where order_id=?",
+               (status, datetime.now(timezone.utc).isoformat(),
+                (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).isoformat(), unit_key))
+    tdx.commit(); tdx.close()
+KP, EP = fresh("Papa")
+check(send(KP)[1].get("state") == "sent", "Provider failure: first send accepted by GHL")
+uk = booking(KP)[1]["units"][0]["unit_key"]
+provider(uk, "failed", 5)
+st_, bp = booking(KP)
+check(bp["delivery"] == "failed" and not bp["retryable"] and bp.get("retry_after"),
+      "Receiving server failed it 5 min ago: not retryable yet, says when", (bp["delivery"], bp["retryable"], bp.get("retry_after")))
+n0 = len(outbox())
+check(send(KP, retry=True)[1].get("state") == "skipped" and len(outbox()) == n0, "Retry during the cool-down sends nothing")
+st_, plan = call("POST", E + "/batches/preview", {"retry": True, "keys": [KP]}, ORG)
+check(st_ == 200 and plan.get("emails") == 0 and any("can be retried after" in x.get("reason", "") for x in plan.get("excluded", [])),
+      "Retry batch preview excludes it, with the time", plan)
+provider(uk, "failed", 31)
+st_, bp = booking(KP)
+check(bp["retryable"] and not bp.get("retry_after"), "After the cool-down: retryable", (bp["retryable"], bp.get("retry_after")))
+st_, plan = call("POST", E + "/batches/preview", {"retry": True, "keys": [KP]}, ORG)
+check(st_ == 200 and plan.get("emails") == 1, "Retry batch preview counts the provider-failed email", plan)
+st_, r = call("POST", E + "/bookings/%s/send" % KP, {"retry": True, "fingerprint": bp["fingerprint"]}, ORG)
+check(r.get("state") == "sent" and len(outbox()) == n0 + 1, "Retry sends it again, once", r)
+tdx = sqlite3.connect(TD)
+last = tdx.execute("select kind,reason from delivery_attempts where order_id=? order by rowid desc limit 1", (uk,)).fetchone()
+rec = tdx.execute("select state,provider_status,attempt_count from order_ticket_delivery where order_id=?", (uk,)).fetchone()
+tdx.close()
+check(last and last[0] == "resend" and "delivery failure" in (last[1] or ""), "History records it with the reason", last)
+check(rec[0] == "accepted" and rec[1] is None and rec[2] == 2, "Delivery record: accepted again, provider status reset, 2 attempts", rec)
+st_, bp = booking(KP)
+check(bp["delivery"] == "accepted" and not bp["retryable"], "...and is no longer offered for retry", bp["delivery"])
+check(send(KP, retry=True)[1].get("state") == "skipped" and len(outbox()) == n0 + 1, "A second retry click sends nothing")
+KQ, EQ = fresh("Quebec")
+send(KQ)
+provider(booking(KQ)[1]["units"][0]["unit_key"], "bounced", 90)
+st_, bb = booking(KQ)
+check(bb["delivery"] == "bounced" and not bb["retryable"] and not bb.get("retry_after"), "A bounce is never retried (fix the address first)", bb["delivery"])
 KD, ED = fresh("Juliet")
 fake(dnd=[ED])
 n0 = len(outbox())

@@ -260,6 +260,8 @@ export const exportExhibitorLeads = (exhibitorId) =>
 export const rotateScannerToken = (exhibitorId) => api.post(`/exhibitors/${exhibitorId}/rotate-scanner-token`);
 // The stand's own CSV. A plain link: the scanner token in the path is the credential.
 export const standLeadsCsvUrl = (accessToken) => `${API_URL}/scan/leads/${encodeURIComponent(accessToken)}/export.csv`;
+// The whole attendee list, for a stand whose package includes it (404 otherwise).
+export const standFullListCsvUrl = (accessToken) => `${API_URL}/scan/roster/${encodeURIComponent(accessToken)}/attendees.csv`;
 // A fresh setup link for one stand. Issuing a new one retires the previous.
 export const vendorActivationLink = (id, rotate = false) => api.post(`/exhibitors/${id}/activation-link${rotate ? '?rotate=1' : ''}`);
 // A stand's pictures and its catalogue. The same rows the stand edits through

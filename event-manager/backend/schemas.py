@@ -57,6 +57,8 @@ class EventUpdate(BaseModel):
     public_counters: Optional[bool] = None
     networking_enabled: Optional[bool] = None
     map_image_url: Optional[str] = None
+    # Full attendee list price for stands without it; null = to be announced.
+    lead_list_price: Optional[float] = None
     # Pass an explicit list to reset which fields are locked from auto-sync.
     # If omitted, any field edited here is auto-locked so the scraper won't clobber it.
     locked_fields: Optional[List[str]] = None
@@ -96,6 +98,7 @@ class Event(EventBase):
     # rehearsal was already running — every scan practice, the screen implying
     # real admission.
     door_test_mode: bool = False
+    lead_list_price: Optional[float] = None
     allow_reentry: bool = False
     map_image_url: Optional[str] = None
     # Unambiguous instants: the same moment however the reader's device is set.
@@ -355,6 +358,8 @@ class ExhibitorUpdate(BaseModel):
     is_published: Optional[bool] = None
     # Scanning is sold and granted, not implied by existing.
     can_scan_leads: Optional[bool] = None
+    # The whole attendee list without scanning (top packages).
+    full_list_access: Optional[bool] = None
     stage: Optional[str] = None                   # confirmed | waiting | unsure | ...
     public_email: Optional[str] = None            # from their own website
     public_phone: Optional[str] = None
@@ -392,6 +397,7 @@ class Exhibitor(ExhibitorBase):
     # Admin-facing only (ExhibitorPublic below never carries it): whether this
     # stand's scanner link actually works.
     can_scan_leads: Optional[bool] = False
+    full_list_access: Optional[bool] = False
     social_links: Optional[str] = None            # stored JSON list; the public feed cleans it
     is_featured: Optional[bool] = False
     stage: Optional[str] = "confirmed"

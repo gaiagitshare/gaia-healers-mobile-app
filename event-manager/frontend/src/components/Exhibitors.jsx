@@ -706,6 +706,16 @@ function RosterCards({ rows, sel, patch, onEdit, onLeads, onSetup, onDelete, onR
                                 onClick={() => patch(ex, { can_scan_leads: !ex.can_scan_leads })}
                                 sx={{ height: 24 }} />
                         </Tooltip>
+                        <Tooltip title={ex.full_list_access
+                            ? 'Their package includes the full attendee list (no scanning needed). Click to remove.'
+                            : 'They see people they scan; the rest stay blurred until they buy the list. Click to include the full list.'}>
+                            <Chip size="small"
+                                color={ex.full_list_access ? 'warning' : 'default'}
+                                variant={ex.full_list_access ? 'filled' : 'outlined'}
+                                label={ex.full_list_access ? 'Full list' : 'Scanned only'}
+                                onClick={() => patch(ex, ex.full_list_access ? { full_list_access: false } : { full_list_access: true, can_scan_leads: true })}
+                                sx={{ height: 24 }} />
+                        </Tooltip>
                     </Stack>
 
                     <Stack direction="row" spacing={0.5} alignItems="center"
@@ -812,6 +822,11 @@ function CommercialTable({ rows, patch, onEdit, onLeads, onSetup }) {
                                 <TableCell align="center">
                                     <Switch size="small" checked={!!r.can_scan_leads}
                                         onChange={(e) => patch(r, { can_scan_leads: e.target.checked })} />
+                                    {r.full_list_access && (
+                                        <Tooltip title="Package includes the full attendee list">
+                                            <Chip size="small" color="warning" label="Full list" sx={{ height: 20, ml: 0.5 }} />
+                                        </Tooltip>
+                                    )}
                                 </TableCell>
                                 <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                                     <Button size="small" onClick={() => onEdit({ ...r })}>Edit</Button>

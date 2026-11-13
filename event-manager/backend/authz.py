@@ -363,3 +363,41 @@ def exhibitor_for_token(db: Session, access_token: str) -> Optional[models.Exhib
     if not exhibitor or not exhibitor.can_scan_leads or not stand_is_live(exhibitor):
         return None
     return exhibitor
+
+
+# ── The whole attendee list (top packages) ──────────────────────────────────
+#
+# Babak, 13 Nov 2026: the stands whose package includes it see every ticket
+# holder without scanning (they can still scan); every other stand scans, sees
+# the rest as a blurred count, and will be able to buy the list. Who has it is
+# the organiser's grant (`full_list_access`), never read from package text.
+#
+# Same person-level rules as a scan: name, company and job title always; email
+# and phone only the holder's own and only where they have not opted out.
+# Crew, speaker and exhibitor-staff badges are not ticket holders and are not
+# on the list, nor are cancelled, refunded or revoked tickets.
+
+LIST_HOLDER_TYPES = ("paid", "complimentary")
+LIST_CLOSED_STATUSES = ("cancelled", "canceled", "refunded", "revoked", "transferred", "void")
+
+
+def stand_has_full_list(exhibitor) -> bool:
+    return bool(getattr(exhibitor, "full_list_access", False)) and stand_is_live(exhibitor)
+
+
+def list_holders_query(db: Session, event_id: int):
+    """Ticket holders at this event: the people on the attendee list, and the
+    number a stand without the list sees as its blurred count."""
+    from sqlalchemy import func as _f
+    return db.query(models.Attendee).filter(
+        models.Attendee.event_id == event_id,
+        models.Attendee.attendance_type.in_(LIST_HOLDER_TYPES),
+        ~_f.lower(_f.coalesce(models.Attendee.registration_status, "")).in_(LIST_CLOSED_STATUSES))
+
+
+def full_list_view(attendee) -> dict:
+    """One ticket holder as a full-list stand sees them. lead_view without the
+    internal consent block; the shape matches a lead's attendee."""
+    v = lead_view(attendee)
+    v.pop("consent", None)
+    return v

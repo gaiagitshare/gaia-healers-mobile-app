@@ -1212,6 +1212,22 @@ button[disabled]{opacity:.55;cursor:default}
 .newitem.on{display:grid}
 .empty2{padding:15px;border:1px dashed #cfdcd2;border-radius:12px;text-align:center;
   color:#8a998f;font-size:13.5px}
+.leads{margin:0 0 22px;padding:15px 16px;border-radius:14px;background:#eef6ea;border:1px solid #d6e7cf}
+.leads h2{margin:0 0 4px;font-size:16px}
+.leads p{margin:0 0 12px;font-size:13.5px;line-height:1.5;color:#3d5244}
+.leads .go{display:block;text-align:center;text-decoration:none;padding:12px;border-radius:999px;
+  background:#2e7d32;color:#fff;font-weight:650;font-size:15px}
+.leads .buy{margin:12px 0 0;padding:11px 13px;border-radius:11px;background:#fff;border:1px dashed #b9d3ae;
+  font-size:13px;line-height:1.5;color:#3d5244}
+.leads .buy b{display:block;color:#16231a;font-size:14px}
+.leads.full{background:#fff8e6;border-color:#f0dfae}
+@media (prefers-color-scheme:dark){
+  .leads{background:#15231a;border-color:#2b382e}
+  .leads p,.leads .buy{color:#b8c8bc}
+  .leads .buy{background:#101811;border-color:#2b382e}
+  .leads .buy b{color:#e8efe9}
+  .leads.full{background:#2a2414;border-color:#4a3f20}
+}
 @media (prefers-color-scheme:dark){
   body{background:#0e1510;color:#e8efe9}
   .sheet{background:#141d17;border-color:#243026;box-shadow:none}
@@ -1241,7 +1257,35 @@ def vendor_page_html(title, body_html):
             "</div></body></html>" % (_h(title), _VENDOR_CSS, _MARK, body_html))
 
 
-def vendor_setup_html(ex, event_name, token):
+def _leads_block(leads):
+    """Leads and the attendee list, at the top of the stand's own page.
+
+    `leads` is {"scanner_url", "full", "price"} or None (no working scanner:
+    the block says how to get one rather than linking to a dead page)."""
+    if not leads:
+        return ("<div class=\"leads\"><h2>Collect leads at your stand</h2>"
+                "<p>Your badge scanner is not switched on yet. Ask the Gaia Healers team at the "
+                "registration desk and they will turn it on for you.</p></div>")
+    go = "<a class=\"go\" href=\"%s\">%s</a>"
+    if leads.get("full"):
+        return ("<div class=\"leads full\"><h2>Your package includes the full attendee list</h2>"
+                "<p>See every attendee&rsquo;s name, company and contact details, download them as a "
+                "spreadsheet, and scan badges at your stand to mark who you met.</p>"
+                + go % (_h(leads["scanner_url"]), "Open attendee list &amp; scanner") + "</div>")
+    price = leads.get("price")
+    buy = ("<b>Want everyone&rsquo;s details?</b>The full attendee list is available to buy for "
+           "$%s. Ask the Gaia Healers team at the registration desk." % (("%.2f" % price).rstrip("0").rstrip("."))
+           if price else
+           "<b>Want everyone&rsquo;s details?</b>The full attendee list will be available to buy "
+           "on your stand page. Price to be announced.")
+    return ("<div class=\"leads\"><h2>Collect leads at your stand</h2>"
+            "<p>Scan a visitor&rsquo;s badge with your phone and their name, company and contact "
+            "details are saved to your list, ready to download.</p>"
+            + go % (_h(leads["scanner_url"]), "Open my badge scanner")
+            + "<div class=\"buy\">%s</div></div>" % buy)
+
+
+def vendor_setup_html(ex, event_name, token, leads=None):
     """The stand's own listing, as a form it can finish in one sitting."""
     v = lambda x: _h(x or "")
     done = ex.activated_at is not None
@@ -1249,6 +1293,7 @@ def vendor_setup_html(ex, event_name, token):
         "<p class=\"event\">%s</p>"
         "<h1>%s</h1>"
         "<p class=\"sub\">%s</p>"
+        "%s"
         "<form id=\"f\">"
         "<label><span>Company name</span>"
         "<input type=\"text\" name=\"company_name\" value=\"%s\" maxlength=\"120\" readonly aria-readonly=\"true\">"
@@ -1307,6 +1352,7 @@ def vendor_setup_html(ex, event_name, token):
         % (v(event_name), v(ex.company_name),
            "Update how your stand appears to attendees." if done
            else "Fill this in and your stand goes live in the attendee directory.",
+           _leads_block(leads),
            v(ex.company_name),
            ('<img src="%s" alt="">' % v(ex.logo_url)) if ex.logo_url else "<span>No logo</span>",
            "Change logo" if ex.logo_url else "Choose a logo",

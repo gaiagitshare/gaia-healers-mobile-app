@@ -7,7 +7,7 @@ import {
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import CloseIcon from '@mui/icons-material/Close';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { getExhibitorRoster, scanQR, updatePublicLead, standLeadsCsvUrl } from '../utils/api';
+import { getExhibitorRoster, scanQR, updatePublicLead, standLeadsCsvUrl, standFullListCsvUrl } from '../utils/api';
 
 /**
  * The stand's own screen: everyone at the event, and the ones they have met.
@@ -22,6 +22,10 @@ import { getExhibitorRoster, scanQR, updatePublicLead, standLeadsCsvUrl } from '
  * A person becomes visible here exactly once: when they hand over their badge
  * and the server, having checked this stand is allowed to scan at all, records
  * the exchange. What comes back is consent-filtered even then.
+ *
+ * Babak, 13 Nov 2026: stands whose package includes the full attendee list get
+ * it here (the server sends it only to them, same person-level rules). Every
+ * other stand keeps the count below and an offer to buy the list.
  */
 function ExhibitorScan() {
     const { token } = useParams();
@@ -90,6 +94,8 @@ function ExhibitorScan() {
     // the CSV download has every one of them.
     const captured = roster.captured ?? leads.length;
     const remaining = Math.max(0, (roster.attendees_total || 0) - captured);
+    const full = !!roster.full_list;
+    const offer = roster.list_offer;
 
     return (
         <Box sx={{ maxWidth: 560, mx: 'auto', p: 2, pb: 8 }}>
@@ -166,7 +172,9 @@ function ExhibitorScan() {
                 </Stack>
             )}
 
-            {remaining > 0 && (
+            {full && <FullList people={roster.attendees || []} token={token} />}
+
+            {!full && remaining > 0 && (
                 <>
                     <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>
                         {remaining} more people at this event
@@ -189,13 +197,74 @@ function ExhibitorScan() {
                     </Paper>
                     <Alert severity="info" icon={false} sx={{ mt: 1.5 }}>
                         <Typography variant="body2">
-                            These are not hidden — they were never sent. Your stand receives someone&rsquo;s
-                            details when they hand you their badge to scan, and only what they agreed to share.
+                            Scan someone&rsquo;s badge and their details move up into your list.
                         </Typography>
                     </Alert>
                 </>
             )}
+
+            {!full && offer && (
+                <Paper variant="outlined" sx={{ mt: 2, p: 2, borderStyle: 'dashed', borderColor: 'success.light' }}>
+                    <Typography variant="subtitle2">Want everyone&rsquo;s details?</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                        {offer.status === 'price_set' && offer.price
+                            ? `The full attendee list is available to buy for $${Number(offer.price).toLocaleString('en-US')}. Ask the Gaia Healers team at the registration desk.`
+                            : 'The full attendee list will be available to buy here on your stand page. Price to be announced.'}
+                    </Typography>
+                </Paper>
+            )}
         </Box>
+    );
+}
+
+function FullList({ people, token }) {
+    const [q, setQ] = useState('');
+    const [limit, setLimit] = useState(50);
+    const needle = q.trim().toLowerCase();
+    const hits = needle
+        ? people.filter((p) => [p.first_name, p.last_name, p.company, p.job_title, p.email]
+            .filter(Boolean).join(' ').toLowerCase().includes(needle))
+        : people;
+    return (
+        <>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 3, mb: 1 }} gap={1} flexWrap="wrap">
+                <Typography variant="subtitle2">Everyone at the event · {people.length}</Typography>
+                <Button size="small" variant="outlined" href={standFullListCsvUrl(token)} download>Download full list</Button>
+            </Stack>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                Included in your package. Email and phone show where the attendee shares them.
+            </Typography>
+            <TextField size="small" fullWidth placeholder="Search name, company or email" value={q}
+                onChange={(e) => { setQ(e.target.value); setLimit(50); }} sx={{ mb: 1 }} />
+            <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+                {hits.slice(0, limit).map((p, i) => {
+                    const name = [p.first_name, p.last_name].filter(Boolean).join(' ') || 'Attendee';
+                    return (
+                        <Box key={p.attendee_id || i} sx={{ px: 2, py: 1.2, borderTop: i ? '1px solid' : 'none', borderColor: 'divider' }}>
+                            <Typography variant="body2" fontWeight={600}>{name}</Typography>
+                            {(p.job_title || p.company) && (
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                    {[p.job_title, p.company].filter(Boolean).join(' · ')}
+                                </Typography>
+                            )}
+                            <Typography variant="caption" display="block" sx={{ wordBreak: 'break-all' }}>
+                                {p.email && <a style={{ color: 'inherit' }} href={`mailto:${p.email}`}>{p.email}</a>}
+                                {p.email && p.phone && ' · '}
+                                {p.phone && <a style={{ color: 'inherit' }} href={`tel:${p.phone}`}>{p.phone}</a>}
+                            </Typography>
+                        </Box>
+                    );
+                })}
+                {hits.length === 0 && (
+                    <Typography variant="body2" color="text.secondary" sx={{ p: 2, textAlign: 'center' }}>No match.</Typography>
+                )}
+            </Paper>
+            {hits.length > limit && (
+                <Button fullWidth size="small" sx={{ mt: 1 }} onClick={() => setLimit((n) => n + 100)}>
+                    Show more ({hits.length - limit} left)
+                </Button>
+            )}
+        </>
     );
 }
 

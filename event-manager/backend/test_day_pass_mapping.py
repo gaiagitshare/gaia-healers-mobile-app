@@ -162,8 +162,10 @@ check("no duplicate QR codes anywhere",
 # One email can hold several tickets (Babak, 6 Nov 2026): a transferred ticket on
 # top of a holder's own, or seats on a buyer's address. Two tickets on one email
 # that were each bought under it, with neither explained, is still a question.
+# A badge with no email (a speaker badge, 13 Nov 2026) repeats nothing.
 check("no unexplained repeat of an email within the event",
       n("""select count(*) from (select lower(email) from attendees where event_id=?
+             and coalesce(trim(email),'') != ''
              and coalesce(custom_data,'') not like '%"transfers"%'
              and coalesce(registration_source,'') not in ('rebuilt_seat','door_seat','reconciled_seat')
              group by 1 having count(*)>1)""") == 0)

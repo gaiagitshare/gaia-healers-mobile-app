@@ -105,6 +105,9 @@ class Event(Base):
     # taken this way is recorded as a rehearsal so it can never be mistaken for
     # real attendance.
     door_test_mode = Column(Boolean, default=False)
+    # Price of the full attendee list for a stand without it (USD). Empty
+    # means "price to be announced": the offer shows, nothing can be bought.
+    lead_list_price = Column(Float, nullable=True)
     # One badge, more than one entry. Off is the secure default; a multi-day
     # conference turns it on.
     allow_reentry = Column(Boolean, default=False)
@@ -280,6 +283,10 @@ class Exhibitor(Base):
     # was issued a working token on creation, so scanning was a side effect of
     # existing rather than something an organiser sold and granted.
     can_scan_leads = Column(Boolean, default=False)
+    # The whole attendee list without scanning: what the top packages bought
+    # (Babak, 13 Nov 2026). Granted by an organiser like scanning, never
+    # inferred from the package text. Such a stand can still scan.
+    full_list_access = Column(Boolean, default=False)
     # What they bought, and whether they have paid for it.
     #
     # This lived in a spreadsheet column of free text and a green highlight,

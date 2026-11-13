@@ -61,12 +61,29 @@ def render_setup(ex, url, expires_text=""):
     return {"subject": SUBJECTS["setup"], "html": _frame(SUBJECTS["setup"], inner)}
 
 
+SCANNER_INTRO = {
+    # The stand's package includes the whole attendee list.
+    "full": ('Here is your stand\'s page for the event. Your package includes the <strong>full attendee list</strong>: '
+             'every attendee\'s name, company and contact details, with search and a spreadsheet download. You can also '
+             'scan visitors\' badges to mark who you met, with room for notes and a 1&ndash;5 rating.'),
+    # Scanning is free and this stand has bought its leads.
+    "unlocked": ('Here is your stand\'s badge scanner. Scan a visitor\'s badge and their name, email, phone, company '
+                 'and job title are saved to your stand\'s lead list, with room for notes and a 1&ndash;5 rating. You can '
+                 'download your leads as a spreadsheet at any time.'),
+    # Scanning is free; the scanned leads are blurred until bought.
+    "locked": ('Here is your stand\'s badge scanner. Scanning is <strong>free</strong>: every badge you scan is saved to '
+               'your stand\'s lead list, with room for notes and a 1&ndash;5 rating. The list stays blurred until you '
+               'unlock your leads; then every name, company, email and phone opens, including everyone you scanned before, '
+               'ready to download. To unlock, ask the Gaia Healers team at the registration desk (price to be announced). '
+               'More attendee-list options are coming too.'),
+}
+
+
 def render_scanner(ex, url):
+    intro = SCANNER_INTRO.get((ex or {}).get("leads") or "unlocked", SCANNER_INTRO["unlocked"])
     inner = (_head(ex)
-             + '<p style="line-height:1.55;margin:0 0 8px">Here is your stand\'s badge scanner. Scan a visitor\'s badge and '
-               'their name, email, phone, company and job title are saved to your stand\'s lead list, with room for '
-               'notes and a 1&ndash;5 rating. You can download your leads as a spreadsheet at any time.</p>'
-             + _button(url, "Open my stand scanner")
+             + '<p style="line-height:1.55;margin:0 0 8px">' + intro + '</p>'
+             + _button(url, "Open my attendee list" if (ex or {}).get("leads") == "full" else "Open my stand scanner")
              + '<p style="font-size:17px;font-weight:bold;margin:14px 0 6px">How to scan</p>'
                '<ol style="margin:0 0 10px;padding-left:20px;line-height:1.6;font-size:14px">'
                '<li>Open the link on your phone in Safari (iPhone) or Chrome (Android).</li>'
@@ -75,7 +92,9 @@ def render_scanner(ex, url):
                '<li>Add a note or rating if you like. Each visitor is saved once, however often you scan them.</li>'
                '<li>Tip: use <em>Add to Home Screen</em> so the scanner is one tap away all weekend.</li></ol>'
                '<p style="line-height:1.5;margin:0 0 8px;padding:10px 12px;background:#fff6e5;border-radius:8px;font-size:14px">'
-               '<strong>Keep this link private.</strong> Anyone with it can see your stand\'s leads. Share it only with '
+               '<strong>Keep this link private.</strong> Anyone with it can see your stand\'s leads'
+             + (' and the attendee list' if (ex or {}).get("leads") == "full" else '')
+             + '. Share it only with '
                'your own stand staff; if it is ever shared by mistake, reply and we will replace it.</p>')
     return {"subject": SUBJECTS["scanner"], "html": _frame(SUBJECTS["scanner"], inner)}
 

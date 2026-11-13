@@ -916,7 +916,13 @@ def _scanner_url(ex):
 
 
 def _ex_view(ex):
-    return {"company_name": ex.company_name, "booth_number": ex.booth_number, "contact_name": ex.contact_name}
+    # "leads": what the stand's scanner shows, so the email promises exactly
+    # that (Babak, 13 Nov 2026): the full list, its scans open, or its scans
+    # locked until it buys them.
+    leads = ("full" if authz.stand_has_full_list(ex)
+             else "unlocked" if authz.stand_leads_unlocked(ex) else "locked")
+    return {"company_name": ex.company_name, "booth_number": ex.booth_number, "contact_name": ex.contact_name,
+            "leads": leads}
 
 
 def exhibitor_rows(db, event_id, s):

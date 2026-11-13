@@ -63,6 +63,22 @@ function ExhibitorScan() {
 
     useEffect(() => { load(); }, [load]);
 
+    // Keep the screen current while it sits open at the stand (Babak, 13 Nov
+    // 2026): the attendee count grows as tickets sell, and an unlock shows
+    // without a reload. Quiet: a missed refresh keeps what is on screen and
+    // shows no error. Skipped while the phone has the page in the background.
+    useEffect(() => {
+        if (!token) return undefined;
+        const id = setInterval(async () => {
+            if (document.visibilityState !== 'visible') return;
+            try {
+                const r = await getExhibitorRoster(token);
+                setRoster(r.data);
+            } catch (e) { /* keep the last good view */ }
+        }, 60000);
+        return () => clearInterval(id);
+    }, [token]);
+
     const submit = useCallback(async (code) => {
         const value = String(code || '').trim();
         if (!value || busy) return;

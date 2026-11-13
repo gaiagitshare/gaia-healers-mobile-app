@@ -52,7 +52,7 @@ test('invalid email is rejected', async () => {
 });
 
 test('valid join with unreachable GHL never strands the user — it returns the funnel', async () => {
-  const r = await post({ name: 'New Person', email: 'newperson-join-1@example.com' }, { 'x-forwarded-for': '203.0.113.10' });
+  const r = await post({ name: 'New Person', email: 'newperson-join-1@example.com' }, { 'x-real-ip': '203.0.113.10' });
   assert.equal(r.status, 200);
   assert.equal(r.json.ok, false, 'reports it could not finish here');
   assert.equal(r.json.delivery, 'funnel');
@@ -63,7 +63,7 @@ test('join is rate limited per ip+email (6th attempt is 429)', async () => {
   const ip = '203.0.113.55';
   const email = 'rate-join@example.com';
   let last;
-  for (let i = 0; i < 6; i++) last = await post({ name: 'Rate Test', email }, { 'x-forwarded-for': ip });
+  for (let i = 0; i < 6; i++) last = await post({ name: 'Rate Test', email }, { 'x-real-ip': ip });
   assert.equal(last.status, 429);
   assert.equal(last.json.code, 'rate_limited');
 });

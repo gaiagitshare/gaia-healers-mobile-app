@@ -2804,6 +2804,14 @@ def _held_tiers(db, attendee):
         ids.append(cd["admin_tier"])
     if not ids and attendee.ticket_type_id:
         ids.append(attendee.ticket_type_id)
+    # A programme speaker who also holds a ticket of their own (13 Nov 2026)
+    # speaks in the conference room whatever they bought: the event's Speaker
+    # pass is added to what they hold, never in place of it.
+    if cd.get("speaker_id") and ids:
+        sp = db.query(models.TicketType).filter(models.TicketType.event_id == attendee.event_id,
+                                                models.TicketType.code == "SPEAKER").first()
+        if sp:
+            ids.append(sp.id)
     out, seen = [], set()
     for i in ids:
         if i in seen:
@@ -11964,6 +11972,47 @@ def attach_member_identity(db, attendee, commit=False):
     return card
 
 
+# The one word printed above a person's name on their badge, and shown as their
+# role on the online card (13 Nov 2026, Babak). Decided here, once, from what
+# the person IS at this event -- never typed onto a badge by hand:
+#   SPEAKER    linked to a programme speaker (custom_data.speaker_id), or a
+#              speaker badge. Wins over anything else they also hold.
+#   VIP        an active pass, or add-on, that is a VIP ticket type.
+#   EXHIBITOR  stand staff (attendance_type exhibitor).
+#   VOLUNTEER  crew registered as a volunteer; other crew is STAFF.
+# Everyone else gets no word: a general ticket needs no label.
+BADGE_ROLES = ("SPEAKER", "VIP", "EXHIBITOR", "VOLUNTEER", "STAFF")
+
+
+def badge_role(db, attendee, eff=None):
+    if attendee is None:
+        return None
+    eff = eff or _effective_access(db, attendee)
+    if not eff.get("active"):
+        return None
+    cd = attendee.custom_data or {}
+    kind = (attendee.attendance_type or "").strip().lower()
+    if cd.get("speaker_id") or kind == "speaker":
+        return "SPEAKER"
+    ids = [x.get("id") for x in [eff.get("base_ticket") or {}] + list(eff.get("addons") or [])
+           if isinstance(x, dict) and x.get("id")]
+    if ids and db.query(models.TicketType).filter(models.TicketType.id.in_(ids),
+                                                  models.TicketType.is_vip == True).first():   # noqa: E712
+        return "VIP"
+    if kind == "exhibitor":
+        return "EXHIBITOR"
+    if kind == "staff":
+        return "VOLUNTEER" if "volunteer" in str(cd.get("note") or "").lower() else "STAFF"
+    return None
+
+
+def _participation_role(db, attendee):
+    """The public role word for the online card. VIP is a pass, not a role:
+    what somebody paid for stays off a page anybody can open."""
+    r = badge_role(db, attendee)
+    return r.title() if r in ("SPEAKER", "EXHIBITOR", "VOLUNTEER", "STAFF") else "Participant"
+
+
 def _sync_participation(db, card):
     """Record every event this token has an attendee row for. Only ever adds or
     refreshes — a line is never removed, because archiving or deleting our row
@@ -11988,7 +12037,7 @@ def _sync_participation(db, card):
         line.event_name = ev.name or ""
         line.event_year = str(ev.start_date.year) if ev.start_date else ""
         line.starts_on = ev.start_date
-        line.role = "Participant"
+        line.role = _participation_role(db, a)
         line.attended = bool(a.is_checked_in)
 
 
@@ -12048,6 +12097,14 @@ def _serve_card(token: str, request: FastAPIRequest, db, fmt: str):
         raise HTTPException(status_code=404, detail="Card not found")
     card, event, attendee = ctx
     view = badge_card.public_view(card, event, _participation(db, card))
+    view["event_role"] = _participation_role(db, attendee) if attendee is not None else ""
+    # The stored history line is written when the card is made; the role for
+    # the event the card names is read live, so a role given later shows now.
+    if view["event_role"] and view["event_role"] != "Participant" and event is not None:
+        _lbl = badge_card.event_label(event.name, str(event.start_date.year) if event.start_date else "")
+        for _e in view.get("events") or []:
+            if _e.get("label") == _lbl:
+                _e["role"] = view["event_role"]
     tok = card.public_token
     if fmt == "vcf":
         if not view.get("public"):
@@ -12773,15 +12830,17 @@ def badge_label_png(event_id: int, attendee_id: int, size: str = badge_card.DEFA
         raise HTTPException(status_code=400, detail="Unsupported dpi")
     w, h = badge_card.LABEL_SIZES[size or badge_card.DEFAULT_LABEL]
     token = badge_card.ensure_public_token(db, models, a)
+    role = badge_role(db, a)
     png, meta = badge_card.render_label(a.first_name, a.last_name, token, width_mm=w, height_mm=h,
                                         qr_mm=min(26, h - 6), layout=badge_card.LABEL_LAYOUT.get(size),
-                                        view="card" if view == "card" else "roll", dpi=dpi)
+                                        view="card" if view == "card" else "roll", dpi=dpi, role=role)
     return Response(content=png, media_type="image/png",
                     headers={"Cache-Control": "private, no-store",
                              "X-Label-Payload": meta["payload"],
                              "X-Label-Size": "%dx%d" % (w, h),
                              "X-Label-Layout": meta.get("layout", ""),
-                             "X-Label-Dpi": str(meta.get("dpi", dpi))})
+                             "X-Label-Dpi": str(meta.get("dpi", dpi)),
+                             "X-Label-Role": role or ""})
 
 
 # A token no attendee holds (new_token() draws 8 of [A-Z2-9]; this one is never

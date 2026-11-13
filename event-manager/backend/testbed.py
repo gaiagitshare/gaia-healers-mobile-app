@@ -103,7 +103,15 @@ def start(wait_seconds=40):
         if os.path.exists(live_td):
             _src = _sq.connect("file:%s?mode=ro" % live_td, uri=True)
             _dst = _sq.connect(td_copy)
-            _src.backup(_dst); _dst.close(); _src.close()
+            _src.backup(_dst)
+            # Email sending starts OFF in every copy, like re-entry above.
+            try:
+                _dst.execute("update delivery_control set value='off' where key in "
+                             "('email_center_ticket_sending','email_center_exhibitor_sending')")
+                _dst.commit()
+            except _sq.OperationalError:
+                pass
+            _dst.close(); _src.close()
         os.environ["TICKET_DELIVERY_DB"] = td_copy
     port = _free_port()
     env = dict(os.environ, DATABASE_URL="sqlite:///" + db)

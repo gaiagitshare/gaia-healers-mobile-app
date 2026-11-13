@@ -28,7 +28,17 @@ sys.path.insert(0, HERE)
 WORK = tempfile.mkdtemp(prefix="ec-test-")
 TD = os.path.join(WORK, "ticket-delivery.db")
 src = sqlite3.connect("file:%s?mode=ro" % os.path.join(HERE, "data", "ticket-delivery.db"), uri=True)
-dst = sqlite3.connect(TD); src.backup(dst); dst.close(); src.close()
+dst = sqlite3.connect(TD); src.backup(dst)
+# Sending starts OFF in every copy, whatever the live switches say (Babak
+# switched both on for the real event, 13 Nov 2026): these suites test the
+# switch itself and must not pass or fail on how the live event is set up.
+dst.execute("update delivery_control set value='off' where key in ('email_center_ticket_sending','email_center_exhibitor_sending')")
+# The real emails in the copy are marked as just checked, so "Refresh delivery
+# status" (60 per click) reaches this suite's own emails however many real
+# ones happen to be due on the day it runs.
+dst.execute("update order_ticket_delivery set provider_checked_at=? where state='accepted'",
+            (datetime.now(timezone.utc).isoformat(),))
+dst.commit(); dst.close(); src.close()
 FAKE = os.path.join(WORK, "fake-ghl.json")
 OUTBOX = os.path.join(WORK, "outbox.jsonl")
 json.dump({}, open(FAKE, "w"))

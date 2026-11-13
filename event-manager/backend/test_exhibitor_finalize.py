@@ -27,7 +27,12 @@ sys.path.insert(0, HERE)
 WORK = tempfile.mkdtemp(prefix="exfin-test-")
 TD = os.path.join(WORK, "ticket-delivery.db")
 src = sqlite3.connect("file:%s?mode=ro" % os.path.join(HERE, "data", "ticket-delivery.db"), uri=True)
-dst = sqlite3.connect(TD); src.backup(dst); dst.close(); src.close()
+dst = sqlite3.connect(TD); src.backup(dst)
+# Sending starts OFF in every copy, whatever the live switches say (Babak
+# switched both on for the real event, 13 Nov 2026): these suites test the
+# switch itself and must not pass or fail on how the live event is set up.
+dst.execute("update delivery_control set value='off' where key in ('email_center_ticket_sending','email_center_exhibitor_sending')")
+dst.commit(); dst.close(); src.close()
 FAKE = os.path.join(WORK, "fake-ghl.json")
 OUTBOX = os.path.join(WORK, "outbox.jsonl")
 BW = os.path.join(WORK, "bw"); os.makedirs(BW)

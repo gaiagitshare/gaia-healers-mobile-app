@@ -517,6 +517,10 @@ def render_card_html(view: dict, token: str, app_base: str = None) -> str:
     if not _ev and view.get("events"):
         _ev = view["events"][0].get("label") or ""
     event = _h(_ev or "Gaia Healers")
+    # The person's role at that event (Speaker, Exhibitor, Volunteer, Staff),
+    # never their pass: see main.badge_role.
+    _role = (view.get("event_role") or "").strip()
+    pill = ("<b>%s</b> \u00b7 %s" % (_h(_role), event)) if _role and _role != "Participant" else event
     og_title = "%s \u00b7 %s" % (view.get("name") or "Digital badge", view.get("event_name") or "Gaia Healers")
     og_desc = "Digital badge card from Gaia Healers."
     og_img = view.get("photo_url") or "%s/assets/gaia-icon.png" % app_base
@@ -568,7 +572,7 @@ def render_card_html(view: dict, token: str, app_base: str = None) -> str:
                 "<div class=\"actions\"><a class=\"btn btn--secondary\" href=\"%s\">Connect in the Gaia Healers app</a></div>"
                 "<div class=\"claim\" data-claim>Is this you, %s? <a href=\"%s\" data-claim-link>Create your password</a> \u2014 "
                 "your Gaia Healers profile is ready; one code from your email and you are in.</div>"
-                "</div>" % (event, _h(_initials(view)), name, state, locked, _h(connect_url), first, _h(activate_url)))
+                "</div>" % (pill, _h(_initials(view)), name, state, locked, _h(connect_url), first, _h(activate_url)))
     else:
         avatar = ("<img src=\"%s\" alt=\"\">" % _h(view["photo_url"])) if view.get("photo_url") else _h(_initials(view))
         role = ""
@@ -634,7 +638,7 @@ def render_card_html(view: dict, token: str, app_base: str = None) -> str:
                 "<a class=\"btn btn--secondary\" href=\"%s\">Connect in the Gaia Healers app</a>"
                 "<a class=\"btn btn--ghost\" href=\"%s\" data-owner-edit hidden>Edit my card</a></div>%s%s%s"
                 "<div class=\"claim\" data-claim>Is this your badge? <a href=\"%s\" data-claim-link>Sign in to your Gaia Healers profile</a></div></div>"
-                % (event, avatar, name, headline, role, city, tags, bio, services, pass_block, booking,
+                % (pill, avatar, name, headline, role, city, tags, bio, services, pass_block, booking,
                    "btn--secondary" if booking else "btn--primary", _h(token),
                    _ICON["mail"].replace("currentColor", "#0B1408" if not booking else "currentColor"),
                    _h(connect_url), _h(claim_url), links_html, locked_html, events_html, _h(activate_url)))
@@ -1046,33 +1050,77 @@ DEFAULT_LABEL = "50x30v"
 
 
 def render_label(first_name, last_name, token, width_mm=40, height_mm=50, qr_mm=26, base=None,
-                 layout=None, view="roll", dpi=DPI):
+                 layout=None, view="roll", dpi=DPI, role=None):
     """A 1-bit PNG at the printer's dpi (203 for the B1, 300 for the B1 Pro),
     sized for the roll. Portrait rolls get NAME over QR; a landscape roll gets
     QR beside name; layout="vertical" designs the sticker upright (length x
     width) and turns it to the roll. view="card" returns that upright design
-    unturned -- for a preview, never for a printer."""
+    unturned -- for a preview, never for a printer.
+
+    role (SPEAKER, VIP, EXHIBITOR, VOLUNTEER, STAFF) is printed as a black band
+    across the top of the sticker as it is worn, white capitals, above the
+    unchanged design; no role, no band."""
     if dpi not in LABEL_DPIS:
         raise ValueError("unsupported dpi %r" % (dpi,))
     token_dpi = _DPI.set(int(dpi))
     try:
-        return _render_label(first_name, last_name, token, width_mm, height_mm, qr_mm, base, layout, view)
+        return _render_label(first_name, last_name, token, width_mm, height_mm, qr_mm, base, layout, view,
+                             (role or "").strip().upper() or None)
     finally:
         _DPI.reset(token_dpi)
 
 
-def _render_label(first_name, last_name, token, width_mm, height_mm, qr_mm, base, layout, view):
+ROLE_BAND_MM = 5.2
+
+
+def _role_band(width_px, role):
+    """A full-width black band with the role in white capitals, as large as
+    fits (letter-spaced: it is read from across a room, not at a desk)."""
+    h = _mm(ROLE_BAND_MM)
+    band = Image.new("L", (width_px, h), 0)
+    d = ImageDraw.Draw(band)
+    text = " ".join(role)                                   # S P E A K E R
+    f = None
+    for size in range(_mm(3.6), _mm(2.0) - 1, -1):
+        f = _font(_FONT_SANS_BOLD, size)
+        if d.textlength(text, font=f) <= width_px - 2 * _mm(1.2):
+            break
+    else:
+        text = role
+        f = _font(_FONT_SANS_BOLD, _mm(2.4))
+    bb = f.getbbox("HXG")
+    d.text(((width_px - d.textlength(text, font=f)) / 2, (h - (bb[3] - bb[1])) / 2 - bb[1]), text, font=f, fill=255)
+    return band
+
+
+def _with_role(render, W, H, role, *args):
+    """Render the unchanged design in the space under the band, then add it."""
+    if not role:
+        return render(*args, W, H)
+    band = _role_band(W, role)
+    img, meta = render(*args, W, H - band.height)
+    out = Image.new("L", (W, H), 255)
+    out.paste(band, (0, 0))
+    out.paste(img, (0, band.height))
+    meta["role"] = role
+    return out, meta
+
+
+def _render_label(first_name, last_name, token, width_mm, height_mm, qr_mm, base, layout, view, role=None):
     W, H = _mm(width_mm), _mm(height_mm)
     if layout == "vertical":
-        img, meta = _render_vertical(first_name, last_name, token, H, W, base)
+        img, meta = _with_role(lambda f, l, t, w, h: _render_vertical(f, l, t, w, h, base),
+                               H, W, role, first_name, last_name, token)
         if view != "card":
             img = img.transpose(Image.ROTATE_90)         # exact 90° (rotate() resamples); top of the sticker to the left of the roll
         else:
             W, H = H, W
     elif H >= W:
-        img, meta = _render_portrait(first_name, last_name, token, W, H, base)
+        img, meta = _with_role(lambda f, l, t, w, h: _render_portrait(f, l, t, w, h, base),
+                               W, H, role, first_name, last_name, token)
     else:
-        img, meta = _render_landscape(first_name, last_name, token, W, H, qr_mm, base)
+        img, meta = _with_role(lambda f, l, t, w, h: _render_landscape(f, l, t, w, h, qr_mm, base),
+                               W, H, role, first_name, last_name, token)
     out = io.BytesIO()
     if layout == "vertical":
         # Threshold, don't dither: dithered letter edges print ragged on a

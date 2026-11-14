@@ -136,9 +136,9 @@ st, r = call("GET", "/scan/roster/%s" % TR)
 check(st == 200 and r.get("full_list") is False and "attendees" not in r, "no list for a regular stand",
       sorted(r) if isinstance(r, dict) else r)
 check(r.get("attendees_total") == holders, "the blurred count is ticket holders only", (r.get("attendees_total"), holders))
-TBA = {"price": None, "currency": "USD", "status": "coming_soon"}
+TBA = {"price": None, "currency": "USD", "status": "coming_soon", "checkout_url": None}
 check(r.get("offers") == {"lists": [], "scanned_leads": TBA},
-      "scanned leads: price to be announced; other options not decided yet", r.get("offers"))
+      "scanned leads: price to be announced, no checkout yet; no other options", r.get("offers"))
 st, _ = call("GET", "/scan/roster/%s/attendees.csv" % TR, raw=True)
 check(st == 404, "no CSV for a regular stand (same 404 as a bad link)", st)
 st, _ = call("GET", "/scan/roster/EXH-NOPE%s/attendees.csv" % TAG, raw=True)
@@ -223,11 +223,12 @@ LOCKD, TLK = stand("ZZ Locked %s" % TAG)
 st, html = setup_page(LOCKD)
 check(st == 200 and "Open my badge scanner" in html and ("/event/scan/" + TLK) in html
       and "stays blurred until you buy your leads" in html and "Your scanned leads: price to be announced" in html
-      and "More attendee-list options are coming" in html,
-      "regular stand: scanner link, blurred until bought, more options coming", st)
+      and "More attendee-list options are coming" not in html,
+      "regular stand: scanner link, blurred until bought, no other options promised", st)
 st, html = setup_page(REG)
-check(st == 200 and "stays blurred" not in html and "Want more of the attendees?" in html,
-      "stand that bought its leads: no lock note, other options only", st)
+check(st == 200 and "stays blurred" not in html and "Want more of the attendees?" not in html
+      and "Unlock your leads" not in html,
+      "stand that bought its leads: no lock note, nothing more to buy", st)
 OFF, TO = stand("ZZ Scanner off %s" % TAG, scan=0)
 st, html = setup_page(OFF)
 check(st == 200 and "not switched on yet" in html and ("/event/scan/" + TO) not in html,

@@ -41,6 +41,7 @@ import badge_card
 import wallet
 import vendor_page
 import payments
+import leads_checkout
 from fastapi import Response
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
@@ -111,7 +112,8 @@ def _ensure_event_columns():
                        ("contact_name", "VARCHAR"), ("sheet_notes", "TEXT"), ("sheet_synced_at", "DATETIME"),
                        ("site_name", "VARCHAR"), ("site_synced_at", "DATETIME"),
                        ("vendor_fields", "TEXT"), ("full_list_access", "BOOLEAN DEFAULT 0"),
-                       ("leads_unlocked", "BOOLEAN DEFAULT 0")):
+                       ("leads_unlocked", "BOOLEAN DEFAULT 0"), ("leads_unlocked_at", "DATETIME"),
+                       ("leads_unlock_source", "VARCHAR"), ("leads_unlock_payment_id", "INTEGER")):
         if _ex and _col not in _ex:
             stmts.append("ALTER TABLE exhibitors ADD COLUMN %s %s" % (_col, _ddl))
     if "door_test_mode" not in cols:
@@ -122,6 +124,10 @@ def _ensure_event_columns():
         stmts.append("ALTER TABLE events ADD COLUMN scanned_leads_price FLOAT")
     if "lead_offers" not in cols:
         stmts.append("ALTER TABLE events ADD COLUMN lead_offers JSON")
+    if "scanned_leads_checkout_url" not in cols:
+        stmts.append("ALTER TABLE events ADD COLUMN scanned_leads_checkout_url VARCHAR")
+    if "scanned_leads_product_ids" not in cols:
+        stmts.append("ALTER TABLE events ADD COLUMN scanned_leads_product_ids JSON")
     try:
         _tm = {c["name"] for c in inspector.get_columns("ticket_mappings")}
     except Exception:
@@ -1302,8 +1308,23 @@ def update_event(
     # touch; otherwise every content field the admin edits here is auto-locked so
     # the 6-hour auto-sync never overwrites a manual edit.
     explicit_locks = changes.pop("locked_fields", None)
+    if {"scanned_leads_price", "scanned_leads_checkout_url", "scanned_leads_product_ids"} & set(changes):
+        # Selling leads decides what stands see: the same gate as unlocking one.
+        authz.require_cap(db, current_user, event_id, "exhibitor.grant_scanning")
+        url = (changes.get("scanned_leads_checkout_url") or "").strip()
+        if "scanned_leads_checkout_url" in changes:
+            if url and not url.startswith("https://"):
+                raise HTTPException(status_code=422, detail="The checkout link must start with https://")
+            changes["scanned_leads_checkout_url"] = url or None
+        if "scanned_leads_product_ids" in changes:
+            changes["scanned_leads_product_ids"] = [str(p).strip() for p in (changes["scanned_leads_product_ids"] or [])
+                                                    if str(p or "").strip()] or None
     for key, value in changes.items():
         setattr(event, key, value)
+    if "scanned_leads_product_ids" in changes:
+        # Payments that arrived before the product was named here count too.
+        db.flush()
+        leads_checkout.sweep(db)
 
     if explicit_locks is not None:
         event.locked_fields = list(dict.fromkeys(explicit_locks))
@@ -5042,6 +5063,15 @@ def update_exhibitor(
         authz.require_cap(db, current_user, exhibitor.event_id, "exhibitor.grant_scanning")
     if "leads_unlocked" in _changes and bool(_changes["leads_unlocked"]) != bool(exhibitor.leads_unlocked):
         authz.require_cap(db, current_user, exhibitor.event_id, "exhibitor.grant_scanning")
+        if _changes["leads_unlocked"]:
+            exhibitor.leads_unlocked_at = datetime.utcnow()
+            exhibitor.leads_unlock_source = "admin"
+        else:
+            # Locked again by hand: the payment link goes too, so a later
+            # payment can open it afresh.
+            exhibitor.leads_unlocked_at = None
+            exhibitor.leads_unlock_source = None
+            exhibitor.leads_unlock_payment_id = None
     if "full_list_access" in _changes and bool(_changes["full_list_access"]) != bool(exhibitor.full_list_access):
         # The whole attendee list is a bigger grant than scanning: same gate.
         authz.require_cap(db, current_user, exhibitor.event_id, "exhibitor.grant_scanning")
@@ -5337,6 +5367,9 @@ def exhibitor_roster(access_token: str, db: Session = Depends(get_db)):
         out["offers"] = {"lists": lead_offers_public(event)}
         if not out["leads_unlocked"]:
             out["offers"]["scanned_leads"] = _offer(getattr(event, "scanned_leads_price", None) if event else None)
+            # Pay online (GHL checkout); the screen re-reads every minute and
+            # opens by itself once the payment lands.
+            out["offers"]["scanned_leads"]["checkout_url"] = leads_checkout.checkout_url(event, exhibitor)
     return out
 
 
@@ -5354,6 +5387,41 @@ def lead_offers_public(event):
         out.append({"title": str(o["title"]).strip()[:80], "note": str(o.get("note") or "").strip()[:240],
                     "price": price, "currency": "USD", "status": "price_set" if price else "coming_soon"})
     return out
+
+
+@app.get("/events/{event_id}/leads-payments")
+def list_leads_payments(event_id: int, db: Session = Depends(get_db),
+                        current_user: models.User = Depends(get_current_user)):
+    """Payments for this event's scanned-leads product, and the stand each one
+    opened -- or why it opened none (no stand with that email, two stands,
+    refunded). Organisers assign the ones that need a person."""
+    authz.require_cap(db, current_user, event_id, "exhibitor.grant_scanning")
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    rows = leads_checkout.payments_for_event(db, event)
+    return {"configured": bool(leads_checkout.product_ids(event)),
+            "checkout_url": getattr(event, "scanned_leads_checkout_url", None),
+            "price": getattr(event, "scanned_leads_price", None),
+            "attention": sum(1 for r in rows if r["needs_attention"]), "payments": rows}
+
+
+@app.post("/events/{event_id}/leads-payments/{payment_id}/assign")
+def assign_leads_payment(event_id: int, payment_id: int, body: dict, db: Session = Depends(get_db),
+                         current_user: models.User = Depends(get_current_user)):
+    """This payment was for that stand: open its leads and settle the row."""
+    authz.require_cap(db, current_user, event_id, "exhibitor.grant_scanning")
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    pe = db.query(models.PaymentEvent).filter(models.PaymentEvent.id == payment_id).first()
+    ex = db.query(models.Exhibitor).filter(models.Exhibitor.id == int((body or {}).get("exhibitor_id") or 0)).first()
+    if not event or not pe or not ex:
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        result = leads_checkout.assign(db, event, pe, ex, actor=current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    db.commit()
+    return {"ok": True, "result": result, "exhibitor_id": ex.id}
 
 
 @app.get("/scan/roster/{access_token}/attendees.csv")
@@ -5409,7 +5477,8 @@ def vendor_setup_page(token: str, db: Session = Depends(get_db)):
                  "full": authz.stand_has_full_list(ex),
                  "unlocked": authz.stand_leads_unlocked(ex),
                  "lists": lead_offers_public(event),
-                 "leads_price": getattr(event, "scanned_leads_price", None) if event else None}
+                 "leads_price": getattr(event, "scanned_leads_price", None) if event else None,
+                 "checkout_url": leads_checkout.checkout_url(event, ex)}
     return HTMLResponse(badge_card.vendor_setup_html(ex, event.name if event else "", token, leads))
 
 
@@ -9406,12 +9475,18 @@ def payments_sync(payload: schemas.PaymentSyncIn, db: Session = Depends(get_db),
         if (m.entitlement_type or "EVENT_TICKET") in ("EVENT_TICKET", "EVENT_UPGRADE"):
             maps.setdefault(m.external_product_id, []).append(m)
     seen = 0
+    leads_events = leads_checkout._leads_events(db)
+    unlocked = 0
     for row in (payload.transactions or []):
         tx = row.get("transaction") or {}
-        if _pe_upsert(db, tx, row.get("order") or {}, maps, payload.source or "mirror") is not None:
+        pe = _pe_upsert(db, tx, row.get("order") or {}, maps, payload.source or "mirror")
+        if pe is not None:
             seen += 1
+            # A stand that just paid for its leads opens now, not at the next sweep.
+            if leads_events and leads_checkout.apply_payment(db, pe, leads_events) == "unlocked":
+                unlocked += 1
     db.commit()
-    return {"ok": True, "recorded": seen}
+    return {"ok": True, "recorded": seen, "leads_unlocked": unlocked}
 
 
 @app.post("/identity/payments/reclassify")

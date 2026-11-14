@@ -1275,23 +1275,29 @@ def _leads_block(leads):
     def money(p):
         return ("$%s" % (("%.2f" % p).rstrip("0").rstrip("."))) if p else "price to be announced"
     lists = leads.get("lists") or []
-    more = ("".join("<br>%s: %s." % (_h(o["title"]), money(o.get("price"))) for o in lists)
-            if lists else "<br>More attendee-list options are coming; details and prices to be announced.")
+    more = "".join("<br>%s: %s." % (_h(o["title"]), money(o.get("price"))) for o in lists)
     if leads.get("unlocked"):
         what = ("<p>Scan a visitor&rsquo;s badge with your phone: their name, company and contact "
                 "details are saved to your list, ready to download.</p>")
         buy = ("<b>Want more of the attendees?</b>%s<br>Ask the Gaia Healers team at the registration desk."
-               % more[4:])
+               % more[4:]) if lists else ""
     else:
         what = ("<p>Scanning is free. Every badge you scan is saved to your list, where you can add "
                 "a note and a rating. The list stays blurred until you buy your leads; then every "
                 "name, company, email and phone opens, including the ones you scanned before.</p>")
-        buy = ("<b>Unlock your leads</b>"
-               "Your scanned leads: %s. Every lead you scan now opens the moment you buy.%s<br>"
-               "Ask the Gaia Healers team at the registration desk." % (money(leads.get("leads_price")), more))
+        if leads.get("checkout_url"):
+            # Babak, 14 Nov 2026: one price, paid online; it opens by itself.
+            buy = ("<b>Unlock your leads: %s</b>"
+                   "Pay online and your list opens within 15 minutes, including everyone you "
+                   "already scanned.%s<br><a href=\"%s\">Unlock my leads &ndash; %s</a>"
+                   % (money(leads.get("leads_price")), more, _h(leads["checkout_url"]), money(leads.get("leads_price"))))
+        else:
+            buy = ("<b>Unlock your leads</b>"
+                   "Your scanned leads: %s. Every lead you scan now opens the moment you buy.%s<br>"
+                   "Ask the Gaia Healers team at the registration desk." % (money(leads.get("leads_price")), more))
     return ("<div class=\"leads\"><h2>Collect leads at your stand</h2>" + what
             + go % (_h(leads["scanner_url"]), "Open my badge scanner")
-            + "<div class=\"buy\">%s</div></div>" % buy)
+            + ("<div class=\"buy\">%s</div>" % buy if buy else "") + "</div>")
 
 
 def vendor_setup_html(ex, event_name, token, leads=None):

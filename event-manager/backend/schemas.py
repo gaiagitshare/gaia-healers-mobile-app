@@ -61,6 +61,10 @@ class EventUpdate(BaseModel):
     scanned_leads_price: Optional[float] = None
     # Other offers (whole list, part of it, packages): [{title, note, price}].
     lead_offers: Optional[List[Any]] = None
+    # The GHL checkout a stand pays on, and the GHL product ids that count as
+    # buying its scanned leads (14 Nov 2026).
+    scanned_leads_checkout_url: Optional[str] = None
+    scanned_leads_product_ids: Optional[List[str]] = None
     # Pass an explicit list to reset which fields are locked from auto-sync.
     # If omitted, any field edited here is auto-locked so the scraper won't clobber it.
     locked_fields: Optional[List[str]] = None
@@ -102,6 +106,8 @@ class Event(EventBase):
     door_test_mode: bool = False
     scanned_leads_price: Optional[float] = None
     lead_offers: Optional[List[Any]] = None
+    scanned_leads_checkout_url: Optional[str] = None
+    scanned_leads_product_ids: Optional[List[str]] = None
     allow_reentry: bool = False
     map_image_url: Optional[str] = None
     # Unambiguous instants: the same moment however the reader's device is set.
@@ -404,6 +410,9 @@ class Exhibitor(ExhibitorBase):
     can_scan_leads: Optional[bool] = False
     full_list_access: Optional[bool] = False
     leads_unlocked: Optional[bool] = False
+    leads_unlocked_at: Optional[datetime] = None
+    leads_unlock_source: Optional[str] = None
+    leads_unlock_payment_id: Optional[int] = None
     social_links: Optional[str] = None            # stored JSON list; the public feed cleans it
     is_featured: Optional[bool] = False
     stage: Optional[str] = "confirmed"

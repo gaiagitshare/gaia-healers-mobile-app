@@ -114,6 +114,10 @@ class Event(Base):
     lead_offers = Column(JSON, nullable=True)
     # Price to unlock a stand's own scanned leads (USD); empty = to be announced.
     scanned_leads_price = Column(Float, nullable=True)
+    # Where a stand pays for them (the GHL checkout page) and which GHL product
+    # ids count as that purchase (Babak, 14 Nov 2026: $199, gateway = GHL).
+    scanned_leads_checkout_url = Column(String, nullable=True)
+    scanned_leads_product_ids = Column(JSON, nullable=True)
     # One badge, more than one entry. Off is the secure default; a multi-day
     # conference turns it on.
     allow_reentry = Column(Boolean, default=False)
@@ -298,6 +302,11 @@ class Exhibitor(Base):
     # (first name, company, role) and their last name, email and phone only
     # once it has bought its leads. Set by an organiser when paid.
     leads_unlocked = Column(Boolean, default=False)
+    # Why it is open: "payment" (matched automatically), "payment_assigned"
+    # (an organiser matched the payment), or "admin" (switched on by hand).
+    leads_unlocked_at = Column(DateTime, nullable=True)
+    leads_unlock_source = Column(String, nullable=True)
+    leads_unlock_payment_id = Column(Integer, nullable=True, index=True)
     # What they bought, and whether they have paid for it.
     #
     # This lived in a spreadsheet column of free text and a green highlight,

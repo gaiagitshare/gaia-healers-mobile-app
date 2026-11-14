@@ -42,6 +42,7 @@ from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 
 import authz
+import leads_checkout
 import main as M
 import models
 from ticket_delivery import ec_store, exhibitor_email
@@ -921,8 +922,11 @@ def _ex_view(ex):
     # locked until it buys them.
     leads = ("full" if authz.stand_has_full_list(ex)
              else "unlocked" if authz.stand_leads_unlocked(ex) else "locked")
+    # The price is promised only once stands can actually pay it online.
+    ev = getattr(ex, "event", None)
+    price = ev.scanned_leads_price if ev is not None and leads_checkout.checkout_url(ev, ex) else None
     return {"company_name": ex.company_name, "booth_number": ex.booth_number, "contact_name": ex.contact_name,
-            "leads": leads}
+            "leads": leads, "leads_price": price}
 
 
 def exhibitor_rows(db, event_id, s):

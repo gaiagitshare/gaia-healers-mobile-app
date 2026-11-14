@@ -22,6 +22,7 @@ import {
 import ImportCsvDialog from './ImportCsvDialog';
 import BulkToolbar, { useBulkSelection, SelectAllCheckbox } from './BulkToolbar';
 import LoadGate from './LoadGate';
+import LeadsPayments from './LeadsPayments';
 
 /**
  * Exhibitors — the stands: who is coming, what they bought, what they may do,
@@ -283,6 +284,8 @@ export default function Exhibitors({ eventId, onCountChange }) {
                          selection={sel} onDone={load} />
 
             {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
+
+            <LeadsPayments eventId={eventId} stands={rows} onChanged={load} />
 
             {rows.length > 0 && (
                 <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>

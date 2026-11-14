@@ -240,7 +240,7 @@ function ExhibitorScan() {
                 </>
             )}
 
-            {!full && (
+            {!full && (!unlocked || (offers.lists || []).length > 0) && (
                 <Paper variant="outlined" sx={{ mt: 2, p: 2, borderStyle: 'dashed', borderColor: 'success.light' }}>
                     <Typography variant="subtitle2">
                         {unlocked ? 'Want more of the attendees?' : 'Unlock your leads'}
@@ -252,14 +252,24 @@ function ExhibitorScan() {
                     {(offers.lists || []).map((o, i) => (
                         <OfferLine key={i} title={o.title} offer={o} note={o.note} />
                     ))}
-                    {(offers.lists || []).length === 0 && (
-                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                            More attendee-list options are coming. Details and prices to be announced.
+                    {offers.scanned_leads?.checkout_url ? (
+                        <>
+                            <Button variant="contained" color="success" fullWidth sx={{ mt: 1.5 }}
+                                href={offers.scanned_leads.checkout_url} target="_blank" rel="noopener">
+                                {offers.scanned_leads.price
+                                    ? `Unlock my leads \u2013 $${Number(offers.scanned_leads.price).toLocaleString('en-US')}`
+                                    : 'Unlock my leads'}
+                            </Button>
+                            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                                Secure online payment. Pay with your stand{'\u2019'}s email and this page opens by itself
+                                within 15 minutes. Paid and still blurred? Ask the Gaia Healers team at the registration desk.
+                            </Typography>
+                        </>
+                    ) : (
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                            To buy, ask the Gaia Healers team at the registration desk.
                         </Typography>
                     )}
-                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
-                        To buy, ask the Gaia Healers team at the registration desk.
-                    </Typography>
                 </Paper>
             )}
         </Box>

@@ -75,13 +75,22 @@ SCANNER_INTRO = {
     "locked": ('Here is your stand\'s badge scanner. Scanning is <strong>free</strong>: every badge you scan is saved to '
                'your stand\'s lead list, with room for notes and a 1&ndash;5 rating. The list stays blurred until you '
                'unlock your leads; then every name, company, email and phone opens, including everyone you scanned before, '
-               'ready to download. To unlock, ask the Gaia Healers team at the registration desk (price to be announced). '
-               'More attendee-list options are coming too.'),
+               'ready to download. %s'),
 }
+
+
+def _unlock_how(ex):
+    p = (ex or {}).get("leads_price")
+    if p:
+        return ('Unlocking costs <strong>$%s</strong>: tap <strong>Unlock my leads</strong> on your scanner page and pay '
+                'online, and the list opens within 15 minutes.' % (("%.2f" % p).rstrip("0").rstrip(".")))
+    return 'To unlock, ask the Gaia Healers team at the registration desk (price to be announced).'
 
 
 def render_scanner(ex, url):
     intro = SCANNER_INTRO.get((ex or {}).get("leads") or "unlocked", SCANNER_INTRO["unlocked"])
+    if "%s" in intro:
+        intro = intro % _unlock_how(ex)
     inner = (_head(ex)
              + '<p style="line-height:1.55;margin:0 0 8px">' + intro + '</p>'
              + _button(url, "Open my attendee list" if (ex or {}).get("leads") == "full" else "Open my stand scanner")
@@ -108,8 +117,7 @@ def render_leads_update(ex, url):
                'Your scanner link has not changed, and scanning visitors\' badges is <strong>free</strong>.</p>'
                '<p style="line-height:1.55;margin:0 0 8px">Every badge you scan is saved to your lead list, where you can add '
                'notes and a rating. The list stays blurred until you unlock your leads. Then every name, company, email '
-               'and phone opens, including everyone you scanned before, ready to download. To unlock, ask the Gaia Healers '
-               'team at the registration desk (price to be announced).</p>'
+               'and phone opens, including everyone you scanned before, ready to download. ' + _unlock_how(ex) + '</p>'
              + _button(url, "Open my stand scanner")
              + '<p style="line-height:1.5;margin:0 0 8px;font-size:14px">Sorry for any confusion, and thank you for '
                'exhibiting with us.</p>')

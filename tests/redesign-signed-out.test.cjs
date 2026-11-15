@@ -36,5 +36,15 @@ test('intro and activate pages use the app type and lime', () => {
 
 test('changed assets carry new version tags', () => {
   const html = read('home.html');
-  for (const f of ['gaia-guest-home.css', 'gaia-warm.css', 'gaia-ds.css', 'gaia-member.js', 'gaia-superapp.js']) assert.match(html, new RegExp(f.replace('.', '\\.') + '\\?v=20261115so1'), f);
+  for (const f of ['gaia-warm.css', 'gaia-ds.css', 'gaia-member.js', 'gaia-superapp.js']) assert.match(html, new RegExp(f.replace('.', '\\.') + '\\?v=20261115so1'), f);
+  assert.match(html, /gaia-guest-home\.css\?v=20261115tg1/, 'compact phone tools grid');
+});
+
+test('phones get the tools as a 2-column grid of stacked tiles', () => {
+  const css = read('gaia-guest-home.css');
+  const m = css.match(/@container gg \(max-width: 559px\) \{([\s\S]*?)\n\}/);
+  assert.ok(m, 'phone container block');
+  assert.match(m[1], /\.gg-explore__grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(m[1], /\.gg-tool__arrow \{ display: none; \}/);
+  assert.doesNotMatch(m[1], /line-clamp/, 'no subtitle is cut off');
 });

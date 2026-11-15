@@ -403,16 +403,30 @@ def run_cycle(world, state, em, clock=None, log=print):
         summary['errors'].append(str(e))
     for mid, status in bad:
         if mid in before:
-            alerts.append('Ticket email for order %s was %s by the mail provider. Check the address and resend from the Email Center.' % (before[mid], status.upper()))
+            n, _ = failed_address(state.db, before[mid])
+            if n > 1:
+                alerts.append('Ticket email for order %s %s AGAIN at the mail provider (%d sends to the same address). '
+                              'Correct the email on the contact before any further resend.' % (before[mid], status.upper(), n))
+            else:
+                alerts.append('Ticket email for order %s was %s by the mail provider. Check the address and resend from the Email Center.' % (before[mid], status.upper()))
 
     # 3. Admin resends (a person asked, with a reason). Not while paused, and
     # not under the shadow-only lock: they wait, visibly, in the dashboard.
     pending_resends = [] if HARD_SHADOW else state.db.execute("select id,order_id,reason,requested_by from resend_requests where state='pending' and event_id=? order by id", (EVENT_ID,)).fetchall()
     for rid, oid, reason, who in pending_resends:
-        cls, why, order, _ = classify(oid, em, world, state, allow_delivered=True)
+        cls, why, order, info = classify(oid, em, world, state, allow_delivered=True)
         if cls != 'GREEN':
             state.db.execute("update resend_requests set state='refused',result=?,processed_at=? where id=?", ('Not sent: ' + ', '.join(why), st.now(), rid))
             alerts.append('Resend for order %s was NOT sent: %s.' % (oid, ', '.join(why)))
+            continue
+        # The same address already failed: another send fails again and only
+        # adds an alert. Correct the contact's email first, or say "same address"
+        # in the reason to send anyway (a provider failure can be temporary).
+        n_failed, failed_rcpt = failed_address(state.db, oid)
+        if n_failed and (info.get('recipient') or '').strip().lower() == failed_rcpt and 'same address' not in str(reason).lower():
+            state.db.execute("update resend_requests set state='refused',result=?,processed_at=? where id=?",
+                             ('Not sent: this address already failed %d time(s). Correct the email on the contact first, '
+                              'or request again with "same address" in the reason.' % n_failed, st.now(), rid))
             continue
         state.actor = who if str(who).startswith('admin:') else 'admin:%s' % who
         res = st.deliver(order, state, template_sha(), lambda o: (True, ''), lambda o, p: world.send(o['contact_id'], p), ticket_email.render,
@@ -493,6 +507,20 @@ def run_cycle(world, state, em, clock=None, log=print):
     state.put('last_run', json.dumps(summary))
     log(json.dumps(summary))
     return summary
+
+
+def failed_address(db, order_id):
+    """(attempts, recipient) when the order's latest ticket email FAILED at the
+    provider: how many accepted sends went to that same address. (0, '') when
+    the latest status is not a failure. Used to stop re-reporting and
+    re-sending to an address that cannot receive mail (15 Nov 2026)."""
+    row = db.execute("select provider_status,recipient from order_ticket_delivery where event_id=? and order_id=?", (EVENT_ID, order_id)).fetchone()
+    if not row or (row[0] or '').lower() not in st.BAD_PROVIDER or not row[1]:
+        return 0, ''
+    rcpt = row[1].strip().lower()
+    n = db.execute("select count(*) from delivery_attempts where event_id=? and order_id=? and state='accepted' and lower(trim(recipient))=?",
+                   (EVENT_ID, order_id, rcpt)).fetchone()[0]
+    return n, rcpt
 
 
 def provider_status(world, message_id):

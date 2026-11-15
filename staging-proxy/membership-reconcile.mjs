@@ -30,13 +30,28 @@ const headers = {
   Version: env.GHL_API_VERSION || '2021-07-28',
 };
 
+// One retry for a dropped connection or a GHL 502/503/504 (15 Nov 2026): a
+// single ECONNRESET used to fail the whole run and raise a CRITICAL alert that
+// healed itself five minutes later. Bounded: at most two attempts per request.
+// GHL is not a paid model API.
+async function fetchRetry(url, options) {
+  try {
+    const r = await fetch(url, options);
+    if (r.status !== 502 && r.status !== 503 && r.status !== 504) return r;
+  } catch (e) {
+    if (!(e instanceof TypeError)) throw e;   // fetch failed (network); anything else is real
+  }
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+  return fetch(url, options);
+}
+
 async function fetchPage({ limit, offset }) {
   const url = new URL(`${base}/payments/subscriptions`);
   url.searchParams.set('altId', locationId);
   url.searchParams.set('altType', 'location');
   url.searchParams.set('limit', String(limit));
   url.searchParams.set('offset', String(offset));
-  const response = await fetch(url, { headers });
+  const response = await fetchRetry(url, { headers });
   if (!response.ok) throw new Error(`GHL subscriptions returned ${response.status}`);
   return response.json();
 }
@@ -46,7 +61,7 @@ async function resolveCanonicalContact(subscription) {
   if (!mapped.proposal) return { subscription, repaired: false };
   const originalId = String(subscription.contactId || '').trim();
   if (originalId) {
-    const direct = await fetch(`${base}/contacts/${encodeURIComponent(originalId)}`, { headers });
+    const direct = await fetchRetry(`${base}/contacts/${encodeURIComponent(originalId)}`, { headers });
     if (direct.ok) return { subscription, repaired: false };
     if (direct.status !== 400 && direct.status !== 404) {
       throw new Error(`GHL contact verification returned ${direct.status}`);
@@ -54,7 +69,7 @@ async function resolveCanonicalContact(subscription) {
   }
   const email = String(subscription.contactEmail || '').trim().toLowerCase();
   if (!email) throw new Error('Mapped membership has no resolvable GHL contact or email');
-  const response = await fetch(`${base}/contacts/search`, {
+  const response = await fetchRetry(`${base}/contacts/search`, {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify({

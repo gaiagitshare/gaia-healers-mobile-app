@@ -475,12 +475,33 @@ export function reconcile(store, detections, { now = nowIso() } = {}) {
     }
   }
 
-  // Keep the record bounded without losing anything current.
-  store.incidents = incidents
-    .sort((a, b) => String(b.lastDetectedAt).localeCompare(String(a.lastDetectedAt)))
-    .slice(0, 500);
+  store.incidents = pruneIncidents(incidents);
   store.updatedAt = now;
   return { opened, updated, resolved, store };
+}
+
+/**
+ * Keep the record bounded without losing anything that matters (15 Nov 2026).
+ * A check that flaps (academy-access:drift opened and resolved 478 times in two
+ * weeks) used to push every real incident out of the 500-row history. Now:
+ * every open or critical incident is kept first; a resolved non-critical key
+ * keeps only its newest PER_KEY records; the rest fill up to the cap.
+ */
+export const INCIDENT_CAP = 500;
+export const RESOLVED_NONCRITICAL_PER_KEY = 20;
+export function pruneIncidents(incidents, { cap = INCIDENT_CAP, perKey = RESOLVED_NONCRITICAL_PER_KEY } = {}) {
+  const newest = [...incidents].sort((a, b) => String(b.lastDetectedAt).localeCompare(String(a.lastDetectedAt)));
+  const important = (i) => i.state !== 'resolved' || i.severity === 'critical';
+  const seen = new Map();
+  const rest = newest.filter((i) => {
+    if (important(i)) return false;
+    const c = (seen.get(i.key) || 0) + 1;
+    seen.set(i.key, c);
+    return c <= perKey;
+  });
+  return [...newest.filter(important), ...rest]
+    .slice(0, cap)
+    .sort((a, b) => String(b.lastDetectedAt).localeCompare(String(a.lastDetectedAt)));
 }
 
 /**
@@ -491,15 +512,36 @@ export function reconcile(store, detections, { now = nowIso() } = {}) {
  * A re-notification only after a long interval, so a problem left unattended for
  * a day says so once more rather than every five minutes.
  */
-export function notificationsDue(store, { now = Date.now(), renotifyAfterMs = DAY, notifyResolved = true } = {}) {
+/**
+ * Quieter alerts (15 Nov 2026). The inbox was mostly CRITICAL + RESOLVED pairs
+ * for blips that healed themselves within one or two runs (a GHL connection
+ * reset, one failed 15-minute mirror run).
+ *  - GRACE: a critical incident is only announced once it has stayed open this
+ *    long. A blip that resolves inside the grace sends nothing at all (and so
+ *    no RESOLVED either, which already requires an announced opening). 20 min
+ *    covers one missed run of the 15-minute event mirror.
+ *  - Problems that wait on a person (matching a buyer to a contact) are
+ *    reminded every three days instead of daily.
+ */
+export const NOTIFY_GRACE_MS = 20 * 60 * 1000;
+export const RENOTIFY_BY_KEY = {
+  'course-webhook:unresolved-contact': 3 * DAY,
+};
+
+export function notificationsDue(store, { now = Date.now(), renotifyAfterMs = DAY, notifyResolved = true, graceMs = NOTIFY_GRACE_MS } = {}) {
   const due = [];
   for (const inc of store.incidents || []) {
     if (inc.severity !== 'critical') continue;
     const n = inc.notified || {};
     if (inc.state === 'open') {
-      if (!n.sentAt) { due.push({ incident: inc, kind: 'opened' }); continue; }
+      if (!n.sentAt) {
+        const age = now - Date.parse(inc.firstDetectedAt);
+        if (!(graceMs > 0) || !Number.isFinite(age) || age >= graceMs) due.push({ incident: inc, kind: 'opened' });
+        continue;
+      }
       const since = now - Date.parse(n.sentAt);
-      if (Number.isFinite(since) && since >= renotifyAfterMs) due.push({ incident: inc, kind: 'ongoing' });
+      const every = RENOTIFY_BY_KEY[inc.key] || renotifyAfterMs;
+      if (Number.isFinite(since) && since >= every) due.push({ incident: inc, kind: 'ongoing' });
     } else if (inc.state === 'resolved' && notifyResolved && n.sentAt && !n.resolvedNoticeAt) {
       // Only worth saying if the opening was announced.
       due.push({ incident: inc, kind: 'resolved' });

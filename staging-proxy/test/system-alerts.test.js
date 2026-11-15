@@ -137,7 +137,8 @@ test('ten failures of one problem are ONE notification', () => {
   let sent = 0;
   for (let i = 0; i < 10; i++) {
     reconcile(store, d);
-    for (const due of notificationsDue(store)) {
+    // Past the notify grace: the problem has stayed open long enough to announce.
+    for (const due of notificationsDue(store, { now: Date.now() + 21 * 60 * 1000 })) {
       recordNotification(due.incident, due.kind, { ok: true });
       sent++;
     }
@@ -211,7 +212,7 @@ test('a failed notification does NOT resolve or hide the incident', () => {
   assert.equal(inc.state, 'open', 'the problem is still a problem');
   assert.equal(inc.notified.sentAt, null, 'nothing was delivered');
   assert.equal(inc.notified.lastError, 'not_configured', 'and the failure is recorded');
-  assert.equal(notificationsDue(store).length, 1, 'so it remains due — a lost email is not a delivered one');
+  assert.equal(notificationsDue(store, { now: Date.now() + 21 * 60 * 1000 }).length, 1, 'so it remains due — a lost email is not a delivered one');
 });
 
 test('acknowledging does not stop the condition being evaluated', () => {

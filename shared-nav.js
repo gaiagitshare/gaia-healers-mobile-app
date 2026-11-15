@@ -93,6 +93,10 @@
       <button type="button" class="gaia-tabbar__link gaia-rail__practice" data-rail-practice hidden>
         <i class="ph ph-stethoscope gaia-tabbar__icon" aria-hidden="true"></i>
         <span class="gaia-tabbar__label">Practice</span>
+      </button>
+      <button type="button" class="gaia-tabbar__link gaia-rail__founder" data-book-inline="https://calendly.com/nimafarshid/gaia-healers-meeting" data-book-title="Meet Dr. Nima Farshid">
+        <i class="ph ph-handshake gaia-tabbar__icon" aria-hidden="true"></i>
+        <span class="gaia-tabbar__label">Meet the founder</span>
       </button>`;
   }
 

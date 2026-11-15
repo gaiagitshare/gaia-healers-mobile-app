@@ -24,6 +24,16 @@ body.gaia-v2 .gaia-rail__brand,
 body.gaia-v2 .gaia-rail__home-icon,
 body.gaia-v2 .gaia-rail__home-label { display: none; }
 body.gaia-v2 .gaia-rail__practice[hidden] { display: none !important; }
+/* Meet the founder: in the rail and sidebar only. On phones it stays in the
+   Home menu sheet, which the sidebar replaces on wider screens. */
+body.gaia-v2 .gaia-rail__founder { border: 0; background: none; font: inherit; cursor: pointer; }
+@media (max-width: 699px) { body.gaia-v2 .gaia-rail__founder { display: none !important; } }
+@media (min-width: 700px) {
+  body.gaia-v2 .gaia-rail__founder { order: 10 !important; }
+  /* The Home menu button only repeated the sidebar (15 Nov 2026). */
+  /* Hidden, not removed: the topbar is a grid and the actions keep their column. */
+  body.gaia-v2 [data-screen="today"] .g-topbar__nav { visibility: hidden !important; pointer-events: none !important; }
+}
 
 /* —— Phone: the centre Home button glows less, and only when it is the page —— */
 @media (max-width: 699px) {

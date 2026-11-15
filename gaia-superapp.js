@@ -901,7 +901,7 @@
     return '<section class="gg-explore" id="gg-explore" aria-labelledby="gg-explore-title">'
       + '<div class="gg-head"><p class="g-super-kicker">Explore free</p><h2 id="gg-explore-title">Start with a two-minute check-in</h2></div>'
       + '<div class="gg-explore__grid">'
-      + '<a class="gg-feature" href="home.html?view=wellness&tab=check"><span class="gg-feature__icon">' + icon('sparkle') + '</span>'
+      + '<a class="gg-feature" href="home.html?view=wellness&tab=check"><img class="gg-feature__art" src="assets/home3/ref-aura.webp?v=kit1" alt="" width="420" height="420" loading="lazy" decoding="async" /><span class="gg-feature__icon">' + icon('sparkle') + '</span>'
       + '<span class="gg-feature__copy"><small>Most people start here</small><strong>Energy check</strong>'
       + '<span>Today’s body point and a short practice to match how you feel.</span></span>'
       + '<span class="gg-feature__go">Start the check ' + icon('arrow-right', 'gg-cta__arrow') + '</span></a>'
@@ -912,6 +912,7 @@
 
   function guestJoin() {
     return '<section class="gg-join" aria-labelledby="gg-join-title">'
+      + '<img class="gg-join__art" src="assets/home3/ref-leaves.webp?v=kit1" alt="" width="600" height="900" loading="lazy" decoding="async" />'
       + '<div class="gg-join__visual" aria-hidden="true"><span class="gg-join__orb"><img src="assets/gaia-mark.svg" alt="" width="64" height="64" /></span></div>'
       + '<div class="gg-join__body"><p class="g-super-kicker">Join free</p><h2 id="gg-join-title">Make Gaia Healers yours</h2>'
       + '<p class="gg-join__lede">A name and an email — we send a one-tap sign-in link. No password.</p>'

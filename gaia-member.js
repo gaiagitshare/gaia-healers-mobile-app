@@ -1245,15 +1245,17 @@ body.gaia-booking-open{overflow:hidden;}
 
     if (!(state.authed && acc && acc.communities)) {
       if (sub) sub.textContent = 'Sign in to see which circles your membership opens.';
-      const preview = ['All Gaia Healers', 'Bio-Well Practitioners', 'BioPulsar Practitioners', 'BioTekna Practitioners', 'ASEA Community', 'BrainTap Community', 'LifeWave Community', 'Golden Practitioner Circle']
-        .map((name) => accessItem({ name: name, reason: '' }, 'locked')).join('');   // the card above already asks to sign in
+      // Signed out: the member "More circles with membership" card, said once
+      // (signed-out redesign, 15 Nov 2026) -- not a wall of locked rows.
+      const names = ['All Gaia Healers', 'Bio-Well Practitioners', 'BioPulsar Practitioners', 'BioTekna Practitioners', 'ASEA Community', 'BrainTap Community', 'LifeWave Community', 'Golden Practitioner Circle'];
       box.innerHTML =
         announcementsHtml(state.announcements)
-        + '<article class="g-card g-card--feature"><p class="g-card__label">Community</p>'
-        // No title of its own: the section above already says "Your circles".
-        + '<p class="g-card__meta">Sign in to see which Gaia Healers communities your membership unlocks — and open them in one tap.</p>'
-        + '<div class="g-card__actions"><button type="button" class="g-btn g-btn--primary g-btn--sm" data-native-signin>Sign in securely →</button></div></article>'
-        + gSec('What’s inside', '<div class="g-access-grid">' + preview + '</div>');
+        + '<section class="g-circles g-circles--guest">'
+        + '<div class="g-circles__head"><div><h3 class="g-circles__title">What’s inside</h3>'
+        + '<p class="g-circles__lead">Sign in to see which Gaia Healers communities your membership unlocks — and open them in one tap.</p></div>'
+        + '<button type="button" class="g-btn g-btn--primary g-btn--sm" data-native-signin>Sign in securely →</button></div>'
+        + '<ul class="g-circles__list">' + names.map((n) => '<li class="g-circles__item"><span class="g-circles__name">' + esc(n) + '</span></li>').join('') + '</ul>'
+        + '</section>';
       box.querySelector('[data-native-signin]')?.addEventListener('click', () => window.GaiaAuth?.open?.());
       return;
     }

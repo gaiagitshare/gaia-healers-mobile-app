@@ -1384,7 +1384,11 @@
     function tabForView(view, tab) {
       if (view === 'community') return tab || 'discussion';
       if (view === 'wellness') return tab || 'check';
-      return '';
+      // Any other screen keeps the tab it was asked for (Store: Shop |
+      // Membership). Dropping it rewrote ?view=store&tab=membership to
+      // ?view=store before the Store could read it, so every "Compare
+      // membership plans" link opened the Shop tab (15 Nov 2026).
+      return tab || '';
     }
 
     function urlFor(view, options = {}) {

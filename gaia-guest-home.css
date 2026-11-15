@@ -173,6 +173,18 @@ body.gaia-v2 .g-guest .gg-tool__copy small { font-size: var(--gh-fs-small, 12.5p
 body.gaia-v2 .g-guest .gg-tool__arrow { display: block; font-size: 16px; color: var(--gh-text-3); transition: transform .15s ease, color .15s ease; }
 body.gaia-v2 .g-guest .gg-tool:hover .gg-tool__arrow { transform: translateX(2px); color: var(--gh-text); }
 
+/* Phones: the eight tools as a compact 2 x 4 grid of small tiles (icon above
+   the name and one short line, no arrow) instead of eight full-width rows
+   (15 Nov 2026). */
+@container gg (max-width: 559px) {
+  body.gaia-v2 .g-guest .gg-explore__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gh-s2, 8px); }
+  body.gaia-v2 .g-guest .gg-tool { grid-template-columns: minmax(0, 1fr); align-content: start; align-items: start; gap: 8px; padding: 12px; }
+  body.gaia-v2 .g-guest .gg-tool__icon { width: 30px; height: 30px; font-size: 15px; }
+  body.gaia-v2 .g-guest .gg-tool__copy strong { font-size: 14px; line-height: 1.25; }
+  body.gaia-v2 .g-guest .gg-tool__copy small { font-size: 12px; line-height: 1.3; }
+  body.gaia-v2 .g-guest .gg-tool__arrow { display: none; }
+}
+
 @container gg (min-width: 560px) {
   body.gaia-v2 .g-guest .gg-explore__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   body.gaia-v2 .g-guest .gg-feature { grid-template-columns: minmax(0, 1fr) auto; gap: var(--gh-s4, 16px); padding: var(--gh-s5, 20px) var(--gh-s6, 24px); min-height: 132px; }

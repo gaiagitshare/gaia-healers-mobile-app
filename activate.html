@@ -7,23 +7,29 @@
   <meta name="referrer" content="no-referrer" />
   <title>Your Gaia Healers profile · Gaia Healers</title>
   <link rel="icon" href="favicon.ico" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
-    :root { --bg:#04070A; --card:#0C1117; --line:rgba(255,255,255,.15); --text:#fff; --muted:rgba(255,255,255,.72);
-            --accent:#B6F25C; --on-accent:#0B1408; --danger:#F08A74; }
+    /* App design-system colours and type (signed-out redesign, 15 Nov 2026).
+       The large sizes stay: this page is opened from a badge, often by
+       people who need big, plain controls. */
+    :root { --bg:#07140d; --card:#0e1f15; --line:rgba(232,240,220,.16); --text:#f2f2ea; --muted:#b9c0b2;
+            --accent:#b7ff62; --on-accent:#0b1a08; --danger:#F08A74; --label:#a9cf86; }
     * { box-sizing: border-box; }
     html, body { margin:0; background:var(--bg); color:var(--text);
-      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+      font-family:"Plus Jakarta Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
     main { max-width:480px; margin:0 auto; padding:32px 20px 48px; min-height:100vh; }
-    .brand { font-size:16px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); margin:0 0 28px; font-weight:700; }
-    h1 { font-size:30px; line-height:1.2; margin:0 0 14px; }
+    .brand { font-size:14px; letter-spacing:.12em; text-transform:uppercase; color:var(--label); margin:0 0 28px; font-weight:600; }
+    h1 { font-family:"Cormorant Garamond",Georgia,"Times New Roman",serif; font-weight:500; font-size:36px; line-height:1.1; margin:0 0 14px; }
     p { font-size:20px; line-height:1.5; margin:0 0 20px; color:var(--muted); }
     p strong { color:var(--text); }
     label { display:block; font-size:19px; margin:0 0 10px; color:var(--text); }
-    input { width:100%; font-size:24px; padding:18px 16px; border-radius:14px; border:2px solid var(--line);
+    input { width:100%; font-size:24px; padding:18px 16px; border-radius:12px; border:2px solid var(--line);
       background:var(--card); color:var(--text); margin:0 0 18px; }
     input:focus { outline:3px solid var(--accent); outline-offset:1px; border-color:transparent; }
     input.code { font-size:34px; letter-spacing:.35em; text-align:center; font-variant-numeric:tabular-nums; }
-    button.primary { width:100%; font-size:22px; font-weight:700; padding:20px; border:0; border-radius:14px;
+    button.primary { width:100%; font-size:22px; font-weight:700; padding:20px; border:0; border-radius:12px;
       background:var(--accent); color:var(--on-accent); cursor:pointer; min-height:64px; }
     button.primary:disabled { opacity:.55; }
     button.link { background:none; border:0; color:var(--accent); font-size:19px; padding:14px 0; cursor:pointer;
@@ -35,7 +41,7 @@
     section[hidden] { display:none; }
     /* Event profile: the person's own things, one per card, large and plain. */
     main.is-profile { max-width:640px; }
-    .ep-card { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:20px 18px; margin:0 0 18px; }
+    .ep-card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 18px; margin:0 0 18px; }
     .ep-card > h2 { font-size:22px; margin:0 0 12px; color:var(--text); }
     .ep-card > p { font-size:18px; margin:0 0 6px; }
     .ep-invite { border-color:rgba(182,242,92,.45); }

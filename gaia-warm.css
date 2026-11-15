@@ -69,14 +69,7 @@ body.gaia-v2 :is(.g-home2__rows > *, .g-home2__action, .g-super-row) { border-ra
 body.gaia-v2 .g-home2__action { padding: 12px 14px; }
 body.gaia-v2 .g-super-kicker { color: var(--v3-label); letter-spacing: 0.12em; }
 
-/* ---- Guest Home ------------------------------------------------------- */
-body.gaia-v2 .g-guest .gg-hero { border-radius: 20px; }
-body.gaia-v2 .g-guest .gg-scan {
-  padding: 16px; border-radius: 16px;
-  background: linear-gradient(135deg, rgba(232, 196, 120, 0.10), rgba(157, 225, 119, 0.06));
-  border-color: rgba(232, 214, 160, 0.18);
-}
-body.gaia-v2 .g-guest .gg-scan__icon { background: rgba(232, 196, 120, 0.14); color: #e6c98a; }
+/* ---- Guest Home: styled by gaia-guest-home.css on the design system (15 Nov 2026). */
 
 /* ---- Cards and panels everywhere: smaller radius, softer edges -------- */
 body.gaia-v2 :is(.g-card, .gaia-card, .g-dir-card, .gaia-dirprofile__panel, .gaia-booking-modal__sheet) { border-color: var(--v3-border); }

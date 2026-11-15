@@ -530,3 +530,51 @@
     transition: none !important;
   }
 }
+
+/* ==========================================================================
+   Design-system layer (signed-out redesign, 15 Nov 2026): the intro speaks
+   the same language as the app behind it (gaia-ds.css tokens, copied here
+   because the splash does not load the app sheets): the app background,
+   Plus Jakarta Sans, a serif headline, label-style eyebrow, and the lime
+   10px-radius primary button. The scenes and copy are unchanged.
+   ========================================================================== */
+.gaia-splash-shell {
+  --sp-bg: #07140d;
+  --sp-accent: #b7ff62;
+  --sp-accent-ink: #0b1a08;
+  --sp-label: #a9cf86;
+  --sp-text: #f2f2ea;
+  --sp-text-2: #b9c0b2;
+  --sp-text-3: #8f978a;
+  --sp-line: rgba(232, 240, 220, 0.14);
+  font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--sp-text);
+  background: radial-gradient(90% 60% at 50% 0%, rgba(183, 255, 98, 0.06), transparent 70%), var(--sp-bg);
+}
+.gaia-splash-grid { opacity: .5; }
+.gaia-splash-brand { font-family: "Cormorant Garamond", Georgia, serif; font-size: 1.375rem; font-weight: 600; letter-spacing: 0; color: var(--sp-text); }
+.gaia-splash-eyebrow {
+  padding: 0; border: 0; border-radius: 0; background: none;
+  margin-bottom: .5rem; font-size: 11.5px; font-weight: 600; letter-spacing: .12em; color: var(--sp-label);
+}
+.gaia-splash-title {
+  font-family: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  font-size: clamp(2.125rem, 8vw, 2.75rem); font-weight: 500; line-height: 1.06; letter-spacing: 0; color: var(--sp-text);
+}
+.gaia-splash-body { margin-top: .75rem; font-size: 14.5px; line-height: 1.55; color: var(--sp-text-2); max-width: 22rem; }
+.gaia-splash-progress [data-splash-dot] { height: 6px; width: 6px; background: rgba(232, 240, 220, 0.18); }
+.gaia-splash-progress [data-splash-dot].bg-gaia,
+.gaia-splash-progress [data-splash-dot].active { width: 22px; background: var(--sp-accent); box-shadow: none; }
+.gaia-splash-progress [data-splash-dot].bg-neutral-200 { background: rgba(232, 240, 220, 0.18); }
+.gaia-splash-btn {
+  height: 48px; padding: 0 20px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 10px; border: 1px solid transparent; background: var(--sp-accent); color: var(--sp-accent-ink);
+  font-family: inherit; font-size: 15px; font-weight: 600; letter-spacing: 0; box-shadow: none;
+  transition: background .15s ease;
+}
+.gaia-splash-btn:hover { transform: none; background: #c6ff80; box-shadow: none; }
+.gaia-splash-btn:active { transform: none; }
+.gaia-splash-btn:focus-visible, .gaia-splash-skip:focus-visible { outline: 2px solid var(--sp-accent); outline-offset: 2px; }
+.gaia-splash-btn.hidden { display: none; }
+.gaia-splash-skip { font-size: 13.5px; font-weight: 500; color: var(--sp-text-3); }
+.gaia-splash-skip:hover { color: var(--sp-text); }

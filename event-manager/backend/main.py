@@ -4,7 +4,7 @@ from fastapi import Request as FastAPIRequest  # urllib.request.Request is impor
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text
+from sqlalchemy import func, text, or_, cast, String
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
@@ -3323,6 +3323,20 @@ def _ticket_for_email(db, event_id, email, order_ref=None, is_upgrade=False):
     return rows[0] if is_upgrade else None
 
 
+def _ticket_for_order(db, event_id, order_ref):
+    """The ONE ticket made from this GHL order, or None. Several seats from one
+    order are not guessed between here: their payments are claimed (see
+    _payment_claims), and anything else falls through to the contact."""
+    if not order_ref:
+        return None
+    rows = db.query(models.Attendee).filter(
+        models.Attendee.event_id == event_id,
+        or_(models.Attendee.acq_order_id == order_ref,
+            cast(models.Attendee.custom_data, String).contains(order_ref))).all()
+    rows = [a for a in rows if order_ref in _ticket_orders(a)]
+    return rows[0] if len(rows) == 1 else None
+
+
 def _attendee_for_contact(db, event_id, contact_id):
     """The one ticket holder GHL knows as this contact, or None.
 
@@ -3381,6 +3395,17 @@ def _attendee_for_payment(db, pe, claims=None):
         # the money reading "paid, no ticket" for three days.
         return _attendee_for_contact(db, pe.event_id, pe.contact_id)
     found = _ticket_for_email(db, pe.event_id, pe.buyer_email, pe.ghl_entity_id)
+    if found is None and pe.status in payments.PAID:
+        # Only money is followed this way: an unpaid attempt with nobody behind
+        # it is the expected outcome and is judged as before.
+        # The address on the payment is GHL's copy from the day it was paid.
+        # When an organiser corrects a ticket's email (two-admin approval --
+        # Lorraine Assam's "yahoo.con", 15 Nov 2026), that copy no longer
+        # matches, and the money read "paid, nobody can get in" about two
+        # people holding delivered tickets. The order the ticket was made from,
+        # and then the GHL contact, still say whose it is.
+        found = (_ticket_for_order(db, pe.event_id, pe.ghl_entity_id)
+                 or _attendee_for_contact(db, pe.event_id, pe.contact_id))
     # A row ruled a duplicate keeps its email, so a payment made under that
     # address keeps landing on it -- and is then reported as "money received but
     # the ticket is not valid", about a person whose real badge is fine. Marie

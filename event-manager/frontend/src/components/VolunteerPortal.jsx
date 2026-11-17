@@ -135,6 +135,18 @@ export default function VolunteerPortal() {
 
             <Box sx={{ mt: 2 }}>
                 {tab === 'mine' && (data.my_bookings.length ? <>
+                    {data.calendar && data.my_bookings.some((b) => b.status === 'confirmed') && (
+                        <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
+                            <Button variant="contained" color="success" fullWidth href={data.calendar.webcal}>
+                                Add my shifts to my calendar
+                            </Button>
+                            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                                On iPhone, choose <b>Subscribe</b>: your confirmed shifts appear in Calendar with a reminder an
+                                hour before, and update by themselves if anything changes. Google Calendar?{' '}
+                                <a href={data.calendar.google} target="_blank" rel="noopener noreferrer">Add them there</a>.
+                            </Typography>
+                        </Paper>
+                    )}
                     {expected > 0 && perDay.map((g) => (
                         <Typography key={g.day} variant="body2" color={g.shifts.length >= expected ? 'success.main' : 'warning.main'}>
                             {dayLabel(g.day)}: {g.shifts.length} of {expected} expected shifts

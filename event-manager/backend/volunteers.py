@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 
 import authz
 import models
+import volunteer_calendar as VCAL
 import volunteer_invites as INV
 from database import get_db
 
@@ -618,6 +619,7 @@ def register(app, get_current_user, rate_limited, client_ip):
             models.VolunteerAnnouncement.pinned.desc(), models.VolunteerAnnouncement.id.desc()).all()
         return {"me": {"first_name": v.first_name, "last_name": v.last_name, "email": v.email, "phone": v.phone,
                        "status": v.status},
+                "calendar": VCAL.feed_urls(v.token),
                 "announcements": [{"id": a.id, "title": a.title, "body": a.body, "pinned": bool(a.pinned),
                                    "created_at": a.created_at} for a in anns],
                 "event": {"name": ev.name if ev else "", "timezone": (ev.timezone if ev else None) or "America/New_York",
@@ -627,6 +629,102 @@ def register(app, get_current_user, rate_limited, client_ip):
                                 for b in sorted(mine, key=lambda b: (by_shift[b.shift_id].day, by_shift[b.shift_id].start_time))
                                 if b.shift_id in by_shift],
                 "shifts": [shift_view(db, s, bookings, vols) for s in shifts]}
+
+    # ── Schedule reminder + calendar feed (17 Nov 2026) ─────────────────────
+    def confirmed_shifts(db, v):
+        rows = db.query(models.VolunteerBooking, models.VolunteerShift).join(
+            models.VolunteerShift, models.VolunteerShift.id == models.VolunteerBooking.shift_id).filter(
+            models.VolunteerBooking.volunteer_id == v.id, models.VolunteerBooking.status == "confirmed",
+            models.VolunteerShift.active == True).all()                                   # noqa: E712
+        return sorted(rows, key=lambda r: (r[1].day, r[1].start_time))
+
+    def reminder_sent(db, v):
+        return db.execute(text("SELECT 1 FROM volunteer_log WHERE volunteer_id=:v AND action='schedule_reminder_sent' LIMIT 1"),
+                          {"v": v.id}).first() is not None
+
+    def reminder_check(db, v, resend=False):
+        """(contact_id, None) if this person can get the reminder now, else (None, why)."""
+        if v.status != "approved":
+            return None, "not approved"
+        if not v.token:
+            return None, "no personal link"
+        if not v.email:
+            return None, "no email address"
+        if not confirmed_shifts(db, v):
+            return None, "no confirmed shifts"
+        if reminder_sent(db, v) and not resend:
+            return None, "already sent (use Resend)"
+        if v.ghl_contact_id:
+            return v.ghl_contact_id, None
+        cid, why = INV.find_contact(v.email)
+        if cid:
+            v.ghl_contact_id = cid
+        return cid, why
+
+    def reminder_for(db, v):
+        ev = db.query(models.Event).filter(models.Event.id == v.event_id).first()
+        return VCAL.render_reminder(v.first_name, [sh for _, sh in confirmed_shifts(db, v)],
+                                    VCAL.feed_urls(v.token), ev.name if ev else "")
+
+    @app.get("/volunteer/{token}/calendar.ics")
+    def volunteer_calendar(token: str, request: Request, db: Session = Depends(get_db)):
+        """The volunteer's confirmed shifts as a calendar feed (subscribe with
+        webcal:// on an iPhone; it refreshes itself)."""
+        throttle(request, "view")
+        v = by_token(db, token)
+        ev = db.query(models.Event).filter(models.Event.id == v.event_id).first()
+        body = VCAL.ics(v, [(b.id, sh) for b, sh in confirmed_shifts(db, v)], ev.name if ev else "",
+                        (ev.timezone if ev else None) or "America/New_York")
+        return PlainTextResponse(body, media_type="text/calendar; charset=utf-8",
+                                 headers={"Content-Disposition": 'inline; filename="volunteer-shifts.ics"',
+                                          "Cache-Control": "private, max-age=300"})
+
+    @app.post("/events/{event_id}/volunteers/schedule-reminder-preview")
+    def reminder_preview(event_id: int, body: dict, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+        admin_only(db, current_user, event_id)
+        q = db.query(models.Volunteer).filter(models.Volunteer.event_id == event_id)
+        ids = [int(x) for x in (body.get("volunteer_ids") or [])]
+        if ids:
+            q = q.filter(models.Volunteer.id.in_(ids))
+        out, sample = [], None
+        for v in q.order_by(models.Volunteer.first_name).all():
+            cid, why = reminder_check(db, v, resend=bool(body.get("resend")))
+            n = len(confirmed_shifts(db, v))
+            out.append({"id": v.id, "name": full_name(v), "email": v.email, "shifts": n, "can_send": bool(cid), "reason": why})
+            if cid and sample is None:
+                subject, html_ = reminder_for(db, v)
+                sample = {"to": full_name(v), "subject": subject, "html": html_}
+        db.commit()
+        return {"sending_enabled": INV.enabled(), "recipients": out, "can_send": sum(1 for r in out if r["can_send"]),
+                "sample": sample}
+
+    @app.post("/events/{event_id}/volunteers/schedule-reminder")
+    def reminder_send(event_id: int, body: dict, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+        """Send each reviewed volunteer their own schedule, once. The admin
+        confirms the exact number shown in the preview."""
+        admin_only(db, current_user, event_id)
+        if not INV.enabled():
+            raise HTTPException(status_code=423, detail="Volunteer emails are switched off.")
+        ids = [int(x) for x in (body.get("volunteer_ids") or [])][:100]
+        resend = bool(body.get("resend"))
+        vols = db.query(models.Volunteer).filter(models.Volunteer.event_id == event_id, models.Volunteer.id.in_(ids)).all()
+        ready = [(v,) + reminder_check(db, v, resend) for v in vols]
+        if int(body.get("confirm_count") or -1) != sum(1 for r in ready if r[1]):
+            raise HTTPException(status_code=409, detail="The recipients changed since the preview. Review them again.")
+        results = []
+        for v, cid, why in ready:
+            if not cid:
+                results.append({"id": v.id, "name": full_name(v), "ok": False, "reason": why}); continue
+            subject, html_ = reminder_for(db, v)
+            r = INV.send(cid, subject, html_)
+            if r["ok"]:
+                log(db, event_id, who(current_user), "schedule_reminder_sent", volunteer_id=v.id,
+                    after={"message_id": r["message_id"], "shifts": len(confirmed_shifts(db, v)), "resend": resend})
+            else:
+                log(db, event_id, who(current_user), "schedule_reminder_failed", volunteer_id=v.id, after={"reason": r["reason"]})
+            db.commit()
+            results.append({"id": v.id, "name": full_name(v), "ok": r["ok"], "reason": r["reason"], "message_id": r["message_id"]})
+        return {"sent": sum(1 for r in results if r["ok"]), "results": results}
 
     @app.get("/volunteer/{token}")
     def portal(token: str, request: Request, db: Session = Depends(get_db)):

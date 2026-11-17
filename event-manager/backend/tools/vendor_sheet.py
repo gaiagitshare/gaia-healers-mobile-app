@@ -84,6 +84,9 @@ def parse(csv_text):
         raise ValueError("header row with 'Company Name' not found")
     header = [c.strip() for c in rows[hi]]
     col = {key: header.index(label) for key, label in HEADERS.items() if label in header}
+    # "Staff Members at the Event" (added to the sheet 16 Nov 2026): matched by
+    # its start, since the wording of a header drifts.
+    staff_col = next((i for i, h in enumerate(header) if h.lower().startswith("staff")), None)
     status_col = 0
     out, stage, section = [], None, None
     for n, r in enumerate(rows[hi + 1:], start=hi + 2):
@@ -109,6 +112,8 @@ def parse(csv_text):
                "speaking": cells[col["speaking"]] if "speaking" in col else "",
                "video": cells[col["video"]] if "video" in col else "",
                "notes": cells[col["notes"]] if "notes" in col else "",
+               # Raw, not _clean()ed: people are separated by line breaks.
+               "staff": (r[staff_col] if staff_col is not None and staff_col < len(r) else "") or "",
                "issues": []}
         # Email and website typed in each other's column happens; repair, and say so.
         if rec["email"] and not EMAIL_RE.match(rec["email"]) and rec["website"] and EMAIL_RE.match(rec["website"]):
@@ -190,3 +195,83 @@ if __name__ == "__main__":
         print("%-16s %-6s %-32s booth=%-8s old=%-4s tables=%-2s pay=%-8s %s" % (
             rec["stage"], "#%s" % rec["row"], rec["company"][:32], booth_label(rec), rec["booth_old"],
             rec["tables"], rec["payment_status"], "; ".join(rec["issues"])))
+
+
+# ---------------------------------------------------------------------------
+# The stand's staff, as the team types them into one cell (16 Nov 2026):
+#   "Michael Porter - mporter@braintap.com | Shawn Bean - sbean@braintap.com"
+#   "Erin Currin\nerinina2020@gmail.com\nShannon Procise\nShannon@..."
+#   "Ariel Molina\nPaola Palacio\nDarya Smith\nJacob Wilson\narielthemermaidllc@gmail.com"
+#   "Jason Cestaro - +1 (321) 987-4949"         (phone only)
+#   "Ray@myivspaorlando.com\nPatricia@..."      (address only)
+# ---------------------------------------------------------------------------
+_EMAIL_IN = re.compile(r"[\w.+'-]+@[\w-]+(?:\.[\w-]+)+")
+_PHONE_IN = re.compile(r"\+?\d[\d\s().\-‐-―‑]{6,}\d")
+_ROLE = re.compile(r"\([^)]*\)")
+_TITLES = re.compile(r"\b(dr|mr|mrs|ms|phd|md|ceo|cfo|coo|speaker)\b\.?", re.I)
+_INVISIBLE = re.compile("[‎‏‪-‮⁦-⁩]")
+
+
+def _name_of(seg):
+    t = _INVISIBLE.sub("", seg)
+    t = _EMAIL_IN.sub(" ", t)
+    t = _PHONE_IN.sub(" ", t)
+    t = _ROLE.sub(" ", t)
+    t = _TITLES.sub(" ", t)
+    t = re.sub(r"[<>|;:,\-‐-―]+", " ", t)
+    t = " ".join(w for w in t.split() if re.search(r"[A-Za-z]", w) and not re.search(r"\d", w))
+    return t.strip(" .")
+
+
+def _alpha(s):
+    return re.sub(r"[^a-z]", "", (s or "").lower())
+
+
+def _owns(person, email):
+    """Does this address plausibly belong to this name? (its local part carries
+    the first name, the surname, or initial+surname)."""
+    local = _alpha(email.split("@")[0])
+    parts = [_alpha(w) for w in person["name"].split()]
+    parts = [w for w in parts if len(w) >= 3]
+    if not local or not parts:
+        return False
+    first, last = parts[0], parts[-1]
+    return (any(w in local or (len(local) >= 3 and w.startswith(local)) for w in parts)
+            or (len(parts) > 1 and local.startswith(first[0] + last[:4])))
+
+
+def parse_staff(cell):
+    """-> [{"name", "first_name", "last_name", "email", "phone", "name_from_email"}].
+    An address on its own line goes to the name it belongs to (by its local
+    part), else to the name right before it; never guessed further."""
+    segs = [s.strip() for s in re.split(r"[\n|;]+", _INVISIBLE.sub("", cell or "")) if s.strip()]
+    people = []
+    prev_named_without_email = None
+    for seg in segs:
+        emails = [e.lower() for e in _EMAIL_IN.findall(seg)]
+        phones = [re.sub(r"[^\d+]", "", p) for p in _PHONE_IN.findall(seg)]
+        name = _name_of(seg)
+        if name and len(_alpha(name)) >= 2:
+            p = {"name": name, "email": emails[0] if emails else None, "phone": phones[0] if phones else None,
+                 "name_from_email": False}
+            people.append(p)
+            prev_named_without_email = p if not p["email"] else None
+            continue
+        if emails:
+            e = emails[0]
+            owner = next((p for p in people if not p["email"] and p["name"] and _owns(p, e)), None)
+            if owner is None and prev_named_without_email is not None:
+                owner = prev_named_without_email
+            if owner is not None:
+                owner["email"] = e
+            else:
+                local = re.sub(r"[\d_]+", " ", e.split("@")[0]).replace(".", " ").strip()
+                people.append({"name": " ".join(w.capitalize() for w in local.split()) or e, "email": e,
+                               "phone": phones[0] if phones else None, "name_from_email": True})
+            prev_named_without_email = None
+        elif phones and people and not people[-1]["phone"]:
+            people[-1]["phone"] = phones[0]
+    for p in people:
+        bits = p["name"].split()
+        p["first_name"], p["last_name"] = (bits[0], " ".join(bits[1:])) if bits else ("", "")
+    return people

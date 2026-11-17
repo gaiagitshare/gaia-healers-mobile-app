@@ -172,6 +172,22 @@ def main():
         by_key.setdefault(vs.norm_name(rec["company"]), []).append(rec)
     dupes = {k: recs for k, recs in by_key.items() if len(recs) > 1}
 
+    # A stand the sheet RENAMED is still that stand (16 Nov 2026: "First
+    # Alternative Care" retyped as "First Alternative" became a second stand,
+    # so the one with the scanner and the printed card stopped being updated).
+    # A sheet row whose name matches nothing is the stand -- among those whose
+    # own name is no longer in the sheet -- with the same contact email, when
+    # exactly one has it. Anything less certain still creates, and is reported.
+    sheet_keys = set(by_key)
+    unmatched_by_email = {}
+    for r in rows:
+        if stand_key(r) in sheet_keys or (r["stage"] or "") == "purchased":
+            continue
+        e = (r["contact_email"] or "").strip().lower()
+        if e:
+            unmatched_by_email.setdefault(e, []).append(r)
+    renamed_ids = set()
+
     for rec in sheet:
         key = vs.norm_name(rec["company"]); seen.add(key)
         if key in dupes:
@@ -182,6 +198,12 @@ def main():
         if r is None and want.get("contact_email") and want["contact_email"] in purchased:
             r, adopted = purchased.pop(want["contact_email"]), True
             by_name[key] = r; adopted_ids.add(r["id"])
+        renamed = False
+        if r is None and want.get("contact_email"):
+            cands = [c for c in unmatched_by_email.get(want["contact_email"], []) if c["id"] not in renamed_ids]
+            if len(cands) == 1:
+                r, renamed = cands[0], True
+                renamed_ids.add(r["id"]); by_name[key] = r
         if r is None:
             creates.append((rec, want)); continue
         diff = {f: v for f, v in want.items() if v not in (None, "") and not same(f, r[f], v)}
@@ -189,7 +211,7 @@ def main():
         # stand's from then on; the sheet no longer reverts them (audit 7 Nov 2026).
         for f in vendor_owned(r):
             diff.pop(f, None)
-        if adopted:
+        if adopted or (renamed and "company_name" not in vendor_owned(r)):
             diff["company_name"] = rec["company"]
         # Take a staff note back off a stand's stored name -- and only the note:
         # any other rename an organiser made is theirs and is left alone.
@@ -212,7 +234,7 @@ def main():
         if off:
             offs.append((r, diff, off))
 
-    gone = [r for r in rows if stand_key(r) not in seen and r["id"] not in adopted_ids]
+    gone = [r for r in rows if stand_key(r) not in seen and r["id"] not in adopted_ids and r["id"] not in renamed_ids]
 
     lines = ["# Exhibitor sheet sync — %s (%s)" % (started.strftime("%Y-%m-%d %H:%M UTC"), "APPLIED" if APPLY else "dry run"), ""]
     lines.append("Sheet rows: %d · matched: %d · to create: %d · to update: %d · switched off: %d · in Event Manager but not in sheet: %d" % (

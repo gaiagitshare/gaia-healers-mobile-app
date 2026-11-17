@@ -33,6 +33,7 @@ import os
 import re
 import threading
 import time
+import urllib.error
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -789,8 +790,18 @@ def _validate_live(gw, order, contact_hint):
             return False, "recipient_do_not_disturb", None
         contact_id = c["id"]
     for oid in order.get("_order_ids") or []:
-        o = gw.order(oid, order["source"])
-        if order["source"] == "ghl_invoice":
+        # A booking can mix ordinary orders and invoices (Lana Warren, Lita
+        # Aris: 17 Nov 2026). Each id is looked up as what it is: when GHL
+        # does not know it under the booking's source, try the other one.
+        src = order["source"]
+        try:
+            o = gw.order(oid, src)
+        except urllib.error.HTTPError as e:
+            if e.code not in (400, 404):
+                raise
+            src = "ghl_order" if src == "ghl_invoice" else "ghl_invoice"
+            o = gw.order(oid, src)
+        if src == "ghl_invoice":
             if (o.get("status") or "").lower() != "paid":
                 return False, "invoice_not_paid_live", None
         elif o.get("status") != "completed" or o.get("paymentStatus") != "paid" or o.get("liveMode") is not True:

@@ -42,6 +42,7 @@ import wallet
 import vendor_page
 import payments
 import leads_checkout
+import wristbands
 from fastapi import Response
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
@@ -124,6 +125,8 @@ def _ensure_event_columns():
         stmts.append("ALTER TABLE events ADD COLUMN scanned_leads_price FLOAT")
     if "lead_offers" not in cols:
         stmts.append("ALTER TABLE events ADD COLUMN lead_offers JSON")
+    if "wristband_red_product_ids" not in cols:
+        stmts.append("ALTER TABLE events ADD COLUMN wristband_red_product_ids JSON")
     if "scanned_leads_checkout_url" not in cols:
         stmts.append("ALTER TABLE events ADD COLUMN scanned_leads_checkout_url VARCHAR")
     if "scanned_leads_product_ids" not in cols:
@@ -3715,6 +3718,8 @@ def _door_card(db, attendee, event, user=None):
             "email": attendee.email,
             "phone": attendee.phone,
             "pass_display": _pass_display(db, attendee),
+            # The band(s) the desk hands over (17 Nov 2026); empty = none.
+            "wristbands": wristbands.for_attendee(db, attendee, event),
             "pass_includes": _pass_includes(db, attendee, event),
             "status": _ticket_status(attendee),
             "attendance_type": attendee.attendance_type or None,

@@ -55,6 +55,9 @@ const LOG_STATE = {
     OVERRIDE:  { label: 'Let in',    mark: '⚠', color: 'warning', variant: 'filled' },
     REHEARSAL: { label: 'Rehearsal', mark: '◐', color: 'warning', variant: 'filled' },
 };
+// The four wristband colours (17 Nov 2026).
+const WRISTBAND_COLORS = { green: '#1e8e3e', purple: '#7b1fa2', yellow: '#fdd835', red: '#d32f2f' };
+
 const HEADLINE = {
     GRANTED: 'ADMITTED', LIMITED: 'CHECK THIS ONE', DENIED: 'DENIED', UNDO: 'UNDONE',
     OVERRIDE: 'LET IN ANYWAY',
@@ -1009,6 +1012,23 @@ function CheckIn({ timezone: timezoneProp }) {
                         <Typography variant="body1" color="text.secondary" sx={{ mt: 0.25 }}>
                             {d.effective_label}
                         </Typography>
+                    )}
+                    {/* Which wristband to hand over (17 Nov 2026). Big and in the
+                        band's own colour, so it is read at a glance across the desk. */}
+                    {card && Array.isArray(card.wristbands) && (
+                        <Stack direction="row" spacing={1} sx={{ mt: 1.25, flexWrap: 'wrap', gap: 1 }}>
+                            {card.wristbands.length === 0 ? (
+                                <Box sx={{ px: 1.5, py: 0.75, borderRadius: 1, border: '1px dashed', borderColor: 'divider' }}>
+                                    <Typography sx={{ fontWeight: 700, color: 'text.secondary' }}>No wristband</Typography>
+                                </Box>
+                            ) : card.wristbands.map((w) => (
+                                <Box key={w.color} sx={{ px: 1.75, py: 0.9, borderRadius: 1.5,
+                                    bgcolor: WRISTBAND_COLORS[w.color] || 'grey.500',
+                                    color: w.color === 'yellow' ? '#222' : '#fff' }}>
+                                    <Typography sx={{ fontWeight: 800, fontSize: 18, letterSpacing: '.02em' }}>{w.label}</Typography>
+                                </Box>
+                            ))}
+                        </Stack>
                     )}
                     <Typography variant="body2" sx={{ mt: 1 }}>{reason}</Typography>
                     {d.refused_reason && (

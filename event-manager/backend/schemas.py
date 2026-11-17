@@ -65,6 +65,7 @@ class EventUpdate(BaseModel):
     # buying its scanned leads (14 Nov 2026).
     scanned_leads_checkout_url: Optional[str] = None
     scanned_leads_product_ids: Optional[List[str]] = None
+    wristband_red_product_ids: Optional[List[str]] = None
     # Pass an explicit list to reset which fields are locked from auto-sync.
     # If omitted, any field edited here is auto-locked so the scraper won't clobber it.
     locked_fields: Optional[List[str]] = None
@@ -108,6 +109,7 @@ class Event(EventBase):
     lead_offers: Optional[List[Any]] = None
     scanned_leads_checkout_url: Optional[str] = None
     scanned_leads_product_ids: Optional[List[str]] = None
+    wristband_red_product_ids: Optional[List[str]] = None
     allow_reentry: bool = False
     map_image_url: Optional[str] = None
     # Unambiguous instants: the same moment however the reader's device is set.

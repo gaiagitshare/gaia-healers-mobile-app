@@ -112,6 +112,8 @@ class Event(Base):
     # be empty = to be announced). Babak, 13 Nov 2026: not decided yet, so it
     # is data the organiser fills in later, not code. Empty = "coming soon".
     lead_offers = Column(JSON, nullable=True)
+    # GHL product ids whose buyers get the RED wristband (Susanne's workshop).
+    wristband_red_product_ids = Column(JSON, nullable=True)
     # Price to unlock a stand's own scanned leads (USD); empty = to be announced.
     scanned_leads_price = Column(Float, nullable=True)
     # Where a stand pays for them (the GHL checkout page) and which GHL product

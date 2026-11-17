@@ -180,6 +180,7 @@ def main():
                     "phone": p["phone"] or "", "ticket_type_id": ids[p["kind"]],
                     "attendance_type": ATTENDANCE[p["kind"]], "confirm_new": True,
                     "note": ("From the planning sheet: " + (ps.job_title(p) or p["kind"])
+                             + (" (%s)" % p["name_note"] if p.get("name_note") else "")
                              + (" (media: %s)" % p["media"] if p.get("media") else ""))[:300]})
                 ok = st in (200, 201) and (out or {}).get("attendee")
                 if ok:

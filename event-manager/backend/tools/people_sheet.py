@@ -21,10 +21,24 @@ def _clean(v):
 
 def _split_name(full):
     """Single names are real names ("Elnaz", "Jahangir"), not incomplete ones."""
-    parts = [p for p in _clean(full).split(" ") if p]
+    parts = [p for p in _clean(name_and_note(full)[0]).split(" ") if p]
     if not parts:
         return "", ""
     return parts[0], " ".join(parts[1:])
+
+
+def name_and_note(full):
+    """-> (name, note). The team writes who someone is next to their name --
+    "Raymond Herrmann (Pat's Husband)", "Kay Raymond (Ambers Friend)", "Nancy
+    Ventura 11" -- and that went onto the printed badge as the surname, and
+    stopped the person being recognised under their real name (17 Nov 2026)."""
+    v = _clean(full)
+    notes = re.findall(r"\(([^)]*)\)", v)
+    v = re.sub(r"\([^)]*\)", " ", v)
+    m = re.search(r"\s+(\d+)\s*$", v)
+    if m:
+        notes.append(m.group(1)); v = v[:m.start()]
+    return _clean(v), "; ".join(n.strip() for n in notes if n.strip())
 
 
 def fetch(gid):
@@ -39,7 +53,8 @@ def parse_volunteers(text):
             continue
         first, last = _split_name(name)
         email = _clean(row.get("E-MAIL")).lower()
-        rec = {"row": n, "kind": "volunteer", "name": name, "first_name": first, "last_name": last,
+        rec = {"row": n, "kind": "volunteer", "name": name_and_note(name)[0], "name_note": name_and_note(name)[1],
+               "first_name": first, "last_name": last,
                "email": email if EMAIL_RE.match(email) else "",
                "phone": _clean(row.get("PHONE")), "role": _clean(row.get("Area of expertise")),
                "workshops": _clean(row.get("WORKSHOPS")), "dates": _clean(row.get("Dates")),
@@ -60,7 +75,8 @@ def parse_guests(text):
             continue
         first, last = _split_name(name)
         email = _clean(row.get("EMAIL")).lower()
-        rec = {"row": n, "kind": "guest", "name": name, "first_name": first, "last_name": last,
+        rec = {"row": n, "kind": "guest", "name": name_and_note(name)[0], "name_note": name_and_note(name)[1],
+               "first_name": first, "last_name": last,
                "email": email if EMAIL_RE.match(email) else "", "phone": _clean(row.get("PHONE")),
                "role": "", "workshops": "", "dates": "", "forms": "", "issues": [],
                # "MEDIA?" on the guests tab: press/media guest (YES/NO), kept on the badge record.

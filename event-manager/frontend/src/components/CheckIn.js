@@ -195,7 +195,7 @@ function CheckIn({ timezone: timezoneProp }) {
     const [doorAction, setDoorAction] = useState(null);   // { kind, decision, ... }
     const [doorBusy, setDoorBusy] = useState(false);
     const [doorError, setDoorError] = useState('');
-    const [fixForm, setFixForm] = useState({ first_name: '', last_name: '', phone: '', email: '' });
+    const [fixForm, setFixForm] = useState({ first_name: '', last_name: '', phone: '', email: '', company: '', job_title: '', idChecked: false });
     const [actionReason, setActionReason] = useState('');
     const [passChoice, setPassChoice] = useState('');
     // An upgrade bought at the desk is real money. Recording it as
@@ -693,9 +693,10 @@ function CheckIn({ timezone: timezoneProp }) {
         setDoorError(''); setActionReason('');
         const card = d.door || {};
         setFixForm(kind === 'addseat'
-            ? { first_name: '', last_name: '', phone: '', email: '' }
+            ? { first_name: '', last_name: '', phone: '', email: '', company: '', job_title: '', idChecked: false }
             : { first_name: d.first_name || '', last_name: d.last_name || '',
-                phone: card.phone || '', email: card.email || '' });
+                phone: card.phone || '', email: card.email || '',
+                company: card.company || '', job_title: card.job_title || '', idChecked: false });
         setPassChoice(card.ticket_type_id ? String(card.ticket_type_id) : '');
         // The desk can only SELL an upgrade, so their dialog opens on "paying"
         // and stays there. An organiser gets the choice.
@@ -741,6 +742,11 @@ function CheckIn({ timezone: timezoneProp }) {
         'Let in, and logged with your reason.',
         { rescan: false });
 
+    // Whether the email field differs from the ticket's (the desk must then
+    // confirm they checked who the person is before saving).
+    const emailChanged = Boolean(doorAction?.kind === 'fix' && fixForm.email.trim()
+        && fixForm.email.trim().toLowerCase() !== ((doorAction?.decision?.door || {}).email || '').toLowerCase());
+
     const submitFix = () => runDoorAction(
         async (d) => {
             const before = d.door || {};
@@ -748,7 +754,14 @@ function CheckIn({ timezone: timezoneProp }) {
             if (fixForm.first_name.trim() !== (d.first_name || '')) body.first_name = fixForm.first_name.trim();
             if (fixForm.last_name.trim() !== (d.last_name || '')) body.last_name = fixForm.last_name.trim();
             if (fixForm.phone.trim() !== (before.phone || '')) body.phone = fixForm.phone.trim();
-            if (fixForm.email.trim().toLowerCase() !== (before.email || '').toLowerCase()) body.email = fixForm.email.trim();
+            if ((fixForm.company || '').trim() !== (before.company || '')) body.company = (fixForm.company || '').trim();
+            if ((fixForm.job_title || '').trim() !== (before.job_title || '')) body.job_title = (fixForm.job_title || '').trim();
+            if (fixForm.email.trim().toLowerCase() !== (before.email || '').toLowerCase()) {
+                body.email = fixForm.email.trim();
+                // The person is here and the desk checked who they are: corrected
+                // at once (18 Nov 2026). The old address stays in the history.
+                body.identity_checked = Boolean(fixForm.idChecked);
+            }
             await doorIdentity(eventId, d.attendee_id, body);
         },
         'Details corrected. Print the badge again so it carries the right name.');
@@ -2249,9 +2262,23 @@ function CheckIn({ timezone: timezoneProp }) {
                                 <TextField label="Phone" size="small" fullWidth value={fixForm.phone}
                                     onChange={(e) => setFixForm({ ...fixForm, phone: e.target.value })} />
                                 {doorAction?.kind === 'fix' && (
-                                    <TextField label="Email" size="small" fullWidth value={fixForm.email}
-                                        onChange={(e) => setFixForm({ ...fixForm, email: e.target.value })}
-                                        helperText="Changing the email needs an organiser login — it is how their card is claimed." />
+                                    <>
+                                        <Stack direction="row" spacing={1}>
+                                            <TextField label="Company" size="small" fullWidth value={fixForm.company || ''}
+                                                onChange={(e) => setFixForm({ ...fixForm, company: e.target.value })} />
+                                            <TextField label="Job title" size="small" fullWidth value={fixForm.job_title || ''}
+                                                onChange={(e) => setFixForm({ ...fixForm, job_title: e.target.value })} />
+                                        </Stack>
+                                        <TextField label="Email" size="small" fullWidth value={fixForm.email} type="email"
+                                            onChange={(e) => setFixForm({ ...fixForm, email: e.target.value })}
+                                            helperText="Type it with them, letter by letter. The old email is kept in the history." />
+                                        {emailChanged && (
+                                            <FormControlLabel sx={{ mt: -0.5 }}
+                                                control={<Checkbox size="small" checked={Boolean(fixForm.idChecked)}
+                                                    onChange={(e) => setFixForm({ ...fixForm, idChecked: e.target.checked })} />}
+                                                label="They are here and I checked who they are" />
+                                        )}
+                                    </>
                                 )}
                             </>
                         )}
@@ -2323,7 +2350,7 @@ function CheckIn({ timezone: timezoneProp }) {
                             onClick={submitOverride}>{doorBusy ? 'Working\u2026' : 'Let them in'}</Button>
                     )}
                     {doorAction?.kind === 'fix' && (
-                        <Button variant="contained" disabled={doorBusy || !fixForm.first_name.trim()}
+                        <Button variant="contained" disabled={doorBusy || !fixForm.first_name.trim() || (emailChanged && !fixForm.idChecked)}
                             onClick={submitFix}>{doorBusy ? 'Saving\u2026' : 'Save'}</Button>
                     )}
                     {doorAction?.kind === 'addseat' && (

@@ -82,7 +82,9 @@ def index(db, event_id):
             for _oid, st, prov, tids in s.db.execute(
                     "select order_id,state,provider_status,ticket_ids from order_ticket_delivery where event_id=?", (event_id,)):
                 ids = [int(x) for x in str(tids or "").replace(",", ";").split(";") if x.strip().isdigit()]
-                bad = st == "rejected" or (prov or "").lower() in _BAD_PROVIDER
+                # Only an email GHL accepted (and did not later report failed)
+                # reached them; refused, unknown or half-sent ones did not.
+                bad = st != "accepted" or (prov or "").lower() in _BAD_PROVIDER
                 for i in ids:
                     (failed if bad else delivered).add(i)
             try:

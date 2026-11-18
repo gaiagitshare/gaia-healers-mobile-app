@@ -1255,6 +1255,12 @@ class DoorIdentity(BaseModel):
     last_name: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
+    company: Optional[str] = None
+    job_title: Optional[str] = None
+    # The person is at the desk and staff checked who they are: the email is
+    # corrected on the spot (Babak, 18 Nov 2026). Without it, an email change
+    # is an organiser's request for a second admin, as before.
+    identity_checked: bool = False
     reason: Optional[str] = None
 
 

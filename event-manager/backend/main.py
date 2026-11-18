@@ -1771,7 +1771,7 @@ def door_identity(event_id: int, attendee_id: int, body: schemas.DoorIdentity,
     if not att:
         raise HTTPException(status_code=404, detail="That badge does not belong to this event")
     changes = {}
-    for field in ("first_name", "last_name", "phone"):
+    for field in ("first_name", "last_name", "phone", "company", "job_title"):
         val = getattr(body, field, None)
         if val is None:
             continue
@@ -1783,12 +1783,18 @@ def door_identity(event_id: int, attendee_id: int, body: schemas.DoorIdentity,
         email = str(body.email).strip().lower()
         if email and email != (att.email or "").lower():
             # Changing the address is an organiser's call, and it must stay
-            # unique at this event or two people claim one card.
-            authz.require_cap(db, current_user, event_id, "attendee.write")
-            _four_eyes(db, current_user, event_id, label='Change the email on a ticket (who it belongs to)',
-                       step={"action": "replay", "fn": 'door_identity', "kwargs": {"event_id": event_id, "attendee_id": attendee_id},
-                             "body_param": "body", "schema": "DoorIdentity", "body": body.dict()},
-                       attendee_id=attendee_id, reason=getattr(body, "reason", "") or "")
+            # unique at this event or two people claim one card -- EXCEPT with
+            # the person at the desk and their identity checked (Babak, 18 Nov
+            # 2026: "very easy to fix the contact info at the desk"). Then it is
+            # corrected at once; the old address stays in the history and an
+            # organiser can put it back. GHL is never written.
+            _at_desk = bool(getattr(body, "identity_checked", False))
+            if not _at_desk:
+                authz.require_cap(db, current_user, event_id, "attendee.write")
+                _four_eyes(db, current_user, event_id, label='Change the email on a ticket (who it belongs to)',
+                           step={"action": "replay", "fn": 'door_identity', "kwargs": {"event_id": event_id, "attendee_id": attendee_id},
+                                 "body_param": "body", "schema": "DoorIdentity", "body": body.dict()},
+                           attendee_id=attendee_id, reason=getattr(body, "reason", "") or "")
             if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
                 raise HTTPException(status_code=400, detail="That is not a valid email address")
             clash = db.query(models.Attendee).filter(
@@ -1800,6 +1806,8 @@ def door_identity(event_id: int, attendee_id: int, body: schemas.DoorIdentity,
                                     detail="%s already belongs to %s %s at this event" % (
                                         email, clash.first_name or "", clash.last_name or ""))
             changes["email"] = {"from": att.email or "", "to": email}
+            if _at_desk:
+                changes["email"]["identity_checked_at_desk"] = True
             att.email = email
     if not changes:
         return {"ok": True, "changed": {}, "door": _door_card(db, att, event, current_user)}
@@ -3765,6 +3773,8 @@ def _door_card(db, attendee, event, user=None):
                     "sell_upgrade": True, "fix_name": True, "override": True},
             "email": attendee.email,
             "phone": attendee.phone,
+            "company": attendee.company,
+            "job_title": attendee.job_title,
             "pass_display": _pass_display(db, attendee),
             # The band(s) the desk hands over (17 Nov 2026); empty = none.
             "wristbands": wristbands.for_attendee(db, attendee, event),
@@ -10429,6 +10439,14 @@ def reconcile_attendee(payload: schemas.ReconcileAttendee, db: Session = Depends
     # NEW order from the original buyer is theirs and gets its own ticket.
     if existing is None and payload.order_id:
         existing = _ticket_transferred_from(db, event.id, email, payload.order_id)
+
+    # The ticket THIS order already made, whose email was corrected since (at
+    # the desk, or by an approved request). Found by email it is not -- and a
+    # replay of the same order by the mirror created a second ticket for the
+    # old address (18 Nov 2026). The order replayed belongs to the ticket it
+    # bought; its corrected email is left alone.
+    if existing is None and payload.order_id:
+        existing = _ticket_for_order(db, event.id, payload.order_id)
 
     # An UPGRADE belongs to whoever holds the ticket it upgrades (11 Nov 2026).
     # Bought under another address, it found no ticket by email and became a

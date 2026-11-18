@@ -127,7 +127,16 @@ st, _ = call("PUT", "/events/%d" % EV, {"scanned_leads_price": 199,
                                         "scanned_leads_checkout_url": "https://pay.example.invalid/leads?src=card"}, ADMIN)
 check(st == 200, "admin sets price and checkout link", st)
 off = roster(A_TOK)["offers"]["scanned_leads"]
-u = urlsplit(off.get("checkout_url") or "")
+# 18 Nov 2026: the button goes through Gaia (so the stand is known whoever
+# pays) and on to the checkout; follow that one hop.
+check((off.get("checkout_url") or "").endswith("/scan/leads/%s/checkout" % A_TOK), "the screen offers the stand's own checkout link", off)
+class _NoRedir(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k): return None
+try:
+    urllib.request.build_opener(_NoRedir).open(BASE + "/scan/leads/%s/checkout" % A_TOK, timeout=60); _loc = ""
+except urllib.error.HTTPError as _e:
+    _loc = _e.headers.get("Location") or ""
+u = urlsplit(_loc)
 q = parse_qs(u.query)
 check(off["price"] == 199 and u.netloc == "pay.example.invalid" and q.get("email") == ["Alpha-%s@Example.invalid" % TAG]
       and q.get("src") == ["card"], "stand screen: $199 and the checkout with the stand's email pre-filled", off)

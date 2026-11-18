@@ -261,8 +261,9 @@ function ExhibitorScan() {
                                     : 'Unlock my leads'}
                             </Button>
                             <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
-                                Secure online payment. Pay with your stand{'\u2019'}s email and this page opens by itself
-                                within 15 minutes. Paid and still blurred? Ask the Gaia Healers team at the registration desk.
+                                Secure online payment. Anyone on your team can pay, with any email or card: this page
+                                opens by itself, usually within a minute or two. Paid and still blurred? Ask the Gaia
+                                Healers team at the registration desk.
                             </Typography>
                         </>
                     ) : (

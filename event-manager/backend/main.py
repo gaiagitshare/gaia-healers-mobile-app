@@ -115,7 +115,8 @@ def _ensure_event_columns():
                        ("site_name", "VARCHAR"), ("site_synced_at", "DATETIME"),
                        ("vendor_fields", "TEXT"), ("full_list_access", "BOOLEAN DEFAULT 0"),
                        ("leads_unlocked", "BOOLEAN DEFAULT 0"), ("leads_unlocked_at", "DATETIME"),
-                       ("leads_unlock_source", "VARCHAR"), ("leads_unlock_payment_id", "INTEGER")):
+                       ("leads_unlock_source", "VARCHAR"), ("leads_unlock_payment_id", "INTEGER"),
+                       ("leads_checkout_started_at", "DATETIME")):
         if _ex and _col not in _ex:
             stmts.append("ALTER TABLE exhibitors ADD COLUMN %s %s" % (_col, _ddl))
     if "door_test_mode" not in cols:
@@ -5383,6 +5384,27 @@ def public_vendor_page(exhibitor_id: int, db: Session = Depends(get_db)):
         ex, event.name if event else "", _directory_url(ex.event_id)))
 
 
+@app.get("/scan/leads/{access_token}/checkout")
+def leads_checkout_from_panel(access_token: str, db: Session = Depends(get_db)):
+    """The stand's "Unlock my leads" button. Notes that THIS stand started a
+    checkout, then sends it to the GHL payment page. The payment that follows
+    opens this stand whoever pays and with whatever email (Babak, 18 Nov 2026:
+    "from their panel if they pay it should get open, does not matter who pays")."""
+    from fastapi.responses import RedirectResponse
+    ex = authz.exhibitor_for_token(db, access_token)
+    if not ex:
+        raise HTTPException(status_code=404, detail="This scanner link is not valid")
+    event = db.query(models.Event).filter(models.Event.id == ex.event_id).first()
+    url = leads_checkout.checkout_url(event, ex)
+    if not url:
+        raise HTTPException(status_code=404, detail="Leads are not on sale for this event yet")
+    if not ex.leads_unlocked:
+        ex.leads_checkout_started_at = datetime.utcnow()
+        leads_checkout.note_checkout(ex)
+        db.commit()
+    return RedirectResponse(url, status_code=302)
+
+
 @app.get("/scan/roster/{access_token}")
 def exhibitor_roster(access_token: str, db: Session = Depends(get_db)):
     """How many people are at this event, and which of them this stand has met.
@@ -5446,7 +5468,9 @@ def exhibitor_roster(access_token: str, db: Session = Depends(get_db)):
             out["offers"]["scanned_leads"] = _offer(getattr(event, "scanned_leads_price", None) if event else None)
             # Pay online (GHL checkout); the screen re-reads every minute and
             # opens by itself once the payment lands.
-            out["offers"]["scanned_leads"]["checkout_url"] = leads_checkout.checkout_url(event, exhibitor)
+            out["offers"]["scanned_leads"]["checkout_url"] = (
+                leads_checkout.panel_url(EVENT_API_PUBLIC_BASE, exhibitor)
+                if leads_checkout.checkout_url(event, exhibitor) else None)
     return out
 
 
@@ -5555,7 +5579,8 @@ def vendor_setup_page(token: str, db: Session = Depends(get_db)):
                  "unlocked": authz.stand_leads_unlocked(ex),
                  "lists": lead_offers_public(event),
                  "leads_price": getattr(event, "scanned_leads_price", None) if event else None,
-                 "checkout_url": leads_checkout.checkout_url(event, ex)}
+                 "checkout_url": (leads_checkout.panel_url(EVENT_API_PUBLIC_BASE, ex)
+                                  if leads_checkout.checkout_url(event, ex) else None)}
     return HTMLResponse(badge_card.vendor_setup_html(ex, event.name if event else "", token, leads))
 
 

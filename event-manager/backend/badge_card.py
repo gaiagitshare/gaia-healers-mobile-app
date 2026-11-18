@@ -1290,7 +1290,7 @@ def _leads_block(leads):
         if leads.get("checkout_url"):
             # Babak, 14 Nov 2026: one price, paid online; it opens by itself.
             buy = ("<b>Unlock your leads: %s</b>"
-                   "Pay online and your list opens within 15 minutes, including everyone you "
+                   "Anyone on your team can pay online, with any email or card, and your list opens by itself, usually within a minute or two, including everyone you "
                    "already scanned.%s<br><a href=\"%s\">Unlock my leads &ndash; %s</a>"
                    % (money(leads.get("leads_price")), more, _h(leads["checkout_url"]), money(leads.get("leads_price"))))
         else:

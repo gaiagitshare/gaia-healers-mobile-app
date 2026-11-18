@@ -309,6 +309,11 @@ class Exhibitor(Base):
     leads_unlocked_at = Column(DateTime, nullable=True)
     leads_unlock_source = Column(String, nullable=True)
     leads_unlock_payment_id = Column(Integer, nullable=True, index=True)
+    # When this stand last pressed "Unlock my leads" on its own panel (18 Nov
+    # 2026). GHL's payment link carries nothing that names the stand, so a leads
+    # payment nobody's email or phone matches is given to the stand that had
+    # just started the checkout -- whoever actually paid.
+    leads_checkout_started_at = Column(DateTime, nullable=True)
     # What they bought, and whether they have paid for it.
     #
     # This lived in a spreadsheet column of free text and a green highlight,

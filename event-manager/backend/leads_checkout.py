@@ -111,6 +111,37 @@ def candidates_by_phone(db, event_id, phone):
         if _digits10(x.contact_phone) == want]
 
 
+PANEL_WINDOW_BEFORE_MIN = 180      # a checkout started up to 3 h before the payment
+PANEL_WINDOW_AFTER_MIN = 10       # (clock slack: GHL's time vs ours)
+
+
+def panel_url(api_base, ex):
+    """The panel's Unlock button: through Gaia, so the stand is known, then on
+    to GHL's checkout."""
+    return "%s/scan/leads/%s/checkout" % (api_base.rstrip("/"), ex.access_token)
+
+
+def note_checkout(ex):
+    _log({"op": "checkout_started", "exhibitor": ex.id})
+
+
+def candidates_by_panel(db, event_id, paid_at):
+    """The stand that started a checkout from its own panel just before this
+    payment. Only one may have, or it is not decided here."""
+    if paid_at is None:
+        return []
+    from datetime import timedelta
+    lo = paid_at - timedelta(minutes=PANEL_WINDOW_BEFORE_MIN)
+    hi = paid_at + timedelta(minutes=PANEL_WINDOW_AFTER_MIN)
+    return db.query(models.Exhibitor).filter(
+        models.Exhibitor.event_id == event_id,
+        models.Exhibitor.can_scan_leads == True,                     # noqa: E712
+        models.Exhibitor.leads_unlocked != True,                     # noqa: E712
+        models.Exhibitor.leads_checkout_started_at.isnot(None),
+        models.Exhibitor.leads_checkout_started_at >= lo,
+        models.Exhibitor.leads_checkout_started_at <= hi).all()
+
+
 def unlock(db, ex, pe=None, source="payment", actor=None):
     """Open a stand's leads, saying why. Never touches a stand already open."""
     if ex.leads_unlocked:
@@ -144,6 +175,9 @@ def apply_payment(db, pe, events=None):
     if not hits:
         hits = candidates_by_phone(db, event.id, pe.buyer_phone)
         source = "payment_phone"
+    if not hits:
+        hits = candidates_by_panel(db, event.id, pe.occurred_at)
+        source = "payment_panel"
     if len(hits) != 1:
         return "unmatched" if not hits else "ambiguous"
     ex = hits[0]
@@ -195,7 +229,8 @@ def payments_for_event(db, event):
         elif pe.live_mode is False:
             state = "test_mode"
         else:
-            n = len(candidates(db, event.id, pe.buyer_email) or candidates_by_phone(db, event.id, pe.buyer_phone))
+            n = len(candidates(db, event.id, pe.buyer_email) or candidates_by_phone(db, event.id, pe.buyer_phone)
+                    or candidates_by_panel(db, event.id, pe.occurred_at))
             state = "unmatched" if n == 0 else "ambiguous" if n > 1 else "stand_already_open"
         rows.append({"id": pe.id, "occurred_at": pe.occurred_at, "buyer_name": pe.buyer_name,
                      "buyer_email": pe.buyer_email, "amount": pe.amount, "currency": pe.currency,

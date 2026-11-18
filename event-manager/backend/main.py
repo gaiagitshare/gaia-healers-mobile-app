@@ -1098,6 +1098,32 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.refresh(db_user)
     return db_user
 
+def _login_lifetime(db, user):
+    """Door staff stay signed in for the whole event.
+
+    A desk iPad that drops back to the login screen mid-queue is the worst
+    moment to retype a password, so a non-admin whose only roles are event
+    check-in roles keeps one session until the morning after the last of those
+    events ends (never under the normal day, never over 7 days). Admins keep the
+    normal day. Removing the person's role on the event still cuts them off at
+    once, because every request re-checks the role.
+    """
+    base = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    if user.is_admin:
+        return base
+    roles = db.query(models.EventRole).filter(models.EventRole.user_id == user.id).all()
+    if not roles or any(r.role != "checkin_staff" for r in roles):
+        return base
+    ends = [e.end_date for e in db.query(models.Event).filter(
+        models.Event.id.in_([r.event_id for r in roles])).all() if e.end_date]
+    if not ends:
+        return base
+    now = datetime.utcnow()
+    # end_date is venue-local; +18h comfortably covers the evening and the US offset.
+    until = max(ends) + timedelta(hours=18)
+    return max(base, min(until - now, timedelta(days=7)))
+
+
 @app.post("/auth/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     # Phones and iPads capitalise the first letter and autocomplete adds a
@@ -1111,7 +1137,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token_expires = _login_lifetime(db, user)
     # "adm" tells the member/CRM admin (the proxy, which shares this signing
     # key for single sign-on) that this login belongs to an Event Manager
     # administrator. Door staff and other roles get no claim, so their tokens

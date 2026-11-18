@@ -1244,7 +1244,17 @@
       var err = document.getElementById('lerr'); err.textContent = '';
       if (!em || !pw) { err.textContent = 'Enter your email and password.'; return; }
       evPost('/auth/login', 'username=' + encodeURIComponent(em) + '&password=' + encodeURIComponent(pw), true).then(function (r) {
-        if (r.status === 200 && r.j && r.j.access_token) { setToken(r.j.access_token); boot(); }
+        if (r.status === 200 && r.j && r.j.access_token) {
+          // Door desks and other non-admin staff sign in here by habit, but this
+          // admin refuses them. Hand the same login to the Event Manager (same
+          // origin, same 'token' key) and open Check-In, already signed in.
+          if (r.j.user && r.j.user.is_admin === false) {
+            try { localStorage.setItem('token', r.j.access_token); } catch (e) {}
+            location.replace('/event/checkin');
+            return;
+          }
+          setToken(r.j.access_token); boot();
+        }
         else { err.textContent = (r.j && r.j.detail) || 'Incorrect email or password.'; }
       });
     };

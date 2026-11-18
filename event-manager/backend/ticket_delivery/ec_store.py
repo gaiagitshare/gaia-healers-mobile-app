@@ -212,6 +212,16 @@ def due_for_status(table_state, provider_status, provider_checked_at, sent_at, t
         return False
     p = (provider_status or "").lower()
     checked = _ts(provider_checked_at)
+    if p == "failed":
+        # GHL reports a recipient server's TEMPORARY deferral (Microsoft 4.3.2
+        # "too many connections", 4.2.2 "mailbox full") as failed, then keeps
+        # retrying -- two exhibitor emails stored as failed on 12-13 Nov were
+        # delivered/clicked by 18 Nov. So "failed" is not final: ask again,
+        # like a delivered email, for the same three days (18 Nov audit).
+        sent = _ts(sent_at)
+        if sent and t0 - sent > timedelta(hours=RECHECK_HOURS):
+            return False
+        return not checked or t0 - checked > timedelta(minutes=RECHECK_MINUTES)
     if p in st.BAD_PROVIDER or p == "clicked":
         return False
     if p in ("delivered", "opened", "read"):

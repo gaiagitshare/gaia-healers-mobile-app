@@ -528,6 +528,12 @@ def _build_inner(db, event_id, s, only_buyer=None):
         d = deliv.get(key)
         if d and d["state"] != "rejected":
             continue
+        if d and u["ticket_ids"] and all(i in delivered_tix for i in u["ticket_ids"]):
+            # A refused email whose tickets have since gone out in another
+            # email (a corrected address) is history, not something still to
+            # send: checking it again only reported the delivered ticket as a
+            # "duplicate QR" to the "wrong holder" (Vladimir Spivak, 18 Nov).
+            continue
         tix = [by_id[i] for i in u["ticket_ids"] if i in by_id and i not in holds]
         if not tix or (scope is not None and not (set(u["ticket_ids"]) & scope)):
             continue

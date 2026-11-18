@@ -7,6 +7,7 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import PaymentHistory from './PaymentHistory';
+import DeskSummary from './DeskSummary';
 import PartnerGuestDialog from './PartnerGuestDialog';
 import ClearIcon from '@mui/icons-material/Clear';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
@@ -876,6 +877,9 @@ function CheckIn({ timezone: timezoneProp }) {
                         {accessOf(attendee)?.effective_label && (
                             <Typography variant="body2" sx={{ mt: 0.5 }}><strong>{accessOf(attendee).effective_label}</strong></Typography>
                         )}
+                        {/* READY / VERIFY / MULTIPLE / BLOCKED, the desk notes and every
+                            ticket that belongs with this one (18 Nov 2026). */}
+                        <DeskSummary desk={attendee.desk} compact />
                         {attendee.paid_by && (
                             // The name on the card is not always the name they
                             // say. Couples buy two tickets on one card, and the
@@ -1030,6 +1034,7 @@ function CheckIn({ timezone: timezoneProp }) {
                             ))}
                         </Stack>
                     )}
+                    {card?.desk && <DeskSummary desk={card.desk} />}
                     <Typography variant="body2" sx={{ mt: 1 }}>{reason}</Typography>
                     {d.refused_reason && (
                         // An override keeps the refusal visible. The screen must never
@@ -1041,13 +1046,15 @@ function CheckIn({ timezone: timezoneProp }) {
 
                     {/* What they paid, who paid it, and what kind of attendance
                         this is — the three questions a desk gets asked back. */}
-                    {card && (
+                    {/* Money stays with organisers (18 Nov 2026): the desk reads the
+                        entitlement above, never amounts or transactions. */}
+                    {card && card.may?.comp && (
                         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
                             {money}
                         </Typography>
                     )}
 
-                    {card?.payment_history && <PaymentHistory history={card.payment_history} />}
+                    {card?.payment_history && card.may?.comp && <PaymentHistory history={card.payment_history} />}
 
                     {/* A seat whose name came off the buyer's order. This is the
                         single most likely correction of the weekend, so it says so
@@ -1096,7 +1103,7 @@ function CheckIn({ timezone: timezoneProp }) {
                             {/* Why the booking holds the seats it does: each ticket purchase,
                                 when, how much, how, and which transaction. Same price minutes
                                 apart is still a seat, flagged so the desk can ask. */}
-                            {(card.party.purchases || []).length > 1 && (
+                            {card.may?.comp && (card.party.purchases || []).length > 1 && (
                                 <Box sx={{ mt: 1 }}>
                                     {card.party.possible_double_charges > 0 && (
                                         <Typography variant="caption" sx={{ display: 'block', color: 'warning.main', fontWeight: 700 }}>

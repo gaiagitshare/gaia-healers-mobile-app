@@ -43,6 +43,7 @@ import vendor_page
 import payments
 import leads_checkout
 import wristbands
+import desk_view
 from fastapi import Response
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
@@ -1934,7 +1935,9 @@ def add_party_seat(event_id: int, attendee_id: int, body: schemas.AddPartySeat,
     seat = models.Attendee(
         event_id=event_id, email=email, first_name=first, last_name=last,
         phone=(body.phone or "").strip() or None,
-        ticket_type_id=buyer.ticket_type_id,
+        # The pass this seat was bought as (a VIP + Three Day order names its
+        # guest on the Three Day pass); otherwise the buyer's, as before.
+        ticket_type_id=(party.get("next_seat_ticket_type_id") or buyer.ticket_type_id),
         registration_status="registered", attendance_type=(buyer.attendance_type or "paid"),
         registration_source="door_seat",
         qr_code="ATT-%s" % uuid.uuid4().hex[:12].upper(),
@@ -3545,6 +3548,27 @@ def _party_members(db, attendee):
         for _e in ((_row.custom_data or {}).get("entitlements") or []):
             if _e.get("status") == "paid" and not _e.get("addon_code") and not _e.get("is_upgrade"):
                 slots += max(1, int(_e.get("quantity") or 1)) - 1
+    # Two DIFFERENT full passes in ONE checkout are two people (18 Nov 2026:
+    # "VIP PASS" + "THREE DAY EVENT PASS" on one order read as a party of one,
+    # so the guest's paid seat could not be named at the door). A second order
+    # is still a buy-up as above; single-day passes (Sat + Sun on one order) are
+    # one person's days, not a second person. The buyer keeps the best pass; the
+    # guests' seats carry the others.
+    seat_types = []
+    _by_order = {}
+    for _e in ((buyer.custom_data or {}).get("entitlements") or []):
+        if (_e.get("status") == "paid" and not _e.get("addon_code") and not _e.get("is_upgrade")
+                and _e.get("order_id") and _e.get("ticket_type_id")):
+            _t = _snap(db, ("tt", int(_e["ticket_type_id"])), lambda _i=int(_e["ticket_type_id"]): db.query(models.TicketType).filter(
+                models.TicketType.id == _i).first())
+            if _t is None or getattr(_t, "valid_day", None):
+                continue
+            _by_order.setdefault(_e["order_id"], set()).add(int(_e["ticket_type_id"]))
+    for _types in _by_order.values():
+        if len(_types) > 1:
+            _ranked = sorted(_types, key=lambda _i: _tt_rank(db, _i))
+            seat_types += _ranked[:-1]
+            slots += len(_types) - 1
     # A seat named against a multi-seat order has no payment of its own to hold:
     # the one payment carrying the quantity is the buyer's. Those seats are the
     # ones that filled a quantity slot, so they stop it being counted as waiting
@@ -3560,6 +3584,19 @@ def _party_members(db, attendee):
     if not seats and not waiting and slots < 1:
         return None
     size = len(seats) + 1
+    # Which pass the next seat named at the door must carry: the multi-pass
+    # order's guest passes not yet held by an unpaid seat; else the buyer's.
+    next_seat_tt = None
+    if seat_types:
+        _held = {}
+        for _s in seats:
+            _held[_s.ticket_type_id] = _held.get(_s.ticket_type_id, 0) + 1
+        for _t in seat_types:
+            if _held.get(_t, 0) > 0:
+                _held[_t] -= 1
+            else:
+                next_seat_tt = _t
+                break
 
     def row(a, is_buyer):
         _cd = a.custom_data or {}
@@ -3627,6 +3664,7 @@ def _party_members(db, attendee):
             "purchases": purchases,
             "possible_double_charges": sum(1 for p in purchases if p["possible_double_charge"]),
             "unnamed": max(0, paid_for - size),
+            "next_seat_ticket_type_id": next_seat_tt,
             "checked_in": sum(1 for m in members if m["checked_in"]),
             "seat": str(cd.get("seat_of_party") or "1 of %d" % size),
             "members": members}
@@ -3711,7 +3749,16 @@ def _door_card(db, attendee, event, user=None):
     """
     cd = attendee.custom_data or {}
     _organiser = bool(user and authz.can(db, user, event.id, "attendee.write"))
+    _party = _party_members(db, attendee)
+    try:
+        _desk = desk_view.view(db, attendee, party=_party)
+    except Exception as _e:                       # the desk summary must never break a scan
+        print("desk_view failed for %s: %r" % (attendee.id, _e))
+        _desk = None
     return {"attendee_id": attendee.id,
+            # READY / VERIFY / MULTIPLE / BLOCKED, the desk notes and every ticket
+            # that belongs with this one (18 Nov 2026). No money in it.
+            "desk": _desk,
             "may": {"comp": _organiser, "downgrade": _organiser,
                     "revoke": _organiser, "change_email": _organiser,
                     "sell_upgrade": True, "fix_name": True, "override": True},
@@ -3741,7 +3788,7 @@ def _door_card(db, attendee, event, user=None):
                         # Whether anybody ever actually asked them, as opposed
                         # to the default answering on their behalf.
                         "asked": attendee.consent_updated_at is not None},
-            "party": _party_members(db, attendee),
+            "party": _party,
             "money": _money_for(db, attendee),
             "payment_history": _payment_history_for_ticket(db, attendee),
             "badge_print_count": int(attendee.badge_print_count or 0),
@@ -6544,6 +6591,14 @@ def search_attendees(
             score = 85
         elif comp and term in comp:
             score = 30
+        if not score and re.fullmatch(r"#?\d{1,6}", term) and int(digits) == a.id:
+            score = 95                                   # ticket number, as on the badge: "#909"
+        if not score and len(term) >= 6 and re.fullmatch(r"[0-9a-f]+", term):
+            # A GHL order or invoice number, whole or its last characters.
+            _refs = [a.acq_order_id or "", str((a.custom_data or {}).get("order_id") or "")] + [
+                str(e.get("order_id") or e.get("invoice_id") or "") for e in ((a.custom_data or {}).get("entitlements") or [])]
+            if any(r and (r.lower() == term or r.lower().endswith(term)) for r in _refs):
+                score = 88
         if not score and len(digits) >= 4 and phone_d and digits in phone_d:
             score = 70 if phone_d.endswith(digits) else 50
         if not score:
@@ -6571,8 +6626,17 @@ def search_attendees(
         response.headers["X-Search-Total"] = str(len(scored))
         response.headers["X-Search-Truncated"] = "1" if len(scored) > 50 else "0"
     with _read_snapshot(db):                 # read only: one lookup per question
+        try:
+            _ix = desk_view.index(db, event_id) if out else None
+        except Exception as _e:
+            print("desk_view index failed: %r" % (_e,)); _ix = None
         for _a in out:
             _a.effective_access = _effective_access(db, _a)
+            if _ix is not None:
+                try:
+                    _a.desk = desk_view.view(db, _a, _ix, party=_party_members(db, _a))
+                except Exception as _e:
+                    print("desk_view failed for %s: %r" % (_a.id, _e))
             _booking, _seat = _party_of(_a)
             _a.paid_by = _booking or _payer_label(payers.get(_a.id, ()), _a)
             _a.party_seat = _seat or None

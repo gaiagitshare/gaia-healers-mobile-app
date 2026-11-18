@@ -1,4 +1,5 @@
 import axios from 'axios';
+import shrinkImage from './shrinkImage';
 
 const API_URL = process.env.REACT_APP_API_URL || (
     window.location.hostname === 'localhost' ? 'http://localhost:8002' : '/event-api'
@@ -270,9 +271,9 @@ export const vendorActivationLink = (id, rotate = false) => api.post(`/exhibitor
 // A stand's pictures and its catalogue. The same rows the stand edits through
 // its own setup link, so whatever the team builds here is what the stand takes
 // over the day it activates.
-export const uploadExhibitorImage = (id, file) => {
+export const uploadExhibitorImage = async (id, file) => {
     const body = new FormData();
-    body.append('file', file);
+    body.append('file', await shrinkImage(file));
     return api.post(`/exhibitors/${id}/images`, body,
         { headers: { 'Content-Type': 'multipart/form-data' } });
 };

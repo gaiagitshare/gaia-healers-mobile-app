@@ -1201,6 +1201,8 @@ button[disabled]{opacity:.55;cursor:default}
 .item img{width:54px;height:54px;border-radius:9px;object-fit:cover;flex:0 0 auto;background:#eef3ee}
 .item .no{width:54px;height:54px;border-radius:9px;flex:0 0 auto;background:#eef3ee;
   display:flex;align-items:center;justify-content:center;color:#9db0a3;font-size:19px}
+.item .pimg{border:0;padding:0;background:none;cursor:pointer;flex:0 0 auto;font:inherit;color:inherit}
+.item .pimg .no{font-size:11px;font-weight:700;color:#2f5d3a;text-align:center;line-height:1.2}
 .item .t{flex:1;min-width:0}
 .item .t b{display:block;font-size:14.5px}
 .item .t span{display:block;font-size:13px;color:#8a998f;line-height:1.45}
@@ -1416,12 +1418,26 @@ def vendor_setup_html(ex, event_name, token, leads=None):
         "<button type=\"button\" data-ph=\"'+p.id+'\" aria-label=\"Remove photo\">&times;</button></div>';}).join('');"
         "ph0.style.display=(d.photos||[]).length?'none':'';"
         "pr.innerHTML=(d.products||[]).map(function(p){return '<div class=\"item\">'"
-        "+(p.image_url?'<img src=\"'+esc(p.image_url)+'\" alt=\"\">':'<div class=\"no\">&#9634;</div>')"
+        "+'<button type=\"button\" class=\"pimg\" data-primg=\"'+p.id+'\" aria-label=\"'+(p.image_url?'Change photo':'Add a photo')+'\" title=\"'+(p.image_url?'Change photo':'Add a photo')+'\">'"
+        "+(p.image_url?'<img src=\"'+esc(p.image_url)+'\" alt=\"\">':'<div class=\"no\">+ Add<br>photo</div>')+'</button>'"
         "+'<div class=\"t\"><b>'+esc(p.name)+'</b><span>'+esc(p.description||'')+'</span></div>'"
         "+'<button type=\"button\" class=\"x\" data-pr=\"'+p.id+'\" aria-label=\"Remove item\">&times;</button></div>';}).join('');"
         "pr0.style.display=(d.products||[]).length?'none':'';}"
         "async function load(){try{draw(await api('/media'));}catch(e){}}"
-        "async function upload(file){var fd=new FormData();fd.append('file',file);"
+        # Phone photos are 2-12 MB; anything over 1.5 MB is resized in the browser
+        # (longest side 2000px) before it is sent, so it always fits the server's
+        # limit. PNG stays PNG (a logo keeps its transparency); a file the browser
+        # cannot decode goes as it is and the server answers plainly. 18 Nov 2026.
+        "function shrink(file){return new Promise(function(res){"
+        "if(!/^image\\//.test(file.type||'')||(file.size<1500000&&/jpe?g|png|webp|gif/.test(file.type))){res(file);return;}"
+        "var u=URL.createObjectURL(file),im=new Image();"
+        "im.onload=function(){var k=Math.min(1,2000/Math.max(im.naturalWidth,im.naturalHeight));"
+        "var c=document.createElement('canvas');c.width=Math.round(im.naturalWidth*k);c.height=Math.round(im.naturalHeight*k);"
+        "c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);"
+        "var png=file.type==='image/png';"
+        "c.toBlob(function(b){res(b?new File([b],png?'photo.png':'photo.jpg',{type:png?'image/png':'image/jpeg'}):file);},png?'image/png':'image/jpeg',0.85);};"
+        "im.onerror=function(){URL.revokeObjectURL(u);res(file);};im.src=u;});}"
+        "async function upload(file){var fd=new FormData();fd.append('file',await shrink(file));"
         "return (await api('/images',{method:'POST',body:fd})).url;}"
         "phb.addEventListener('click',function(){phf.click();});"
         "phf.addEventListener('change',async function(){"
@@ -1447,6 +1463,13 @@ def vendor_setup_html(ex, event_name, token, leads=None):
         "document.getElementById('prname').value='';document.getElementById('prdesc').value='';"
         "prf.value='';prn.classList.remove('on');await load();say(prm,'Added.');}"
         "catch(e){say(prm,e.message,1);}prsave.disabled=false;});"
+        # A photo for an item already listed (18 Nov 2026: items imported without
+        # pictures could only get one by being deleted and added again).
+        "var pri=document.createElement('input');pri.type='file';pri.accept='image/*';pri.hidden=true;document.body.appendChild(pri);"
+        "var priId=null;pr.addEventListener('click',function(e){var b=e.target.closest('[data-primg]');if(!b)return;priId=b.getAttribute('data-primg');pri.click();});"
+        "pri.addEventListener('change',async function(){var f=pri.files&&pri.files[0];if(!f||!priId)return;say(prm,'Uploading\\u2026');"
+        "try{var url=await upload(f);await api('/products/'+priId,{method:'PATCH',headers:{'Content-Type':'application/json'},"
+        "body:JSON.stringify({image_url:url})});await load();say(prm,'Photo added.');}catch(err){say(prm,err.message,1);}pri.value='';});"
         "pr.addEventListener('click',async function(e){var b=e.target.closest('[data-pr]');if(!b)return;"
         "if(!confirm('Remove this item?'))return;"
         "try{await api('/products/'+b.getAttribute('data-pr'),{method:'DELETE'});await load();}"

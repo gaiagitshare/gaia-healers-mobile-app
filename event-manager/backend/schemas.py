@@ -210,6 +210,9 @@ class Attendee(AttendeeBase):
     # ticket each on one card, so the payer and the badge are routinely
     # different people -- and at a door the payer is the name they say.
     paid_by: Optional[str] = None
+    # The registration-desk summary (desk_view.py): status, notes, every ticket
+    # that belongs with this one. Search results only.
+    desk: Optional[Dict[str, Any]] = None
     # "2 of 4" for a seat rebuilt onto somebody else's booking, so the desk can
     # see at a glance that a party is not all present.
     party_seat: Optional[str] = None

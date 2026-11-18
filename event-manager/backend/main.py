@@ -1100,7 +1100,10 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
 @app.post("/auth/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == form_data.username).first()
+    # Phones and iPads capitalise the first letter and autocomplete adds a
+    # trailing space ("Desk3@... "), so match the email the way people type it.
+    _login = (form_data.username or "").strip().lower()
+    user = db.query(models.User).filter(func.lower(models.User.email) == _login).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

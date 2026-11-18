@@ -1539,7 +1539,56 @@ def ec_bookings(event_id: int, filter: Optional[str] = None, q: Optional[str] = 
         ql = q.strip().lower()
         bs = [b for b in bs if ql in " ".join([b["purchaser_name"] or "", b["purchaser_email"] or "", " ".join(b["order_ids"]), b["key"],
                                                " ".join(str(t["id"]) + " " + (t["name"] or "") + " " + (t["email"] or "") for t in b["tickets"])]).lower()]
-    return {"items": [_public(b) for b in bs], "count": len(bs), "filters": list(FILTERS)}
+    # Everybody else with a ticket (18 Nov 2026: "in the ticket center we want to
+    # easily find everyone and their ticket"). Complimentary guests, volunteers and
+    # staff, speakers, exhibitor staff: not orders, so never in the review or send
+    # flow or the counts above -- but findable here, with their ticket.
+    others = []
+    if (q and q.strip()) or filter == "others":
+        others = _other_tickets(db, event_id, (q or "").strip().lower())
+    items = [] if filter == "others" else [_public(b) for b in bs]
+    return {"items": items, "count": len(items), "filters": list(FILTERS) + ["others"],
+            "others": others, "others_count": len(others)}
+
+
+_OTHER_KIND = {"complimentary": "Complimentary guest", "staff": "Volunteer / staff", "exhibitor": "Exhibitor staff",
+               "speaker": "Speaker", "partner_guest": "Partner guest"}
+
+
+def _other_tickets(db, event_id, ql):
+    built = bookings(db, event_id)
+    ids = [o["id"] for o in built["out_of_scope"]]
+    if not ids:
+        return []
+    rows = db.query(models.Attendee).filter(models.Attendee.id.in_(ids)).all()
+    types = {t.id: t for t in db.query(models.TicketType).filter(models.TicketType.event_id == event_id).all()}
+    st_ = _store()
+    try:
+        deliv = _delivery_rows(st_, event_id)
+    finally:
+        st_.close()
+    out = []
+    for a in sorted(rows, key=lambda x: ((x.last_name or "").lower(), (x.first_name or "").lower())):
+        name = _name(a)
+        email = (a.email or "").strip().lower()
+        hay = " ".join([name.lower(), email, (a.company or "").lower(), str(a.id), "#%d" % a.id, (a.qr_code or "").lower()])
+        if ql and ql not in hay and not all(w in hay for w in ql.split()):
+            continue
+        cd = a.custom_data or {}
+        kind = "speaker" if cd.get("source") == "speaker_badge" else (
+            "partner_guest" if a.registration_source == "partner_guest" else (a.attendance_type or "complimentary"))
+        d = deliv.get("ticket:%d" % a.id)
+        code = M._ticket_links.link_code(a.qr_code, M.SECRET_KEY) if a.qr_code else None
+        tt = types.get(a.ticket_type_id)
+        out.append({"id": a.id, "name": name, "email": email or None, "company": a.company or None,
+                    "kind": _OTHER_KIND.get(kind, kind.replace("_", " ").capitalize()),
+                    "pass": (M._pass_display(db, a) or (tt.name if tt else None)),
+                    "delivery": unit_status(d) if email else "no_email",
+                    "last_sent": (d or {}).get("updated_at"),
+                    "checked_in": bool(a.is_checked_in),
+                    "ticket_url": (PUBLIC + "/ticket/" + code) if code else None,
+                    "note": (str(cd.get("note") or "")[:120] or None)})
+    return out
 
 
 @router.get(P + "/bookings/{key}")

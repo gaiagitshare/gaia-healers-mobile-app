@@ -15,6 +15,7 @@ const FILTER_LABELS = {
     can_approve: 'Can be approved', blocked: 'Blocked', held: 'Held', needs_correction: 'Needs correction',
     changed: 'Changed since review', not_sent: 'Not sent', sent: 'Sent', delivered: 'Delivered',
     failed: 'Failed / unknown', multi: 'Several tickets', late: 'Late orders', missing_email: 'Missing email',
+    others: 'Other tickets (guests, staff, speakers)',
 };
 const FILTERS = Object.keys(FILTER_LABELS);
 
@@ -23,6 +24,7 @@ export default function EmailCenterTickets({ eventId, me, initialFilter, openKey
     const [filter, setFilter] = useState(initialFilter || '');
     const [q, setQ] = useState('');
     const [rows, setRows] = useState([]);
+    const [others, setOthers] = useState([]);
     const [filters, setFilters] = useState(FILTERS);
     const [count, setCount] = useState(0);
     const [loading, setLoading] = useState(true);
@@ -44,6 +46,7 @@ export default function EmailCenterTickets({ eventId, me, initialFilter, openKey
         return ecBookings(eventId, params)
             .then((r) => {
                 setRows(r.data.items || []); setCount(r.data.count ?? (r.data.items || []).length);
+                setOthers(r.data.others || []);
                 if (r.data.filters?.length) setFilters(r.data.filters);
                 setError('');
                 setPicked((p) => { const keep = new Set((r.data.items || []).map((b) => b.key)); return new Set([...p].filter((k) => keep.has(k))); });
@@ -69,7 +72,7 @@ export default function EmailCenterTickets({ eventId, me, initialFilter, openKey
             {batchId && <Box sx={{ mb: 2 }}><BatchCard eventId={eventId} id={batchId} me={me} onFinished={load} /></Box>}
 
             <Stack direction={narrow ? 'column' : 'row'} spacing={1} sx={{ mb: 1 }} alignItems={narrow ? 'stretch' : 'center'}>
-                <TextField size="small" label="Search order, name or email" value={q} onChange={(e) => setQ(e.target.value)} sx={{ flex: 1, minWidth: 220 }} />
+                <TextField size="small" label="Search anyone: name, email, order or ticket #" value={q} onChange={(e) => setQ(e.target.value)} sx={{ flex: 1, minWidth: 220 }} />
                 <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
                     {me?.send && <>
                         <GatedButton variant="contained" reason={sBlock || (!picked.size ? 'Select orders first.' : '')}
@@ -95,7 +98,7 @@ export default function EmailCenterTickets({ eventId, me, initialFilter, openKey
                 ))}
             </Stack>
 
-            <Card variant="outlined">
+            {filter !== 'others' && (<Card variant="outlined">
                 <Box sx={{ overflowX: 'auto' }}>
                     {loading && !rows.length ? <Box sx={{ p: 3, textAlign: 'center' }}><CircularProgress size={24} /></Box> : (
                         <Table size="small" sx={{ minWidth: 1300 }}>
@@ -150,7 +153,44 @@ export default function EmailCenterTickets({ eventId, me, initialFilter, openKey
                 <Typography variant="caption" color="text.secondary" sx={{ p: 1, display: 'block' }}>
                     {count} order(s){picked.size ? ` · ${picked.size} selected` : ''}. Rows in red: purchased and generated differ, or a blocker exists.
                 </Typography>
-            </Card>
+            </Card>)}
+
+            {/* Everybody else with a ticket (18 Nov 2026): complimentary guests,
+                volunteers and staff, speakers, exhibitor staff. Not orders, so not
+                reviewed or sent from here, but findable with their ticket. */}
+            {(others.length > 0 || filter === 'others') && (
+                <Card variant="outlined" sx={{ mt: 2 }}>
+                    <Box sx={{ p: 1.5, pb: 0.5 }}>
+                        <Typography variant="subtitle2">Other tickets: complimentary guests, volunteers & staff, speakers, exhibitor staff</Typography>
+                        <Typography variant="caption" color="text.secondary">Not orders, so they are not reviewed or sent from this page. Each ticket is valid at the door.</Typography>
+                    </Box>
+                    <Box sx={{ overflowX: 'auto' }}>
+                        <Table size="small" sx={{ minWidth: 900 }}>
+                            <TableHead><TableRow>
+                                <TableCell>Ticket</TableCell><TableCell>Name</TableCell><TableCell>Email</TableCell><TableCell>Kind</TableCell>
+                                <TableCell>Pass</TableCell><TableCell>Ticket email</TableCell><TableCell>Last sent</TableCell><TableCell>Checked in</TableCell><TableCell>Ticket link</TableCell>
+                            </TableRow></TableHead>
+                            <TableBody>
+                                {others.map((o) => (
+                                    <TableRow key={o.id} hover>
+                                        <TableCell>#{o.id}</TableCell>
+                                        <TableCell>{o.name}{o.company && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{o.company}</Typography>}</TableCell>
+                                        <TableCell>{o.email || <Typography variant="body2" color="text.secondary">No email</Typography>}</TableCell>
+                                        <TableCell>{o.kind}</TableCell>
+                                        <TableCell>{o.pass}</TableCell>
+                                        <TableCell>{o.delivery === 'no_email' ? <Chip size="small" variant="outlined" label="No email" /> : <DeliveryChip s={o.delivery} />}</TableCell>
+                                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{gst(o.last_sent)}</TableCell>
+                                        <TableCell>{o.checked_in ? <Chip size="small" color="success" label="Checked in" /> : 'No'}</TableCell>
+                                        <TableCell>{o.ticket_url ? <Button size="small" href={o.ticket_url} target="_blank" rel="noopener">Open</Button> : '-'}</TableCell>
+                                    </TableRow>
+                                ))}
+                                {!others.length && <TableRow><TableCell colSpan={9}>Nobody matches.</TableCell></TableRow>}
+                            </TableBody>
+                        </Table>
+                    </Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ p: 1, display: 'block' }}>{others.length} other ticket(s)</Typography>
+                </Card>
+            )}
 
             <EmailCenterReview eventId={eventId} bookingKey={reviewKey} me={me} focus={reviewFocus} onClose={() => setReviewKey(null)} onChanged={onChanged} />
             {batchAsk && (

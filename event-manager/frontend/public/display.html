@@ -14,78 +14,110 @@
   same public live endpoint as the app, so the foyer screen and an attendee's
   phone can never disagree.
 
+  Click (or press F) for full screen. The screen is kept awake where the browser
+  allows it, and the page refreshes itself every few hours to pick up updates.
+
   Options:  &rotate=12   seconds per sponsor  (default 10)
             &poll=20     seconds between refreshes (default 20)
 -->
 <style>
   :root {
-    --bg: #08130d; --panel: #0e1d14; --line: #1d3527;
-    --text: #ecf3e9; --muted: #8fae99; --accent: #7bd88f; --warn: #f0c674;
+    --bg: #07110b; --panel: #0d1a12; --panel2: #10221a; --line: #1d3527;
+    --text: #eef5ec; --muted: #8fae99; --accent: #7bd88f; --accent2: #b9f0c4; --warn: #f0c674; --live: #ff6b6b;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
   body {
-    background: var(--bg); color: var(--text); overflow: hidden;
+    background: radial-gradient(120vw 80vh at 10% -10%, #123322 0%, transparent 55%),
+                radial-gradient(90vw 70vh at 110% 110%, #0f2a1f 0%, transparent 55%), var(--bg);
+    color: var(--text); overflow: hidden; cursor: default;
     font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-    display: flex; flex-direction: column; padding: 2.2vw; gap: 1.6vw;
+    display: flex; flex-direction: column; padding: 2.2vw; gap: 1.5vw;
   }
-  header { display: flex; justify-content: space-between; align-items: baseline; gap: 2vw; }
-  .event { font-size: 2.2vw; font-weight: 700; letter-spacing: -0.01em; }
-  .clock { font-size: 2.6vw; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
-  .zone { font-size: 0.95vw; color: var(--muted); text-transform: uppercase; letter-spacing: .14em; }
+  header { display: flex; justify-content: space-between; align-items: flex-end; gap: 2vw; }
+  .event { font-size: 2.4vw; font-weight: 800; letter-spacing: -0.015em; }
+  .sub { font-size: 1.05vw; color: var(--muted); margin-top: .35vw; letter-spacing: .02em; }
+  .clockbox { text-align: right; }
+  .clock { font-size: 3vw; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1; }
+  .day { font-size: 1vw; color: var(--muted); text-transform: uppercase; letter-spacing: .16em; margin-top: .4vw; }
   .banner {
-    background: var(--warn); color: #23200c; font-weight: 700; font-size: 1.35vw;
-    padding: .9vw 1.4vw; border-radius: .8vw;
+    background: var(--warn); color: #23200c; font-weight: 800; font-size: 1.5vw;
+    padding: 1vw 1.5vw; border-radius: .9vw; animation: glow 2.4s ease-in-out infinite;
   }
-  main { flex: 1; display: grid; grid-template-columns: 1.65fr 1fr; gap: 1.6vw; min-height: 0; }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 1.2vw; padding: 1.6vw; min-height: 0; }
-  .kicker { font-size: .95vw; letter-spacing: .18em; text-transform: uppercase; color: var(--accent); font-weight: 800; }
-  .now-title { font-size: 3.4vw; font-weight: 700; line-height: 1.08; margin-top: .6vw; }
-  .now-meta { font-size: 1.5vw; color: var(--muted); margin-top: .7vw; }
-  .remaining { font-size: 1.5vw; color: var(--accent); font-weight: 700; margin-top: 1vw; }
-  .next-item { display: flex; gap: 1.2vw; padding: 1vw 0; border-top: 1px solid var(--line); }
+  @keyframes glow { 0%,100% { box-shadow: 0 0 0 0 rgba(240,198,116,.0); } 50% { box-shadow: 0 0 2.2vw .2vw rgba(240,198,116,.35); } }
+  main { flex: 1; display: grid; grid-template-columns: 1.65fr 1fr; gap: 1.5vw; min-height: 0; }
+  .panel { background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 1.2vw; padding: 1.7vw; min-height: 0; }
+  .kicker { font-size: .95vw; letter-spacing: .2em; text-transform: uppercase; color: var(--accent); font-weight: 800; display: flex; align-items: center; gap: .7vw; }
+  .dot { width: .8vw; height: .8vw; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 0 rgba(255,107,107,.7); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255,107,107,.7); } 70% { box-shadow: 0 0 0 1vw rgba(255,107,107,0); } 100% { box-shadow: 0 0 0 0 rgba(255,107,107,0); } }
+  .now-item + .now-item { border-top: 1px solid var(--line); margin-top: 1.3vw; padding-top: 1.3vw; }
+  .room { display: inline-block; font-size: .95vw; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+          color: #0b1a10; background: var(--accent); border-radius: 2vw; padding: .25vw .9vw; margin-top: .9vw; }
+  .now-title { font-size: 3.2vw; font-weight: 750; line-height: 1.08; margin-top: .7vw; }
+  .now-title.small { font-size: 2.2vw; }
+  .now-meta { font-size: 1.5vw; color: var(--muted); margin-top: .6vw; }
+  .bar { height: .45vw; background: var(--line); border-radius: 1vw; margin-top: 1.1vw; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 1vw; }
+  .remaining { font-size: 1.25vw; color: var(--accent); font-weight: 700; margin-top: .6vw; }
+  .welcome { display: flex; flex-direction: column; justify-content: center; height: 100%; }
+  .welcome h1 { font-size: 4.2vw; font-weight: 800; line-height: 1.04; letter-spacing: -0.02em; }
+  .welcome h1 em { font-style: normal; color: var(--accent); }
+  .welcome p { font-size: 1.7vw; color: var(--muted); margin-top: 1.4vw; }
+  .countdown { display: flex; gap: 1.2vw; margin-top: 2vw; }
+  .countdown div { background: rgba(123,216,143,.08); border: 1px solid var(--line); border-radius: 1vw; padding: 1vw 1.4vw; text-align: center; min-width: 8vw; }
+  .countdown b { display: block; font-size: 3.6vw; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1; }
+  .countdown span { font-size: .9vw; color: var(--muted); text-transform: uppercase; letter-spacing: .14em; }
+  .next-item { display: flex; gap: 1.3vw; padding: 1.05vw 0; border-top: 1px solid var(--line); }
   .next-item:first-of-type { border-top: 0; }
-  .next-time { color: var(--accent); font-weight: 800; font-size: 1.15vw; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .next-title { font-size: 1.25vw; font-weight: 600; }
-  .next-meta { font-size: 1vw; color: var(--muted); margin-top: .2vw; }
+  .next-time { color: var(--accent); font-weight: 800; font-size: 1.15vw; white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 8.6vw; }
+  .next-time.soon { color: #0b1a10; background: var(--accent); border-radius: .5vw; padding: .1vw .5vw; align-self: flex-start; min-width: 0; }
+  .next-title { font-size: 1.3vw; font-weight: 650; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  #next-body { -webkit-mask-image: linear-gradient(180deg, #000 82%, transparent); mask-image: linear-gradient(180deg, #000 82%, transparent); }
+  .next-meta { font-size: 1vw; color: var(--muted); margin-top: .25vw; }
   .counters { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.2vw; }
-  .counter { background: var(--panel); border: 1px solid var(--line); border-radius: 1.2vw; padding: 1.2vw; text-align: center; }
+  .counter { background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 1.2vw; padding: 1.2vw .6vw; text-align: center; }
   .counter b { display: block; font-size: 3vw; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
-  .counter span { font-size: .95vw; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; }
-  footer { display: flex; align-items: center; gap: 2vw; min-height: 7vw; }
-  .sponsor { flex: 1; display: flex; align-items: center; gap: 1.6vw; opacity: 0; transition: opacity .6s ease; }
+  .counter span { font-size: .9vw; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; }
+  footer { display: flex; align-items: center; gap: 2vw; min-height: 7.5vw; }
+  .sponsor { flex: 1; display: flex; align-items: center; gap: 1.8vw; opacity: 0; transition: opacity .7s ease; }
   .sponsor.show { opacity: 1; }
-  .sponsor img { max-height: 5.5vw; max-width: 22vw; object-fit: contain; }
-  .sponsor-name { font-size: 2.2vw; font-weight: 700; }
-  .sponsor-tier { font-size: .95vw; color: var(--accent); text-transform: uppercase; letter-spacing: .16em; font-weight: 800; }
-  .sponsor-blurb { font-size: 1.1vw; color: var(--muted); margin-top: .3vw; max-width: 46vw; }
-  .announce { margin-top: 1.2vw; padding-top: 1.2vw; border-top: 1px solid var(--line); }
-  .announce h3 { font-size: 1.25vw; font-weight: 700; }
-  .announce p { font-size: 1.05vw; color: var(--muted); margin-top: .3vw; }
-  .status { position: fixed; right: 1.2vw; bottom: 1vw; font-size: .85vw; color: var(--muted); }
-  .status.stale { color: var(--warn); }
-  .empty { color: var(--muted); font-size: 1.4vw; margin-top: 1vw; }
+  .sponsor img { max-height: 5.6vw; max-width: 22vw; object-fit: contain; background: rgba(255,255,255,.04); border-radius: .6vw; }
+  .sponsor-name { font-size: 2.2vw; font-weight: 750; }
+  .sponsor-tier { font-size: .9vw; color: var(--accent); text-transform: uppercase; letter-spacing: .18em; font-weight: 800; }
+  .sponsor-blurb { font-size: 1.1vw; color: var(--muted); margin-top: .3vw; max-width: 50vw; }
+  .thanks { font-size: .9vw; color: var(--muted); text-transform: uppercase; letter-spacing: .16em; white-space: nowrap; }
+  .announce { margin-top: 1.4vw; padding: 1.1vw 1.3vw; border-radius: 1vw; background: rgba(240,198,116,.08); border: 1px solid rgba(240,198,116,.3); }
+  .announce .kicker { color: var(--warn); }
+  .announce h3 { font-size: 1.45vw; font-weight: 750; margin-top: .4vw; }
+  .announce p { font-size: 1.1vw; color: var(--muted); margin-top: .3vw; }
+  .status { position: fixed; right: 1.2vw; bottom: .8vw; font-size: .8vw; color: var(--muted); opacity: .7; }
+  .status.stale { color: var(--warn); opacity: 1; }
+  .empty { color: var(--muted); font-size: 1.5vw; margin-top: 1vw; }
+  .hint { position: fixed; left: 50%; top: 1vw; transform: translateX(-50%); font-size: .9vw; color: var(--muted);
+          background: rgba(0,0,0,.4); padding: .4vw .9vw; border-radius: 2vw; transition: opacity 1s; }
 </style>
 </head>
 <body>
   <header>
     <div>
       <div class="event" id="event-name">Loading…</div>
-      <div class="zone" id="zone"></div>
+      <div class="sub" id="sub"></div>
     </div>
-    <div class="clock" id="clock">--:--</div>
+    <div class="clockbox">
+      <div class="clock" id="clock">--:--</div>
+      <div class="day" id="day"></div>
+    </div>
   </header>
 
   <div class="banner" id="banner" hidden></div>
 
   <main>
     <section class="panel" id="now-panel">
-      <div class="kicker">Happening now</div>
-      <div id="now-body"><div class="empty">Waiting for the next session…</div></div>
+      <div id="now-body"><div class="empty">Connecting…</div></div>
       <div class="announce" id="announce" hidden></div>
     </section>
 
-    <section style="display:flex; flex-direction:column; gap:1.6vw; min-height:0;">
+    <section style="display:flex; flex-direction:column; gap:1.5vw; min-height:0;">
       <div class="panel" style="flex:1; overflow:hidden;">
         <div class="kicker">Up next</div>
         <div id="next-body"><div class="empty">Nothing scheduled after this.</div></div>
@@ -96,9 +128,11 @@
 
   <footer class="panel" id="sponsor-footer" hidden>
     <div class="sponsor" id="sponsor"></div>
+    <div class="thanks">Thank you to our sponsors</div>
   </footer>
 
   <div class="status" id="status"></div>
+  <div class="hint" id="hint">Click anywhere for full screen</div>
 
 <script>
 (function () {
@@ -108,8 +142,10 @@
   var pollMs = Math.max(5, Number(params.get('poll') || 20)) * 1000;
   var rotateMs = Math.max(4, Number(params.get('rotate') || 10)) * 1000;
   var api = params.get('api') || '/event-api';
+  var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-  var state = { live: null, sponsorIndex: 0, lastOk: 0, clockBase: null, clockSetAt: 0 };
+  var state = { live: null, sponsorIndex: 0, announceIndex: 0, lastOk: 0, clockBase: null, clockSetAt: 0, sponsorsStarted: false };
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (v) {
     return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) {
@@ -117,92 +153,132 @@
     });
   };
 
-  function timeLabel(value) {
-    var time = String(value || '').split('T')[1];
-    if (!time) return '';
-    var parts = time.split(':');
-    var hour = Number(parts[0]);
-    if (!isFinite(hour)) return '';
-    var suffix = hour >= 12 ? 'PM' : 'AM';
-    return (hour % 12 === 0 ? 12 : hour % 12) + ':' + parts[1] + ' ' + suffix;
+  // Venue-local wall-clock strings ("2026-11-20T09:00") read as local Date
+  // objects: every comparison stays in the venue's own time.
+  function parse(v) { return v ? new Date(String(v).slice(0, 19)) : null; }
+  function venueNow() {
+    if (!state.clockBase) return null;
+    return new Date(state.clockBase.getTime() + (Date.now() - state.clockSetAt));
+  }
+  function hm(d) {
+    var h = d.getHours(), m = d.getMinutes();
+    return (h % 12 === 0 ? 12 : h % 12) + ':' + String(m).padStart(2, '0') + ' ' + (h >= 12 ? 'PM' : 'AM');
+  }
+  function sameDay(a, b) { return a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
+  function dayLabel(d) { return DAYS[d.getDay()] + ', ' + MONTHS[d.getMonth()] + ' ' + d.getDate(); }
+
+  function tickClock() {
+    var now = venueNow();
+    if (!now) return;
+    $('clock').textContent = hm(now);
+    $('day').textContent = dayLabel(now);
+    if (state.live && state.live.status === 'before') renderCountdown(state.live);
   }
 
-  // The clock follows the venue's timezone as reported by the server, so a
-  // screen with a wrong system clock still shows the right local time.
-  function tickClock() {
-    if (!state.clockBase) return;
-    var drift = Date.now() - state.clockSetAt;
-    var now = new Date(state.clockBase.getTime() + drift);
-    var hours = now.getHours();
-    var suffix = hours >= 12 ? 'PM' : 'AM';
-    var display = hours % 12 === 0 ? 12 : hours % 12;
-    $('clock').textContent = display + ':' + String(now.getMinutes()).padStart(2, '0') + ' ' + suffix;
+  function renderCountdown(live) {
+    var box = $('countdown');
+    var start = parse(live.starts_at), now = venueNow();
+    if (!box || !start || !now) return;
+    var s = Math.max(0, Math.floor((start - now) / 1000));
+    var d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+    var cells = d > 0 ? [[d, d === 1 ? 'day' : 'days'], [h, 'hours'], [m, 'minutes']] : [[h, 'hours'], [m, 'minutes'], [sec, 'seconds']];
+    box.innerHTML = cells.map(function (c) { return '<div><b>' + c[0] + '</b><span>' + c[1] + '</span></div>'; }).join('');
   }
 
   function renderNow(live) {
     var body = $('now-body');
-    if (!live.now || !live.now.length) {
-      var msg = live.status === 'ended' ? 'That is a wrap. Thank you for joining us.'
-        : live.status === 'before' ? 'Doors are not open yet.'
-        : 'Between sessions — the exhibit hall is open.';
-      body.innerHTML = '<div class="empty">' + esc(msg) + '</div>';
+    if (live.status === 'before') {
+      var start = parse(live.starts_at);
+      body.innerHTML = '<div class="welcome"><div class="kicker">Welcome</div>'
+        + '<h1>' + esc(live.event_name || 'Welcome') + '</h1>'
+        + '<p>' + (start ? 'Doors open <b style="color:var(--text)">' + esc(dayLabel(start)) + ' at ' + esc(hm(start)) + '</b>' : 'Doors open soon')
+        + (live.venue ? ' · ' + esc(live.venue) : '') + '</p>'
+        + '<div class="countdown" id="countdown"></div></div>';
+      renderCountdown(live);
       return;
     }
-    body.innerHTML = live.now.map(function (session) {
+    if (live.status === 'ended') {
+      body.innerHTML = '<div class="welcome"><div class="kicker">Thank you</div>'
+        + '<h1>That is a <em>wrap.</em></h1>'
+        + '<p>Thank you for joining ' + esc(live.event_name || 'us') + '. Safe travels, and see you next year!</p></div>';
+      return;
+    }
+    if (!live.now || !live.now.length) {
+      var msg = live.status === 'ended' ? 'That is a wrap. Thank you for joining us — see you next year!'
+        : 'Between sessions — the exhibit hall is open.';
+      body.innerHTML = '<div class="kicker">Happening now</div><div class="empty">' + esc(msg) + '</div>';
+      return;
+    }
+    var many = live.now.length > 1;
+    body.innerHTML = '<div class="kicker"><span class="dot"></span>Happening now</div>' + live.now.map(function (session) {
       var who = (session.speakers || []).map(function (s) { return s.name; }).join(', ');
-      var meta = [session.room, session.track].filter(Boolean).join(' · ');
+      var st = parse(session.start_time), en = parse(session.end_time), now = venueNow();
       var left = session.minutes_remaining;
       var remaining = left == null ? '' :
-        (left >= 60 ? Math.floor(left / 60) + 'h ' + (left % 60) + 'm' : left + ' min') + ' remaining';
-      return '<div class="now-title">' + esc(session.title) + '</div>'
+        (left >= 60 ? Math.floor(left / 60) + ' hr' + (left % 60 ? ' ' + (left % 60) + ' min' : '') : left + ' min') + ' remaining';
+      var pct = (st && en && now && en > st) ? Math.min(100, Math.max(0, (now - st) / (en - st) * 100)) : null;
+      return '<div class="now-item">'
+        + (session.room ? '<span class="room">' + esc(session.room) + '</span>' : '')
+        + '<div class="now-title' + (many ? ' small' : '') + '">' + esc(session.title) + '</div>'
         + (who ? '<div class="now-meta">' + esc(who) + '</div>' : '')
-        + (meta ? '<div class="now-meta">' + esc(meta) + '</div>' : '')
-        + (remaining ? '<div class="remaining">' + esc(remaining) + '</div>' : '');
-    }).join('<hr style="border:0;border-top:1px solid var(--line);margin:1.2vw 0" />');
+        + (pct != null ? '<div class="bar"><i style="width:' + pct.toFixed(1) + '%"></i></div>' : '')
+        + (remaining ? '<div class="remaining">' + esc(remaining) + (en ? ' · until ' + esc(hm(en)) : '') + '</div>' : '')
+        + '</div>';
+    }).join('');
   }
 
   function renderNext(live) {
     var body = $('next-body');
     if (!live.next || !live.next.length) {
-      body.innerHTML = '<div class="empty">Nothing scheduled after this.</div>';
+      body.innerHTML = '<div class="empty">' + (live.status === 'ended' ? 'See you next year.' : 'Nothing scheduled after this.') + '</div>';
       return;
     }
+    var now = venueNow();
     body.innerHTML = live.next.map(function (session) {
       var meta = [session.room, (session.speakers || []).map(function (s) { return s.name; }).join(', ')]
         .filter(Boolean).join(' · ');
+      var st = parse(session.start_time);
       var until = session.minutes_until;
-      var when = until != null && until < 90
-        ? 'in ' + (until < 1 ? 'moments' : until + ' min')
-        : timeLabel(session.start_time);
-      return '<div class="next-item"><div class="next-time">' + esc(when) + '</div>'
+      var soon = until != null && until < 60;
+      var when = soon ? 'in ' + (until < 1 ? 'moments' : until + ' min')
+        : (st ? (now && !sameDay(st, now) ? DAYS[st.getDay()].slice(0, 3) + ' ' : '') + hm(st) : '');
+      return '<div class="next-item"><div class="next-time' + (soon ? ' soon' : '') + '">' + esc(when) + '</div>'
         + '<div><div class="next-title">' + esc(session.title) + '</div>'
         + (meta ? '<div class="next-meta">' + esc(meta) + '</div>' : '') + '</div></div>';
     }).join('');
   }
 
+  // Only real numbers. Attendance is private unless the organiser makes it
+  // public; a private figure is left out, never shown as 0.
   function renderCounters(live) {
     var c = live.counters || {};
-    var tiles = [
-      { value: c.checked_in, label: 'Checked in' },
-      { value: c.attendees, label: 'Registered' },
-      { value: c.exhibitors, label: 'Exhibitors' },
-      { value: c.sessions_today, label: 'Sessions today' }
-    ];
+    var tiles = [];
+    if (c.checked_in != null) tiles.push({ value: c.checked_in, label: 'Checked in' });
+    if (c.sessions_today) tiles.push({ value: c.sessions_today, label: 'Sessions today' });
+    if (c.speakers) tiles.push({ value: c.speakers, label: 'Speakers' });
+    if (c.exhibitors) tiles.push({ value: c.exhibitors, label: 'Exhibitors' });
+    if (c.sponsors) tiles.push({ value: c.sponsors, label: 'Sponsors' });
+    tiles = tiles.slice(0, 4);
+    $('counters').style.gridTemplateColumns = 'repeat(' + Math.max(1, tiles.length) + ', 1fr)';
     $('counters').innerHTML = tiles.map(function (t) {
-      return '<div class="counter"><b>' + esc(t.value == null ? 0 : t.value) + '</b><span>' + esc(t.label) + '</span></div>';
+      return '<div class="counter"><b>' + esc(t.value) + '</b><span>' + esc(t.label) + '</span></div>';
     }).join('');
   }
 
-  function renderAnnouncement(live) {
+  function renderAnnouncement() {
     var box = $('announce');
-    var items = live.announcements || [];
+    var items = (state.live && state.live.announcements) || [];
     if (!items.length) { box.hidden = true; return; }
-    var item = items[0];
+    if (state.announceIndex >= items.length) state.announceIndex = 0;
+    var item = items[state.announceIndex];
     box.hidden = false;
-    box.innerHTML = '<h3>' + esc(item.title) + '</h3>' + (item.body ? '<p>' + esc(item.body) + '</p>' : '');
+    box.innerHTML = '<div class="kicker">Announcement' + (items.length > 1 ? ' · ' + (state.announceIndex + 1) + ' of ' + items.length : '') + '</div>'
+      + '<h3>' + esc(item.title) + '</h3>' + (item.body ? '<p>' + esc(item.body) + '</p>' : '');
   }
 
-  // Sponsors rotate one at a time so every tier gets the full screen rather than
+  var TIER = { headline: 'Headline sponsor', title: 'Title sponsor', platinum: 'Platinum sponsor', gold: 'Gold sponsor',
+               silver: 'Silver sponsor', bronze: 'Bronze sponsor', partner: 'Partner' };
+  // Sponsors rotate one at a time so every tier gets the full width rather than
   // competing in a crowded logo strip. Higher tiers come first in the list.
   function rotateSponsor() {
     var live = state.live;
@@ -215,24 +291,27 @@
     state.sponsorIndex += 1;
     box.classList.remove('show');
     setTimeout(function () {
+      var tier = String(sponsor.tier || 'partner').toLowerCase();
       box.innerHTML = (sponsor.logo_url ? '<img src="' + esc(sponsor.logo_url) + '" alt="" />' : '')
-        + '<div><div class="sponsor-tier">' + esc(sponsor.tier || 'partner') + ' sponsor</div>'
+        + '<div><div class="sponsor-tier">' + esc(TIER[tier] || (tier.charAt(0).toUpperCase() + tier.slice(1) + ' sponsor')) + '</div>'
         + '<div class="sponsor-name">' + esc(sponsor.name) + '</div>'
         + (sponsor.blurb ? '<div class="sponsor-blurb">' + esc(sponsor.blurb) + '</div>' : '') + '</div>';
       box.classList.add('show');
-    }, 250);
+    }, 300);
   }
 
   function render(live) {
     $('event-name').textContent = live.event_name || 'Event';
-    $('zone').textContent = (live.timezone || '').replace(/_/g, ' ') + (live.today ? ' · ' + live.today : '');
+    var start = parse(live.starts_at), end = parse(live.ends_at);
+    var range = (start && end) ? MONTHS[start.getMonth()] + ' ' + start.getDate() + '–' + end.getDate() + ', ' + start.getFullYear() : '';
+    $('sub').textContent = [live.venue, range].filter(Boolean).join(' · ');
     var banner = $('banner');
     if (live.live_message) { banner.hidden = false; banner.textContent = live.live_message; }
     else banner.hidden = true;
     renderNow(live);
     renderNext(live);
     renderCounters(live);
-    renderAnnouncement(live);
+    renderAnnouncement();
   }
 
   function markStatus() {
@@ -243,7 +322,7 @@
       el.textContent = 'last update ' + age + 's ago — reconnecting';
       el.className = 'status stale';
     } else {
-      el.textContent = 'live · updated ' + age + 's ago';
+      el.textContent = 'live';
       el.className = 'status';
     }
   }
@@ -256,10 +335,13 @@
         state.live = live;
         state.lastOk = Date.now();
         if (live.server_time) {
-          state.clockBase = new Date(live.server_time);
+          state.clockBase = parse(live.server_time);
           state.clockSetAt = Date.now();
         }
         render(live);
+        tickClock();
+        // The first good answer shows a sponsor at once, not after a blank bar.
+        if (!state.sponsorsStarted) { state.sponsorsStarted = true; rotateSponsor(); }
         // Keep showing the last good frame if the network drops — a blank screen
         // in a venue looks broken; slightly stale numbers do not.
       })
@@ -267,12 +349,32 @@
       .finally(markStatus);
   }
 
+  // Full screen on a click or F; keep the screen awake where allowed.
+  function fullscreen() {
+    var el = document.documentElement;
+    if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(function () {});
+  }
+  document.addEventListener('click', fullscreen);
+  document.addEventListener('keydown', function (e) { if (e.key === 'f' || e.key === 'F') fullscreen(); });
+  setTimeout(function () { $('hint').style.opacity = '0'; }, 6000);
+  var lock = null;
+  function wake() {
+    if (navigator.wakeLock && document.visibilityState === 'visible') {
+      navigator.wakeLock.request('screen').then(function (l) { lock = l; }).catch(function () {});
+    }
+  }
+  document.addEventListener('visibilitychange', wake);
+  wake();
+  // Pick up updates without anybody touching the screen: reload every 4 hours,
+  // only while the server is answering (a reload into a dead network is blank).
+  setInterval(function () { if (Date.now() - state.lastOk < pollMs * 2) location.reload(); }, 4 * 3600 * 1000);
+
   poll();
   setInterval(poll, pollMs);
   setInterval(rotateSponsor, rotateMs);
+  setInterval(function () { state.announceIndex += 1; renderAnnouncement(); }, 12000);
   setInterval(tickClock, 1000);
   setInterval(markStatus, 1000);
-  rotateSponsor();
 })();
 </script>
 </body>

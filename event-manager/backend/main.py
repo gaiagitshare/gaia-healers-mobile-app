@@ -11571,9 +11571,17 @@ def get_public_live(event_id: int, db: Session = Depends(get_db)):
     ).order_by(models.Session.start_time.asc()).all()
 
     running, upcoming = [], []
+    starts = [x.start_time for x in sessions]
     for session in sessions:
         start, end = session.start_time, session.end_time
+        if end is None:
+            # "Registration Opens" carries no end, so it was never "happening
+            # now". It runs until the next item begins (an hour at most).
+            later = [t for t in starts if t > start]
+            end = min([start + timedelta(minutes=60)] + later[:1])
         payload = schemas.LiveSession.model_validate(session)
+        if payload.end_time is None:
+            payload.end_time = end
         if start <= now and end and end > now:
             payload.minutes_remaining = max(0, int((end - now).total_seconds() // 60))
             running.append(payload)
@@ -11603,7 +11611,10 @@ def get_public_live(event_id: int, db: Session = Depends(get_db)):
         today=now.date().isoformat(),
         status=status,
         now=running,
-        next=upcoming[:3],
+        next=upcoming[:4],
+        venue=event.location or None,
+        starts_at=event.start_date.isoformat(timespec="minutes") if event.start_date else None,
+        ends_at=event.end_date.isoformat(timespec="minutes") if event.end_date else None,
         counters=schemas.LiveCounters(
             # How many people bought and how many turned up is commercially
             # sensitive — an event that sold poorly should not announce it to

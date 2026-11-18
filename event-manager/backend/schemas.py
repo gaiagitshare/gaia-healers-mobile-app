@@ -800,6 +800,10 @@ class LiveEvent(BaseModel):
     status: str = "before"      # before | running | ended
     now: List[LiveSession] = []
     next: List[LiveSession] = []
+    # Where and when, for the venue screen's welcome and countdown (18 Nov 2026).
+    venue: Optional[str] = None
+    starts_at: Optional[str] = None
+    ends_at: Optional[str] = None
     counters: LiveCounters = LiveCounters()
     announcements: List[AnnouncementPublic] = []
     sponsors: List[SponsorPublic] = []

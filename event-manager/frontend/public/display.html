@@ -9,103 +9,186 @@
   Lobby / venue display. Point a screen at:
       /event/display.html?event=1
 
-  Self-contained on purpose: no bundle, no login, no dependencies. A venue TV or
-  a spare laptop opens this URL and never needs attention again. It reads the
-  same public live endpoint as the app, so the foyer screen and an attendee's
-  phone can never disagree.
+  Self-contained on purpose: no bundle, no login. A venue TV or a spare laptop
+  opens this URL and never needs attention again. It reads the same public live
+  endpoint as the app, so the foyer screen and an attendee's phone can never
+  disagree.
 
   Click (or press F) for full screen. The screen is kept awake where the browser
   allows it, and the page refreshes itself every few hours to pick up updates.
 
-  Options:  &rotate=12   seconds per sponsor  (default 10)
+  Options:  &rotate=10   seconds per sponsor  (default 10)
             &poll=20     seconds between refreshes (default 20)
+            &app=URL     where the QR code points (default: the event in the Gaia Healers app)
+            &qr=0        hide the QR code
 -->
 <style>
   :root {
-    --bg: #07110b; --panel: #0d1a12; --panel2: #10221a; --line: #1d3527;
-    --text: #eef5ec; --muted: #8fae99; --accent: #7bd88f; --accent2: #b9f0c4; --warn: #f0c674; --live: #ff6b6b;
+    --bg: #06100a; --panel: rgba(13,28,19,.78); --panel2: rgba(18,38,27,.82); --line: rgba(123,216,143,.14);
+    --text: #f1f7ef; --muted: #93b39d; --accent: #7bd88f; --accent2: #c6f5cf; --gold: #f0c674; --live: #ff6b6b;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  [hidden] { display: none !important; }
   html, body { height: 100%; }
   body {
-    background: radial-gradient(120vw 80vh at 10% -10%, #123322 0%, transparent 55%),
-                radial-gradient(90vw 70vh at 110% 110%, #0f2a1f 0%, transparent 55%), var(--bg);
-    color: var(--text); overflow: hidden; cursor: default;
+    background: var(--bg); color: var(--text); overflow: hidden; cursor: default;
     font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-    display: flex; flex-direction: column; padding: 2.2vw; gap: 1.5vw;
+    display: flex; flex-direction: column; padding: 2vw 2.2vw 1.6vw; gap: 1.3vw; position: relative;
   }
-  header { display: flex; justify-content: space-between; align-items: flex-end; gap: 2vw; }
-  .event { font-size: 2.4vw; font-weight: 800; letter-spacing: -0.015em; }
-  .sub { font-size: 1.05vw; color: var(--muted); margin-top: .35vw; letter-spacing: .02em; }
-  .clockbox { text-align: right; }
+  body.idle { cursor: none; }
+  /* Slow aurora behind everything: two soft blobs drifting, GPU-only transforms. */
+  .aurora { position: fixed; inset: -20vh -20vw; z-index: -1; pointer-events: none; filter: blur(6vw); opacity: .55; }
+  .aurora i { position: absolute; border-radius: 50%; will-change: transform; }
+  .aurora i:nth-child(1) { width: 60vw; height: 60vw; left: 0; top: 0; background: radial-gradient(circle, #1b5a35 0%, transparent 65%); animation: drift1 48s ease-in-out infinite alternate; }
+  .aurora i:nth-child(2) { width: 55vw; height: 55vw; right: 0; bottom: 0; background: radial-gradient(circle, #124a3e 0%, transparent 65%); animation: drift2 62s ease-in-out infinite alternate; }
+  .aurora i:nth-child(3) { width: 35vw; height: 35vw; left: 45%; top: 30%; background: radial-gradient(circle, rgba(240,198,116,.18) 0%, transparent 65%); animation: drift1 75s ease-in-out infinite alternate-reverse; }
+  @keyframes drift1 { from { transform: translate(0,0) scale(1); } to { transform: translate(18vw, 14vh) scale(1.15); } }
+  @keyframes drift2 { from { transform: translate(0,0) scale(1.1); } to { transform: translate(-20vw, -12vh) scale(.95); } }
+
+  header { display: flex; justify-content: space-between; align-items: center; gap: 2vw; }
+  .brand { display: flex; align-items: center; gap: 1.1vw; min-width: 0; }
+  .mark { width: 3.6vw; height: 3.6vw; border-radius: 1vw; flex-shrink: 0; display: grid; place-items: center;
+          background: linear-gradient(135deg, var(--accent), #2f8f55); color: #06210f; font-weight: 900; font-size: 1.9vw;
+          box-shadow: 0 0 2.4vw rgba(123,216,143,.35); }
+  .event { font-size: 2.2vw; font-weight: 800; letter-spacing: -0.015em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sub { font-size: 1vw; color: var(--muted); margin-top: .25vw; letter-spacing: .02em; }
+  .clockbox { text-align: right; flex-shrink: 0; }
   .clock { font-size: 3vw; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1; }
-  .day { font-size: 1vw; color: var(--muted); text-transform: uppercase; letter-spacing: .16em; margin-top: .4vw; }
+  .clock .colon { animation: blink 2s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  .day { font-size: .95vw; color: var(--muted); text-transform: uppercase; letter-spacing: .16em; margin-top: .4vw; }
+
   .banner {
-    background: var(--warn); color: #23200c; font-weight: 800; font-size: 1.5vw;
-    padding: 1vw 1.5vw; border-radius: .9vw; animation: glow 2.4s ease-in-out infinite;
+    display: flex; align-items: center; gap: 1vw;
+    background: linear-gradient(90deg, var(--gold), #f6d896); color: #23200c; font-weight: 800; font-size: 1.5vw;
+    padding: .9vw 1.5vw; border-radius: .9vw; animation: glow 2.4s ease-in-out infinite;
   }
-  @keyframes glow { 0%,100% { box-shadow: 0 0 0 0 rgba(240,198,116,.0); } 50% { box-shadow: 0 0 2.2vw .2vw rgba(240,198,116,.35); } }
-  main { flex: 1; display: grid; grid-template-columns: 1.65fr 1fr; gap: 1.5vw; min-height: 0; }
-  .panel { background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 1.2vw; padding: 1.7vw; min-height: 0; }
-  .kicker { font-size: .95vw; letter-spacing: .2em; text-transform: uppercase; color: var(--accent); font-weight: 800; display: flex; align-items: center; gap: .7vw; }
-  .dot { width: .8vw; height: .8vw; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 0 rgba(255,107,107,.7); animation: pulse 1.6s infinite; }
+  .banner::before { content: "⚑"; font-size: 1.4vw; }
+  @keyframes glow { 0%,100% { box-shadow: 0 0 0 0 rgba(240,198,116,0); } 50% { box-shadow: 0 0 2.2vw .2vw rgba(240,198,116,.35); } }
+
+  main { flex: 1; display: grid; grid-template-columns: 1.7fr 1fr; gap: 1.3vw; min-height: 0; }
+  .panel { background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 1.2vw;
+           padding: 1.6vw; min-height: 0; backdrop-filter: blur(.6vw); box-shadow: 0 1.5vw 3vw rgba(0,0,0,.25); }
+  .kicker { font-size: .9vw; letter-spacing: .22em; text-transform: uppercase; color: var(--accent); font-weight: 800; display: flex; align-items: center; gap: .7vw; }
+  .dot { width: .75vw; height: .75vw; border-radius: 50%; background: var(--live); animation: pulse 1.6s infinite; }
   @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255,107,107,.7); } 70% { box-shadow: 0 0 0 1vw rgba(255,107,107,0); } 100% { box-shadow: 0 0 0 0 rgba(255,107,107,0); } }
-  .now-item + .now-item { border-top: 1px solid var(--line); margin-top: 1.3vw; padding-top: 1.3vw; }
-  .room { display: inline-block; font-size: .95vw; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
-          color: #0b1a10; background: var(--accent); border-radius: 2vw; padding: .25vw .9vw; margin-top: .9vw; }
-  .now-title { font-size: 3.2vw; font-weight: 750; line-height: 1.08; margin-top: .7vw; }
-  .now-title.small { font-size: 2.2vw; }
-  .now-meta { font-size: 1.5vw; color: var(--muted); margin-top: .6vw; }
-  .bar { height: .45vw; background: var(--line); border-radius: 1vw; margin-top: 1.1vw; overflow: hidden; }
-  .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 1vw; }
-  .remaining { font-size: 1.25vw; color: var(--accent); font-weight: 700; margin-top: .6vw; }
-  #now-panel { display: flex; flex-direction: column; overflow: hidden; }
-  #now-body { flex: 1; min-height: 0; overflow: hidden; }
-  .welcome { display: flex; flex-direction: column; justify-content: safe center; height: 100%; }
-  .announce { flex-shrink: 0; }
-  .announce p { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-  .welcome h1 { font-size: 3.6vw; font-weight: 800; line-height: 1.04; letter-spacing: -0.02em; }
-  .welcome h1 em { font-style: normal; color: var(--accent); }
-  .welcome p { font-size: 1.6vw; color: var(--muted); margin-top: 1vw; }
-  .countdown { display: flex; gap: 1.2vw; margin-top: 1.4vw; }
-  .countdown div { background: rgba(123,216,143,.08); border: 1px solid var(--line); border-radius: 1vw; padding: 1vw 1.4vw; text-align: center; min-width: 8vw; }
+  .enter { animation: enter .7s cubic-bezier(.2,.7,.2,1) both; }
+  @keyframes enter { from { opacity: 0; transform: translateY(1.2vw); } to { opacity: 1; transform: none; } }
+
+  /* Stage (left) */
+  #stage { display: flex; flex-direction: column; overflow: hidden; gap: 1.2vw; }
+  #now-body { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .now-list { flex: 1; display: flex; flex-direction: column; justify-content: safe center; gap: 1.4vw; min-height: 0; margin-top: .8vw; }
+  .now-item { display: flex; gap: 2vw; align-items: center; }
+  .now-item + .now-item { border-top: 1px solid var(--line); padding-top: 1.4vw; }
+  .faces { display: flex; flex-shrink: 0; }
+  .face { width: 11vw; height: 11vw; border-radius: 50%; object-fit: cover; background: #163222;
+          border: .3vw solid var(--accent); box-shadow: 0 0 0 .5vw rgba(123,216,143,.15), 0 1vw 2.5vw rgba(0,0,0,.4); }
+  .faces .face + .face { margin-left: -3vw; }
+  .many .face { width: 7vw; height: 7vw; border-width: .22vw; }
+  .faces.n2 .face, .faces.n3 .face { width: 8vw; height: 8vw; }
+  .many .faces .face { width: 6vw; height: 6vw; }
+  .now-text { min-width: 0; flex: 1; }
+  .glyph { width: 11vw; height: 11vw; border-radius: 50%; display: grid; place-items: center; font-size: 5vw; flex-shrink: 0;
+           background: radial-gradient(circle at 35% 30%, rgba(123,216,143,.25), rgba(123,216,143,.06)); border: .3vw solid rgba(123,216,143,.45); }
+  .many .glyph { width: 6vw; height: 6vw; font-size: 2.8vw; border-width: .22vw; }
+  .room { display: inline-block; font-size: .9vw; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+          color: #0b1a10; background: var(--accent); border-radius: 2vw; padding: .25vw .9vw; }
+  .now-title { font-size: 3vw; font-weight: 780; line-height: 1.08; margin-top: .7vw; letter-spacing: -0.01em;
+               display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .many .now-title { font-size: 1.9vw; -webkit-line-clamp: 2; margin-top: .4vw; }
+  .many .bar { margin-top: .6vw; }
+  .many .remaining { font-size: 1vw; margin-top: .35vw; }
+  .many .now-item + .now-item { padding-top: 1vw; }
+  .now-meta { font-size: 1.45vw; color: var(--accent2); margin-top: .6vw; font-weight: 600; }
+  .many .now-meta { font-size: 1.15vw; }
+  .bar { height: .45vw; background: rgba(123,216,143,.12); border-radius: 1vw; margin-top: 1vw; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 1vw; transition: width 1s linear; }
+  .remaining { font-size: 1.15vw; color: var(--muted); font-weight: 700; margin-top: .55vw; }
+  .remaining b { color: var(--accent); }
+
+  .welcome { flex: 1; display: flex; flex-direction: column; justify-content: safe center; min-height: 0; }
+  .welcome h1 { font-size: 3.7vw; font-weight: 800; line-height: 1.04; letter-spacing: -0.02em; margin-top: .5vw; }
+  .welcome h1 em { font-style: normal; background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .welcome p { font-size: 1.55vw; color: var(--muted); margin-top: 1vw; }
+  .welcome p b { color: var(--text); }
+  .countdown { display: flex; gap: 1vw; margin-top: 1.4vw; }
+  .countdown div { background: rgba(123,216,143,.07); border: 1px solid var(--line); border-radius: 1vw; padding: .9vw 1.3vw; text-align: center; min-width: 7.6vw; }
   .countdown b { display: block; font-size: 3.2vw; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1; }
-  .countdown span { font-size: .9vw; color: var(--muted); text-transform: uppercase; letter-spacing: .14em; }
-  .next-item { display: flex; gap: 1.3vw; padding: 1.05vw 0; border-top: 1px solid var(--line); }
-  .next-item:first-of-type { border-top: 0; }
-  .next-time { color: var(--accent); font-weight: 800; font-size: 1.15vw; white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 8.6vw; }
-  .next-time.soon { color: #0b1a10; background: var(--accent); border-radius: .5vw; padding: .1vw .5vw; align-self: flex-start; min-width: 0; }
-  .next-title { font-size: 1.3vw; font-weight: 650; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  #next-body { -webkit-mask-image: linear-gradient(180deg, #000 82%, transparent); mask-image: linear-gradient(180deg, #000 82%, transparent); }
-  .next-meta { font-size: 1vw; color: var(--muted); margin-top: .25vw; }
-  .counters { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.2vw; }
-  .counter { background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 1.2vw; padding: 1.2vw .6vw; text-align: center; }
-  .counter b { display: block; font-size: 3vw; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
-  .counter span { font-size: .9vw; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; }
-  footer { display: flex; align-items: center; gap: 2vw; min-height: 7.5vw; }
-  .sponsor { flex: 1; display: flex; align-items: center; gap: 1.8vw; opacity: 0; transition: opacity .7s ease; }
-  .sponsor.show { opacity: 1; }
-  .sponsor img { max-height: 5.6vw; max-width: 22vw; object-fit: contain; background: rgba(255,255,255,.04); border-radius: .6vw; }
-  .sponsor-name { font-size: 2.2vw; font-weight: 750; }
-  .sponsor-tier { font-size: .9vw; color: var(--accent); text-transform: uppercase; letter-spacing: .18em; font-weight: 800; }
-  .sponsor-blurb { font-size: 1.1vw; color: var(--muted); margin-top: .3vw; max-width: 50vw; }
-  .thanks { font-size: .9vw; color: var(--muted); text-transform: uppercase; letter-spacing: .16em; white-space: nowrap; }
-  .announce { margin-top: 1.4vw; padding: 1.1vw 1.3vw; border-radius: 1vw; background: rgba(240,198,116,.08); border: 1px solid rgba(240,198,116,.3); }
-  .announce .kicker { color: var(--warn); }
-  .announce h3 { font-size: 1.45vw; font-weight: 750; margin-top: .4vw; }
-  .announce p { font-size: 1.1vw; color: var(--muted); margin-top: .3vw; }
-  .status { position: fixed; right: 1.2vw; bottom: .8vw; font-size: .8vw; color: var(--muted); opacity: .7; }
-  .status.stale { color: var(--warn); opacity: 1; }
-  .empty { color: var(--muted); font-size: 1.5vw; margin-top: 1vw; }
-  .hint { position: fixed; left: 50%; top: 1vw; transform: translateX(-50%); font-size: .9vw; color: var(--muted);
-          background: rgba(0,0,0,.4); padding: .4vw .9vw; border-radius: 2vw; transition: opacity 1s; }
+  .countdown span { font-size: .85vw; color: var(--muted); text-transform: uppercase; letter-spacing: .14em; }
+  .between h2 { font-size: 2.6vw; font-weight: 800; line-height: 1.1; margin-top: .6vw; }
+  .between p { font-size: 1.4vw; color: var(--muted); margin-top: .7vw; }
+  .between .soon { color: var(--accent); }
+
+  /* Bottom slot of the stage: announcements and speaker spotlights take turns. */
+  #slot { flex-shrink: 0; min-height: 0; }
+  .card { display: flex; gap: 1.4vw; align-items: center; padding: 1vw 1.3vw; border-radius: 1vw; }
+  .card.announce { background: rgba(240,198,116,.09); border: 1px solid rgba(240,198,116,.35); }
+  .card.announce .kicker { color: var(--gold); }
+  .card.spot { background: rgba(123,216,143,.06); border: 1px solid var(--line); }
+  .card h3 { font-size: 1.4vw; font-weight: 750; margin-top: .3vw; }
+  .card p { font-size: 1.05vw; color: var(--muted); margin-top: .25vw; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .card .ico { font-size: 2.4vw; flex-shrink: 0; width: 4.6vw; text-align: center; }
+  .card img { width: 4.6vw; height: 4.6vw; border-radius: 50%; object-fit: cover; border: .18vw solid var(--accent); flex-shrink: 0; background: #163222; }
+  .card .when { color: var(--accent); font-weight: 700; }
+
+  /* Right column */
+  .side { display: flex; flex-direction: column; gap: 1.3vw; min-height: 0; }
+  .timeline { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+  #next-body { flex: 1; min-height: 0; overflow: hidden; margin-top: .6vw; position: relative;
+               -webkit-mask-image: linear-gradient(180deg, #000 84%, transparent); mask-image: linear-gradient(180deg, #000 84%, transparent); }
+  #next-body::before { content: ""; position: absolute; left: .45vw; top: 1.2vw; bottom: 0; width: 2px; background: var(--line); }
+  #next-body.norail::before { display: none; }
+  .next-item { position: relative; padding: .75vw 0 .75vw 2vw; }
+  .next-item::before { content: ""; position: absolute; left: .1vw; top: 1.25vw; width: .8vw; height: .8vw; border-radius: 50%;
+                       background: var(--bg); border: 2px solid var(--accent); }
+  .next-item.is-soon::before { background: var(--accent); box-shadow: 0 0 1vw var(--accent); }
+  .next-when { color: var(--accent); font-weight: 800; font-size: 1vw; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+  .chip { display: inline-block; color: #0b1a10; background: var(--accent); border-radius: .5vw; padding: .05vw .5vw; margin-left: .4vw; font-size: .9vw; }
+  .next-row { display: flex; gap: .9vw; align-items: center; margin-top: .3vw; }
+  .next-row img { width: 2.8vw; height: 2.8vw; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid var(--line); background: #163222; }
+  .next-title { font-size: 1.25vw; font-weight: 680; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .next-meta { font-size: .95vw; color: var(--muted); margin-top: .2vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .counters { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1vw; }
+  .counter { background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 1vw; padding: .9vw .4vw; text-align: center; }
+  .counter b { display: block; font-size: 2.5vw; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .counter span { font-size: .78vw; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; }
+
+  footer { display: flex; align-items: stretch; gap: 1.3vw; height: 8.4vw; flex-shrink: 0; }
+  .sponsors { flex: 1; display: flex; align-items: center; gap: 1.6vw; padding: 1vw 1.6vw; position: relative; overflow: hidden; }
+  .sponsor { flex: 1; display: flex; align-items: center; gap: 1.8vw; opacity: 0; transform: translateX(1.5vw); transition: opacity .7s ease, transform .7s ease; min-width: 0; }
+  .sponsor.show { opacity: 1; transform: none; }
+  .sponsor img { height: 5.4vw; max-width: 20vw; object-fit: contain; background: rgba(255,255,255,.05); border-radius: .6vw; padding: .3vw; }
+  .sponsor-name { font-size: 2vw; font-weight: 760; }
+  .sponsor-tier { font-size: .82vw; color: var(--accent); text-transform: uppercase; letter-spacing: .18em; font-weight: 800; }
+  .sponsor-tier.headline { color: var(--gold); }
+  .sponsor-blurb { font-size: 1.05vw; color: var(--muted); margin-top: .25vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 42vw; }
+  .thanks { font-size: .8vw; color: var(--muted); text-transform: uppercase; letter-spacing: .16em; white-space: nowrap; text-align: right; }
+  .pips { display: flex; gap: .35vw; justify-content: flex-end; margin-top: .6vw; }
+  .pips i { width: .45vw; height: .45vw; border-radius: 50%; background: rgba(123,216,143,.25); }
+  .pips i.on { background: var(--accent); }
+  .qr { display: flex; align-items: center; gap: 1.1vw; padding: .9vw 1.3vw; }
+  .qr canvas { width: 6.4vw; height: 6.4vw; background: #fff; border-radius: .5vw; padding: .35vw; image-rendering: pixelated; }
+  .qr b { display: block; font-size: 1.15vw; }
+  .qr span { font-size: .9vw; color: var(--muted); display: block; max-width: 13vw; margin-top: .2vw; }
+
+  .status { position: fixed; right: 1.2vw; bottom: .35vw; font-size: .7vw; color: var(--muted); opacity: .6; }
+  .status.stale { color: var(--gold); opacity: 1; }
+  .empty { color: var(--muted); font-size: 1.3vw; margin-top: 1vw; }
+  .hint { position: fixed; left: 50%; bottom: 1vw; transform: translateX(-50%); font-size: .9vw; color: var(--muted);
+          background: rgba(0,0,0,.45); padding: .4vw .9vw; border-radius: 2vw; transition: opacity 1s; }
 </style>
 </head>
 <body>
+  <div class="aurora"><i></i><i></i><i></i></div>
+
   <header>
-    <div>
-      <div class="event" id="event-name">Loading…</div>
-      <div class="sub" id="sub"></div>
+    <div class="brand">
+      <div class="mark" id="mark">G</div>
+      <div style="min-width:0">
+        <div class="event" id="event-name">Loading…</div>
+        <div class="sub" id="sub"></div>
+      </div>
     </div>
     <div class="clockbox">
       <div class="clock" id="clock">--:--</div>
@@ -116,28 +199,35 @@
   <div class="banner" id="banner" hidden></div>
 
   <main>
-    <section class="panel" id="now-panel">
+    <section class="panel" id="stage">
       <div id="now-body"><div class="empty">Connecting…</div></div>
-      <div class="announce" id="announce" hidden></div>
+      <div id="slot"></div>
     </section>
 
-    <section style="display:flex; flex-direction:column; gap:1.5vw; min-height:0;">
-      <div class="panel" style="flex:1; overflow:hidden;">
+    <section class="side">
+      <div class="panel timeline">
         <div class="kicker">Up next</div>
-        <div id="next-body"><div class="empty">Nothing scheduled after this.</div></div>
+        <div id="next-body"></div>
       </div>
       <div class="counters" id="counters"></div>
     </section>
   </main>
 
-  <footer class="panel" id="sponsor-footer" hidden>
-    <div class="sponsor" id="sponsor"></div>
-    <div class="thanks">Thank you to our sponsors</div>
+  <footer>
+    <div class="panel sponsors" id="sponsor-footer" hidden>
+      <div class="sponsor" id="sponsor"></div>
+      <div><div class="thanks">Thank you to our sponsors</div><div class="pips" id="pips"></div></div>
+    </div>
+    <div class="panel qr" id="qr" hidden>
+      <canvas id="qr-canvas" width="200" height="200"></canvas>
+      <div><b>On your phone</b><span>Live schedule, speakers &amp; exhibit hall map</span></div>
+    </div>
   </footer>
 
   <div class="status" id="status"></div>
   <div class="hint" id="hint">Click anywhere for full screen</div>
 
+<script src="vendor/qrcodegen.js"></script>
 <script>
 (function () {
   'use strict';
@@ -146,16 +236,29 @@
   var pollMs = Math.max(5, Number(params.get('poll') || 20)) * 1000;
   var rotateMs = Math.max(4, Number(params.get('rotate') || 10)) * 1000;
   var api = params.get('api') || '/event-api';
+  var appUrl = params.get('app') || ('https://gaiahealers.app/home.html?view=events&event=' + encodeURIComponent(eventId));
+  var showQr = params.get('qr') !== '0';
   var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-  var state = { live: null, sponsorIndex: 0, announceIndex: 0, lastOk: 0, clockBase: null, clockSetAt: 0, sponsorsStarted: false };
+  var state = { live: null, speakers: [], sponsorIndex: 0, sponsorTicks: 0, slotIndex: 0, lastOk: 0,
+                clockBase: null, clockSetAt: 0, sponsorsStarted: false, html: {} };
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (v) {
     return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
     });
   };
+  // Swap a region only when its content really changed, and let it glide in.
+  // Re-rendering identical HTML every poll would restart every animation.
+  function put(id, html, animate) {
+    if (state.html[id] === html) return false;
+    state.html[id] = html;
+    var el = $(id);
+    el.innerHTML = html;
+    if (animate !== false) { el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter'); }
+    return true;
+  }
 
   // Venue-local wall-clock strings ("2026-11-20T09:00") read as local Date
   // objects: every comparison stays in the venue's own time.
@@ -170,13 +273,28 @@
   }
   function sameDay(a, b) { return a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
   function dayLabel(d) { return DAYS[d.getDay()] + ', ' + MONTHS[d.getMonth()] + ' ' + d.getDate(); }
+  function whenLabel(d) { var now = venueNow(); return (now && !sameDay(d, now) ? DAYS[d.getDay()].slice(0, 3) + ' ' : '') + hm(d); }
+  function names(session) { return (session.speakers || []).map(function (s) { return s.name; }).join(', '); }
+  function glyph(title) {
+    var t = String(title || '').toLowerCase();
+    if (/lunch|dinner|breakfast/.test(t)) return '🍽️';
+    if (/registration|check.?in/.test(t)) return '🎟️';
+    if (/break|coffee/.test(t)) return '☕';
+    if (/exhibit|expo|hall/.test(t)) return '🌿';
+    if (/yoga|qi gong|meditat|sound|breath/.test(t)) return '🧘';
+    if (/remarks|welcome|opening|closing/.test(t)) return '🎤';
+    return '✨';
+  }
+  function img(url, cls) { return url ? '<img class="' + (cls || '') + '" src="' + esc(url) + '" alt="" loading="lazy" onerror="this.remove()" />' : ''; }
 
   function tickClock() {
     var now = venueNow();
     if (!now) return;
-    $('clock').textContent = hm(now);
+    var t = hm(now).split(':');
+    $('clock').innerHTML = esc(t[0]) + '<span class="colon">:</span>' + esc(t[1]);
     $('day').textContent = dayLabel(now);
     if (state.live && state.live.status === 'before') renderCountdown(state.live);
+    if (state.live && state.live.status === 'running') updateBars();
   }
 
   function renderCountdown(live) {
@@ -189,67 +307,88 @@
     box.innerHTML = cells.map(function (c) { return '<div><b>' + c[0] + '</b><span>' + c[1] + '</span></div>'; }).join('');
   }
 
+  // Progress bars move every second between polls.
+  function updateBars() {
+    var now = venueNow();
+    document.querySelectorAll('[data-st]').forEach(function (el) {
+      var st = parse(el.getAttribute('data-st')), en = parse(el.getAttribute('data-en'));
+      if (st && en && en > st) el.style.width = Math.min(100, Math.max(0, (now - st) / (en - st) * 100)).toFixed(2) + '%';
+    });
+  }
+
   function renderNow(live) {
-    var body = $('now-body');
     if (live.status === 'before') {
       var start = parse(live.starts_at);
-      body.innerHTML = '<div class="welcome"><div class="kicker">Welcome</div>'
+      var html = '<div class="welcome"><div class="kicker">Welcome</div>'
         + '<h1>' + esc(live.event_name || 'Welcome') + '</h1>'
-        + '<p>' + (start ? 'Doors open <b style="color:var(--text)">' + esc(dayLabel(start)) + ' at ' + esc(hm(start)) + '</b>' : 'Doors open soon')
+        + '<p>' + (start ? 'Doors open <b>' + esc(dayLabel(start)) + ' at ' + esc(hm(start)) + '</b>' : 'Doors open soon')
         + (live.venue ? ' · ' + esc(live.venue) : '') + '</p>'
         + '<div class="countdown" id="countdown"></div></div>';
-      renderCountdown(live);
+      if (put('now-body', html)) renderCountdown(live);
       return;
     }
     if (live.status === 'ended') {
-      body.innerHTML = '<div class="welcome"><div class="kicker">Thank you</div>'
+      put('now-body', '<div class="welcome"><div class="kicker">Thank you</div>'
         + '<h1>That is a <em>wrap.</em></h1>'
-        + '<p>Thank you for joining ' + esc(live.event_name || 'us') + '. Safe travels, and see you next year!</p></div>';
+        + '<p>Thank you for joining ' + esc(live.event_name || 'us') + '. Safe travels, and see you next year!</p></div>');
       return;
     }
     if (!live.now || !live.now.length) {
-      var msg = live.status === 'ended' ? 'That is a wrap. Thank you for joining us — see you next year!'
-        : 'Between sessions — the exhibit hall is open.';
-      body.innerHTML = '<div class="kicker">Happening now</div><div class="empty">' + esc(msg) + '</div>';
+      var nx = (live.next || [])[0];
+      var later = nx ? parse(nx.start_time) : null;
+      put('now-body', '<div class="welcome between"><div class="kicker">Right now</div>'
+        + '<h2>' + (nx && nx.minutes_until != null && nx.minutes_until < 90 ? 'Take a breath — the exhibit hall is open.' : 'See you at the next session.') + '</h2>'
+        + (nx ? '<p>Next: <b style="color:var(--text)">' + esc(nx.title) + '</b> · <span class="soon">'
+          + (nx.minutes_until != null && nx.minutes_until < 60 ? 'in ' + Math.max(1, nx.minutes_until) + ' min' : esc(whenLabel(later))) + '</span>'
+          + (nx.room ? ' · ' + esc(nx.room) : '') + '</p>' : '') + '</div>');
       return;
     }
     var many = live.now.length > 1;
-    body.innerHTML = '<div class="kicker"><span class="dot"></span>Happening now</div>' + live.now.map(function (session) {
-      var who = (session.speakers || []).map(function (s) { return s.name; }).join(', ');
-      var st = parse(session.start_time), en = parse(session.end_time), now = venueNow();
-      var left = session.minutes_remaining;
-      var remaining = left == null ? '' :
-        (left >= 60 ? Math.floor(left / 60) + ' hr' + (left % 60 ? ' ' + (left % 60) + ' min' : '') : left + ' min') + ' remaining';
-      var pct = (st && en && now && en > st) ? Math.min(100, Math.max(0, (now - st) / (en - st) * 100)) : null;
-      return '<div class="now-item">'
-        + (session.room ? '<span class="room">' + esc(session.room) + '</span>' : '')
-        + '<div class="now-title' + (many ? ' small' : '') + '">' + esc(session.title) + '</div>'
-        + (who ? '<div class="now-meta">' + esc(who) + '</div>' : '')
-        + (pct != null ? '<div class="bar"><i style="width:' + pct.toFixed(1) + '%"></i></div>' : '')
-        + (remaining ? '<div class="remaining">' + esc(remaining) + (en ? ' · until ' + esc(hm(en)) : '') + '</div>' : '')
-        + '</div>';
-    }).join('');
+    var html2 = '<div class="kicker"><span class="dot"></span>Happening now</div><div class="now-list' + (many ? ' many' : '') + '">'
+      + live.now.map(function (session) {
+        var faces = (session.speakers || []).filter(function (s) { return s.photo_url; }).slice(0, 3);
+        var who = names(session);
+        var en = parse(session.end_time);
+        var left = session.minutes_remaining;
+        var remaining = left == null ? '' :
+          (left >= 60 ? Math.floor(left / 60) + ' hr' + (left % 60 ? ' ' + (left % 60) + ' min' : '') : Math.max(1, left) + ' min') + ' left';
+        return '<div class="now-item">'
+          + (faces.length ? '<div class="faces n' + faces.length + '">' + faces.map(function (s) { return img(s.photo_url, 'face'); }).join('') + '</div>'
+            : '<div class="glyph">' + glyph(session.title) + '</div>')
+          + '<div class="now-text">'
+          + (session.room ? '<span class="room">' + esc(session.room) + '</span>' : '')
+          + '<div class="now-title">' + esc(session.title) + '</div>'
+          + (who ? '<div class="now-meta">' + esc(who) + '</div>' : '')
+          + (session.end_time ? '<div class="bar"><i data-st="' + esc(session.start_time) + '" data-en="' + esc(session.end_time) + '"></i></div>' : '')
+          + (remaining ? '<div class="remaining"><b>' + esc(remaining) + '</b>' + (en ? ' · until ' + esc(hm(en)) : '') + '</div>' : '')
+          + '</div></div>';
+      }).join('') + '</div>';
+    // Minutes-left text changes each minute; that should not re-animate the stage.
+    var key = live.now.map(function (s) { return s.id; }).join(',');
+    var animate = state.nowKey !== key;
+    state.nowKey = key;
+    put('now-body', html2, animate);
+    updateBars();
   }
 
   function renderNext(live) {
-    var body = $('next-body');
+    $('next-body').classList.toggle('norail', !(live.next && live.next.length));
     if (!live.next || !live.next.length) {
-      body.innerHTML = '<div class="empty">' + (live.status === 'ended' ? 'See you next year.' : 'Nothing scheduled after this.') + '</div>';
+      put('next-body', '<div class="empty">' + (live.status === 'ended' ? 'See you next year.' : 'Nothing more scheduled today.') + '</div>');
       return;
     }
-    var now = venueNow();
-    body.innerHTML = live.next.map(function (session) {
-      var meta = [session.room, (session.speakers || []).map(function (s) { return s.name; }).join(', ')]
-        .filter(Boolean).join(' · ');
+    put('next-body', live.next.map(function (session) {
       var st = parse(session.start_time);
       var until = session.minutes_until;
       var soon = until != null && until < 60;
-      var when = soon ? 'in ' + (until < 1 ? 'moments' : until + ' min')
-        : (st ? (now && !sameDay(st, now) ? DAYS[st.getDay()].slice(0, 3) + ' ' : '') + hm(st) : '');
-      return '<div class="next-item"><div class="next-time' + (soon ? ' soon' : '') + '">' + esc(when) + '</div>'
-        + '<div><div class="next-title">' + esc(session.title) + '</div>'
-        + (meta ? '<div class="next-meta">' + esc(meta) + '</div>' : '') + '</div></div>';
-    }).join('');
+      var face = (session.speakers || []).filter(function (s) { return s.photo_url; })[0];
+      var meta = [session.room, names(session)].filter(Boolean).join(' · ');
+      return '<div class="next-item' + (soon ? ' is-soon' : '') + '">'
+        + '<div class="next-when">' + (st ? esc(whenLabel(st)) : '') + (soon ? '<span class="chip">in ' + (until < 1 ? 'moments' : until + ' min') + '</span>' : '') + '</div>'
+        + '<div class="next-row">' + (face ? img(face.photo_url) : '')
+        + '<div style="min-width:0"><div class="next-title">' + esc(session.title) + '</div>'
+        + (meta ? '<div class="next-meta">' + esc(meta) + '</div>' : '') + '</div></div></div>';
+    }).join(''), false);
   }
 
   // Only real numbers. Attendance is private unless the organiser makes it
@@ -257,57 +396,132 @@
   function renderCounters(live) {
     var c = live.counters || {};
     var tiles = [];
-    if (c.checked_in != null) tiles.push({ value: c.checked_in, label: 'Checked in' });
-    if (c.sessions_today) tiles.push({ value: c.sessions_today, label: 'Sessions today' });
-    if (c.speakers) tiles.push({ value: c.speakers, label: 'Speakers' });
-    if (c.exhibitors) tiles.push({ value: c.exhibitors, label: 'Exhibitors' });
-    if (c.sponsors) tiles.push({ value: c.sponsors, label: 'Sponsors' });
+    if (c.checked_in != null) tiles.push([c.checked_in, 'Checked in']);
+    if (c.sessions_today) tiles.push([c.sessions_today, 'Sessions today']);
+    if (c.speakers) tiles.push([c.speakers, 'Speakers']);
+    if (c.exhibitors) tiles.push([c.exhibitors, 'Exhibitors']);
+    if (c.sponsors) tiles.push([c.sponsors, 'Sponsors']);
     tiles = tiles.slice(0, 4);
     $('counters').style.gridTemplateColumns = 'repeat(' + Math.max(1, tiles.length) + ', 1fr)';
-    $('counters').innerHTML = tiles.map(function (t) {
-      return '<div class="counter"><b>' + esc(t.value) + '</b><span>' + esc(t.label) + '</span></div>';
-    }).join('');
+    put('counters', tiles.map(function (t) {
+      return '<div class="counter"><b>' + esc(t[0]) + '</b><span>' + esc(t[1]) + '</span></div>';
+    }).join(''), false);
   }
 
-  function renderAnnouncement() {
-    var box = $('announce');
-    var items = (state.live && state.live.announcements) || [];
-    if (!items.length) { box.hidden = true; return; }
-    if (state.announceIndex >= items.length) state.announceIndex = 0;
-    var item = items[state.announceIndex];
-    box.hidden = false;
-    box.innerHTML = '<div class="kicker">Announcement' + (items.length > 1 ? ' · ' + (state.announceIndex + 1) + ' of ' + items.length : '') + '</div>'
-      + '<h3>' + esc(item.title) + '</h3>' + (item.body ? '<p>' + esc(item.body) + '</p>' : '');
+  // The stage's bottom slot takes turns: every announcement, then a speaker
+  // spotlight (the next people on stage first), so the screen keeps moving
+  // even when nothing changes on the schedule.
+  function slotItems() {
+    var live = state.live || {};
+    var items = (live.announcements || []).map(function (a) { return { kind: 'announce', a: a }; });
+    if (live.status === 'ended') return items;
+    var seen = {}, spots = [];
+    var sessions = (live.next || []);
+    sessions.forEach(function (s) {
+      (s.speakers || []).forEach(function (p) {
+        if (p.photo_url && !seen[p.id]) { seen[p.id] = 1; spots.push({ kind: 'spot', p: p, s: s }); }
+      });
+    });
+    var nowIds = {};
+    (live.now || []).forEach(function (s) { (s.speakers || []).forEach(function (p) { nowIds[p.id] = 1; }); });
+    state.speakers.forEach(function (p) {
+      if (p.photo_url && !seen[p.id] && !nowIds[p.id]) { seen[p.id] = 1; spots.push({ kind: 'spot', p: p, s: null }); }
+    });
+    // Interleave so announcements recur between spotlights.
+    if (!items.length) return spots;
+    var out = [], i = 0;
+    spots.forEach(function (sp, k) { if (k % 2 === 0) { out.push(items[i % items.length]); i += 1; } out.push(sp); });
+    return out.length ? out : items;
+  }
+  function nextSessionFor(p) {
+    var now = venueNow();
+    var list = (p.sessions || []).map(function (s) { return { s: s, t: parse(s.start_time) }; })
+      .filter(function (x) { return x.t && (!now || x.t > now); })
+      .sort(function (a, b) { return a.t - b.t; });
+    return list[0] || null;
+  }
+  function renderSlot() {
+    var items = slotItems();
+    if (!items.length) { put('slot', '', false); return; }
+    if (state.slotIndex >= items.length) state.slotIndex = 0;
+    var it = items[state.slotIndex];
+    var html;
+    if (it.kind === 'announce') {
+      var n = (state.live.announcements || []).length;
+      html = '<div class="card announce"><div class="ico">📣</div><div style="min-width:0"><div class="kicker">Announcement'
+        + (n > 1 ? ' · ' + ((state.live.announcements.indexOf(it.a)) + 1) + ' of ' + n : '') + '</div>'
+        + '<h3>' + esc(it.a.title) + '</h3>' + (it.a.body ? '<p>' + esc(it.a.body) + '</p>' : '') + '</div></div>';
+    } else {
+      var p = it.p, when = null, title = null, room = null;
+      if (it.s) { when = parse(it.s.start_time); title = it.s.title; room = it.s.room; }
+      else { var ns = nextSessionFor(p); if (ns) { when = ns.t; title = ns.s.title; room = ns.s.room; } }
+      html = '<div class="card spot">' + img(p.photo_url) + '<div style="min-width:0"><div class="kicker">Speaker spotlight</div>'
+        + '<h3>' + esc(p.name) + (p.role ? ' <span style="color:var(--muted);font-weight:500;font-size:1.05vw">· ' + esc(p.role) + '</span>' : '') + '</h3>'
+        + (title ? '<p><span class="when">' + esc(whenLabel(when)) + (room ? ' · ' + esc(room) : '') + '</span> — ' + esc(title) + '</p>'
+          : (p.bio ? '<p>' + esc(p.bio) + '</p>' : ''))
+        + '</div></div>';
+    }
+    put('slot', html);
   }
 
   var TIER = { headline: 'Headline sponsor', title: 'Title sponsor', platinum: 'Platinum sponsor', gold: 'Gold sponsor',
                silver: 'Silver sponsor', bronze: 'Bronze sponsor', partner: 'Partner' };
   // Sponsors rotate one at a time so every tier gets the full width rather than
-  // competing in a crowded logo strip. Higher tiers come first in the list.
-  function rotateSponsor() {
+  // competing in a crowded logo strip. Headline sponsors stay up twice as long.
+  function rotateSponsor(force) {
     var live = state.live;
-    var box = $('sponsor');
     var footer = $('sponsor-footer');
     if (!live || !live.sponsors || !live.sponsors.length) { footer.hidden = true; return; }
     footer.hidden = false;
-    if (state.sponsorIndex >= live.sponsors.length) state.sponsorIndex = 0;
-    var sponsor = live.sponsors[state.sponsorIndex];
+    var list = live.sponsors;
+    if (!force && state.current) {
+      var tierNow = String(state.current.tier || '').toLowerCase();
+      state.sponsorTicks += 1;
+      if ((tierNow === 'headline' || tierNow === 'title') && state.sponsorTicks < 2) return;
+    }
+    if (state.sponsorIndex >= list.length) state.sponsorIndex = 0;
+    var sponsor = list[state.sponsorIndex];
+    var shown = state.sponsorIndex;
     state.sponsorIndex += 1;
+    state.current = sponsor;
+    state.sponsorTicks = 0;
+    var box = $('sponsor');
     box.classList.remove('show');
     setTimeout(function () {
       var tier = String(sponsor.tier || 'partner').toLowerCase();
-      box.innerHTML = (sponsor.logo_url ? '<img src="' + esc(sponsor.logo_url) + '" alt="" />' : '')
-        + '<div><div class="sponsor-tier">' + esc(TIER[tier] || (tier.charAt(0).toUpperCase() + tier.slice(1) + ' sponsor')) + '</div>'
+      box.innerHTML = img(sponsor.logo_url)
+        + '<div style="min-width:0"><div class="sponsor-tier ' + esc(tier) + '">' + esc(TIER[tier] || (tier.charAt(0).toUpperCase() + tier.slice(1) + ' sponsor')) + '</div>'
         + '<div class="sponsor-name">' + esc(sponsor.name) + '</div>'
         + (sponsor.blurb ? '<div class="sponsor-blurb">' + esc(sponsor.blurb) + '</div>' : '') + '</div>';
+      $('pips').innerHTML = list.map(function (_, i) { return '<i' + (i === shown ? ' class="on"' : '') + '></i>'; }).join('');
       box.classList.add('show');
-    }, 300);
+    }, 350);
+  }
+
+  function drawQr() {
+    if (!showQr || !window.qrcodegen) return;
+    try {
+      var q = window.qrcodegen.QrCode.encodeText(appUrl, window.qrcodegen.QrCode.Ecc.MEDIUM);
+      var cv = $('qr-canvas'), ctx = cv.getContext('2d');
+      var scale = Math.floor(cv.width / q.size);
+      var off = Math.floor((cv.width - q.size * scale) / 2);
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.fillStyle = '#06100a';
+      for (var y = 0; y < q.size; y++) for (var x = 0; x < q.size; x++) if (q.getModule(x, y)) ctx.fillRect(off + x * scale, off + y * scale, scale, scale);
+      $('qr').hidden = false;
+    } catch (e) { $('qr').hidden = true; }
   }
 
   function render(live) {
     $('event-name').textContent = live.event_name || 'Event';
+    $('mark').textContent = (live.event_name || 'G').trim().charAt(0).toUpperCase();
     var start = parse(live.starts_at), end = parse(live.ends_at);
-    var range = (start && end) ? MONTHS[start.getMonth()] + ' ' + start.getDate() + '–' + end.getDate() + ', ' + start.getFullYear() : '';
+    var range = '';
+    if (start && end) {
+      range = start.getMonth() === end.getMonth()
+        ? MONTHS[start.getMonth()] + ' ' + start.getDate() + '–' + end.getDate() + ', ' + start.getFullYear()
+        : MONTHS[start.getMonth()].slice(0, 3) + ' ' + start.getDate() + ' – ' + MONTHS[end.getMonth()].slice(0, 3) + ' ' + end.getDate() + ', ' + end.getFullYear();
+    }
     $('sub').textContent = [live.venue, range].filter(Boolean).join(' · ');
     var banner = $('banner');
     if (live.live_message) { banner.hidden = false; banner.textContent = live.live_message; }
@@ -315,7 +529,7 @@
     renderNow(live);
     renderNext(live);
     renderCounters(live);
-    renderAnnouncement();
+    renderSlot();
   }
 
   function markStatus() {
@@ -342,29 +556,41 @@
           state.clockBase = parse(live.server_time);
           state.clockSetAt = Date.now();
         }
-        render(live);
         tickClock();
+        render(live);
         // The first good answer shows a sponsor at once, not after a blank bar.
-        if (!state.sponsorsStarted) { state.sponsorsStarted = true; rotateSponsor(); }
+        if (!state.sponsorsStarted) { state.sponsorsStarted = true; rotateSponsor(true); }
         // Keep showing the last good frame if the network drops — a blank screen
         // in a venue looks broken; slightly stale numbers do not.
       })
       .catch(function () { /* keep last frame */ })
       .finally(markStatus);
   }
+  function loadSpeakers() {
+    fetch(api + '/public/events/' + encodeURIComponent(eventId) + '/speakers', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (list) { if (Array.isArray(list)) { state.speakers = list; if (state.live) renderSlot(); } })
+      .catch(function () {});
+  }
 
-  // Full screen on a click or F; keep the screen awake where allowed.
+  // Full screen on a click or F; keep the screen awake where allowed; hide the
+  // mouse pointer when nobody is touching it.
   function fullscreen() {
     var el = document.documentElement;
     if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(function () {});
   }
   document.addEventListener('click', fullscreen);
   document.addEventListener('keydown', function (e) { if (e.key === 'f' || e.key === 'F') fullscreen(); });
-  setTimeout(function () { $('hint').style.opacity = '0'; }, 6000);
-  var lock = null;
+  var idleTimer = null;
+  document.addEventListener('mousemove', function () {
+    document.body.classList.remove('idle');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(function () { document.body.classList.add('idle'); }, 3000);
+  });
+  setTimeout(function () { $('hint').style.opacity = '0'; document.body.classList.add('idle'); }, 6000);
   function wake() {
     if (navigator.wakeLock && document.visibilityState === 'visible') {
-      navigator.wakeLock.request('screen').then(function (l) { lock = l; }).catch(function () {});
+      navigator.wakeLock.request('screen').catch(function () {});
     }
   }
   document.addEventListener('visibilitychange', wake);
@@ -373,10 +599,13 @@
   // only while the server is answering (a reload into a dead network is blank).
   setInterval(function () { if (Date.now() - state.lastOk < pollMs * 2) location.reload(); }, 4 * 3600 * 1000);
 
+  drawQr();
   poll();
+  loadSpeakers();
   setInterval(poll, pollMs);
-  setInterval(rotateSponsor, rotateMs);
-  setInterval(function () { state.announceIndex += 1; renderAnnouncement(); }, 12000);
+  setInterval(loadSpeakers, 10 * 60 * 1000);
+  setInterval(function () { rotateSponsor(false); }, rotateMs);
+  setInterval(function () { state.slotIndex += 1; renderSlot(); }, 11000);
   setInterval(tickClock, 1000);
   setInterval(markStatus, 1000);
 })();

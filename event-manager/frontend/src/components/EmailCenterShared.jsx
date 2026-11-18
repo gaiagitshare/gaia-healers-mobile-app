@@ -64,7 +64,10 @@ export const DELIVERY = {
     rejected: ['Failed', 'error'],
     bounced: ['Bounced', 'error'],
     unknown: ['Unknown', 'warning'],
-    sending: ['Sending…', 'warning'],
+    // Step 1 of every send, logged the instant the email is handed to GHL; the
+    // next row is GHL's answer. Not a waiting state (18 Nov 2026: 'Sending...'
+    // read as stuck).
+    sending: ['Step 1: handed to GHL', 'default'],
     sent: ['Sent', 'info'],
     held: ['Held', 'warning'],
     refused: ['Refused', 'warning'],

@@ -57,7 +57,7 @@ def _clean(v):
 def _num(v):
     """A sheet number cell comes through as '1.0' / '9545511920.0'. Return the
     integer text when it is a whole number, else the text as typed."""
-    t = _clean(v)
+    t = _clean(v).lstrip("=").strip()    # a formula cell exported as text
     if re.fullmatch(r"-?\d+\.0+", t):
         return t.split(".")[0]
     return t
@@ -210,11 +210,15 @@ _PHONE_IN = re.compile(r"\+?\d[\d\s().\-‐-―‑]{6,}\d")
 _ROLE = re.compile(r"\([^)]*\)")
 _TITLES = re.compile(r"\b(dr|mr|mrs|ms|phd|md|ceo|cfo|coo|speaker)\b\.?", re.I)
 _INVISIBLE = re.compile("[‎‏‪-‮⁦-⁩]")
+# Labels the team types in front of a value ("Badge 1: Matt Ma", "email: x@y"),
+# which are never part of a name (18 Nov 2026: two badges came out named "email").
+_LABEL = re.compile(r"\b(?:badges?|staff|e-?mail|phone|tel|cell|mobile|name|contact)\b\s*#?\s*\d*\s*:?", re.I)
 
 
 def _name_of(seg):
     t = _INVISIBLE.sub("", seg)
     t = _EMAIL_IN.sub(" ", t)
+    t = _LABEL.sub(" ", t)
     t = _PHONE_IN.sub(" ", t)
     t = _ROLE.sub(" ", t)
     t = _TITLES.sub(" ", t)

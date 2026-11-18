@@ -124,7 +124,13 @@ def switch_offs(r, diff):
 
 def same(field, a, b):
     a = "" if a is None else str(a).strip(); b = "" if b is None else str(b).strip()
-    if field == "contact_phone": return re.sub(r"\D", "", a) == re.sub(r"\D", "", b)
+    if field == "contact_phone":
+        # Same digits is the same number -- unless the stored value is not a
+        # phone at all: a sheet formula ("=9498702692") once came through as
+        # text and, compared digits-only, was never cleaned up (18 Nov 2026).
+        if re.search(r"[^\d\s+().\-]", a):
+            return False
+        return re.sub(r"\D", "", a) == re.sub(r"\D", "", b)
     if field == "website": return re.sub(r"^https?://(www\.)?", "", a.lower()).rstrip("/") == re.sub(r"^https?://(www\.)?", "", b.lower()).rstrip("/")
     if field in ("contact_email",): return a.lower() == b.lower()
     if field == "booth_number": return re.sub(r"\s+", "", a.lower()) == re.sub(r"\s+", "", b.lower())

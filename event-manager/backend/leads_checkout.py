@@ -93,6 +93,24 @@ def candidates(db, event_id, email):
     ).all()
 
 
+def _digits10(p):
+    d = "".join(ch for ch in str(p or "") if ch.isdigit())
+    return d[-10:] if len(d) >= 10 else ""
+
+
+def candidates_by_phone(db, event_id, phone):
+    """The stand whose contact phone is the buyer's (last ten digits). Used only
+    when the buyer's email matches no stand: 18 Nov 2026, Transform and RISE's
+    speaker paid $199 from her personal email, but with the stand's own phone."""
+    want = _digits10(phone)
+    if not want:
+        return []
+    return [x for x in db.query(models.Exhibitor).filter(
+        models.Exhibitor.event_id == event_id,
+        models.Exhibitor.can_scan_leads == True).all()               # noqa: E712
+        if _digits10(x.contact_phone) == want]
+
+
 def unlock(db, ex, pe=None, source="payment", actor=None):
     """Open a stand's leads, saying why. Never touches a stand already open."""
     if ex.leads_unlocked:
@@ -122,6 +140,10 @@ def apply_payment(db, pe, events=None):
     if db.query(models.Exhibitor.id).filter(models.Exhibitor.leads_unlock_payment_id == pe.id).first():
         return "already"
     hits = candidates(db, event.id, pe.buyer_email)
+    source = "payment"
+    if not hits:
+        hits = candidates_by_phone(db, event.id, pe.buyer_phone)
+        source = "payment_phone"
     if len(hits) != 1:
         return "unmatched" if not hits else "ambiguous"
     ex = hits[0]
@@ -133,7 +155,7 @@ def apply_payment(db, pe, events=None):
             _log({"op": "link", "exhibitor": ex.id, "payment": pe.id, "actor": None})
             return "linked"
         return "stand_already_open"
-    unlock(db, ex, pe, "payment")
+    unlock(db, ex, pe, source)
     return "unlocked"
 
 
@@ -173,7 +195,7 @@ def payments_for_event(db, event):
         elif pe.live_mode is False:
             state = "test_mode"
         else:
-            n = len(candidates(db, event.id, pe.buyer_email))
+            n = len(candidates(db, event.id, pe.buyer_email) or candidates_by_phone(db, event.id, pe.buyer_phone))
             state = "unmatched" if n == 0 else "ambiguous" if n > 1 else "stand_already_open"
         rows.append({"id": pe.id, "occurred_at": pe.occurred_at, "buyer_name": pe.buyer_name,
                      "buyer_email": pe.buyer_email, "amount": pe.amount, "currency": pe.currency,

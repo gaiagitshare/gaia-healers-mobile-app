@@ -893,6 +893,25 @@ def work_queue(db, event_id, user):
             if r[kind]["status"] in ("failed", "bounced", "unknown"):
                 item(key="ex%d:%s:delivery" % (r["id"], kind), problem="%s email %s" % (kind.capitalize(), r[kind]["status"]),
                      kind="exhibitor_delivery", kind_label="Exhibitor email", severity="high", recommended_action="Check in GHL, then resend.", **base)
+    # A stand paid to unlock its leads but the payment matched no stand (paid
+    # from another email and phone) or two: it opens nothing until somebody
+    # assigns it, so it must be in front of staff at once (18 Nov 2026).
+    try:
+        import leads_checkout as _LC
+        _ev = db.query(models.Event).filter(models.Event.id == event_id).first()
+        for _p in (_LC.payments_for_event(db, _ev) if _ev else []):
+            if _p["state"] in ("unmatched", "ambiguous"):
+                item(key="leadspay:%d" % _p["id"], issue_id=None, booking=None, order_number=None,
+                     customer=(_p.get("buyer_name") or _p.get("buyer_email") or "?"),
+                     problem="Paid $%s to unlock scanned leads, but the payment %s (%s)" % (
+                         ("%g" % float(_p.get("amount") or 0)), "matches no stand" if _p["state"] == "unmatched" else "matches two stands",
+                         _p.get("buyer_email") or "no email"),
+                     kind="leads_payment", kind_label="Leads payment", severity="high",
+                     recommended_action="Exhibitors > Leads payments: assign it to the stand (this opens their leads).",
+                     stage="flagged", status="open", assigned_to=None, assigned_name=None, last_update=None,
+                     awaiting_approval=False, proposals=0, ready_to_fix=True, blocks_email=False)
+    except Exception as _e:                    # the queue must never fail because of this
+        print("leads payment queue item failed: %r" % (_e,))
     # Requests held from other admin pages (pass change, transfer, ...) that
     # belong to no reconciliation case: one item each until decided.
     for p in db.query(models.ReconProposal).filter(models.ReconProposal.event_id == event_id,

@@ -21,6 +21,10 @@ from urllib.parse import urlsplit, parse_qs
 
 HERE = "/root/event/backend"
 sys.path.insert(0, HERE)
+import os, tempfile
+# The unlock log goes to a temporary folder, never the live data/ folder
+# (18 Nov 2026: test unlocks of stands 66-68 had landed in the live log).
+os.environ["VENDOR_SYNC_DATA"] = tempfile.mkdtemp(prefix="leads-test-")
 import testbed
 BASE, DB = testbed.start()
 import main                                                    # noqa: E402

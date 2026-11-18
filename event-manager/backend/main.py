@@ -1146,7 +1146,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     if user.is_admin:
         claims["adm"] = True
     access_token = create_access_token(data=claims, expires_delta=access_token_expires)
-    return {"access_token": access_token, "token_type": "bearer", "user": user}
+    # Never send the password hash back; the apps only need who signed in.
+    return {"access_token": access_token, "token_type": "bearer",
+            "user": {"id": user.id, "email": user.email, "full_name": user.full_name,
+                     "is_admin": bool(user.is_admin), "created_at": user.created_at}}
 
 
 @app.post("/auth/change-password")

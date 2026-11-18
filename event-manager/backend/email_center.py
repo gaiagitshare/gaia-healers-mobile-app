@@ -1014,7 +1014,7 @@ def exhibitor_rows(db, event_id, s):
     return out
 
 
-EX_KINDS = ("setup", "scanner", "reminder", "leads_update")
+EX_KINDS = ("setup", "scanner", "reminder", "leads_update", "photos_update")
 REMIND_AFTER_HOURS = 48
 
 # The one thing an admin should do next for a stand, in priority order.
@@ -1157,6 +1157,11 @@ def send_exhibitor(db, event_id, ex_id, kind, actor, resend_reason=None, gw=None
                 return {"id": ex_id, "kind": kind, "state": "refused", "reason": "setup_not_sent_yet"}
             if not _setup_link(db, s, ex, mint_if_missing=False)[0]:
                 return {"id": ex_id, "kind": kind, "state": "refused", "reason": "setup_link_expired"}
+        if kind == "photos_update":
+            # The stand's EXISTING setup link only: this email never mints or
+            # rotates one (18 Nov 2026).
+            if not _setup_link(db, s, ex, mint_if_missing=False)[0]:
+                return {"id": ex_id, "kind": kind, "state": "refused", "reason": "no_valid_setup_link"}
         if kind in ("scanner", "leads_update") and not (ex.can_scan_leads and ex.access_token):
             return {"id": ex_id, "kind": kind, "state": "refused", "reason": "scanning_not_enabled"}
         if kind == "leads_update":
@@ -1189,6 +1194,9 @@ def send_exhibitor(db, event_id, ex_id, kind, actor, resend_reason=None, gw=None
             elif kind == "reminder":
                 url, exp, _ = _setup_link(db, s, ex, mint_if_missing=False)
                 payload = exhibitor_email.render_reminder(_ex_view(ex), url, exp[:10] if exp else "")
+            elif kind == "photos_update":
+                url, _exp, _ = _setup_link(db, s, ex, mint_if_missing=False)
+                payload = exhibitor_email.render_photos_update(_ex_view(ex), url)
             elif kind == "leads_update":
                 payload = exhibitor_email.render_leads_update(_ex_view(ex), _scanner_url(ex))
             else:
@@ -1870,6 +1878,9 @@ def ec_ex_preview(event_id: int, ex_id: int, kind: str, db: Session = Depends(M.
             if not authz.can(db, current_user, event_id, "exhibitor.grant_scanning"):
                 raise HTTPException(status_code=403, detail="Not permitted for this event")
             p = exhibitor_email.render_scanner(_ex_view(ex), _scanner_url(ex) or "(scanning is not enabled for this stand)")
+        elif kind == "photos_update":
+            url, _exp, _ = _setup_link(db, s, ex, mint_if_missing=False)
+            p = exhibitor_email.render_photos_update(_ex_view(ex), url or "(this stand has no valid setup link)")
         elif kind == "leads_update":
             if not authz.can(db, current_user, event_id, "exhibitor.grant_scanning"):
                 raise HTTPException(status_code=403, detail="Not permitted for this event")

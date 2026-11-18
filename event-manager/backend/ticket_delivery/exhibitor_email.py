@@ -11,6 +11,7 @@ SUBJECTS = {
     "scanner": "Your badge scanner for the stand — Gaia Healers ELEVATE 2026",
     "reminder": "Reminder: set up your stand profile — Gaia Healers ELEVATE 2026",
     "leads_update": "Update: your badge scanner and leads — Gaia Healers ELEVATE 2026",
+    "photos_update": "Photo uploads now work — your stand page, Gaia Healers ELEVATE 2026",
 }
 
 
@@ -136,3 +137,20 @@ def render_reminder(ex, url, expires_text=""):
              + ('<li>The link works until ' + esc(expires_text) + '.</li>' if expires_text else '')
              + '<li>Already done? Thank you, and please ignore this email.</li></ul>')
     return {"subject": SUBJECTS["reminder"], "html": _frame(SUBJECTS["reminder"], inner)}
+
+
+def render_photos_update(ex, url):
+    """18 Nov 2026: phone photos over 1 MB were refused when stands uploaded
+    them; fixed, so tell every stand and hand them their own link again."""
+    inner = (_head(ex)
+             + '<p style="line-height:1.55;margin:0 0 8px">If you tried to upload photos of your booth or products to your '
+               'stand page and it did not work, we are sorry: larger photos from phones were being refused. '
+               '<strong>This is now fixed</strong>, and photos are resized automatically, so any photo from your phone will upload.</p>'
+               '<p style="line-height:1.55;margin:0 0 8px">You can now also add a photo to a product you have already listed: '
+               'tap <strong>+ Add photo</strong> beside the item.</p>'
+             + _button(url, "Open my stand page")
+             + '<ul style="margin:0 0 8px;padding-left:20px;line-height:1.6;font-size:14px">'
+               '<li>This is your own stand link, the same as before. No account or password is needed.</li>'
+               '<li>Attendees are already browsing the exhibitor directory, and the event starts on Friday, November 20.</li>'
+               '<li>Photos already on your page? Thank you, and please ignore this email.</li></ul>')
+    return {"subject": SUBJECTS["photos_update"], "html": _frame(SUBJECTS["photos_update"], inner)}

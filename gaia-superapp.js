@@ -809,8 +809,10 @@
     // The list arrives already filtered by the server: only stands an operator
     // has put in the directory are ever in this payload. Nothing here decides
     // who is visible, and nothing here can widen it.
-    const rows = exhibitors.slice().sort((a, b) => String(a.company_name || '')
-      .localeCompare(String(b.company_name || ''), undefined, { sensitivity: 'base' }));
+    // Stands that set up their own business profile (website, products,
+    // photos) come first, then the rest; A-Z within each (19 Nov 2026).
+    const rows = exhibitors.slice().sort((a, b) => (Number(Boolean(b.profile_ready)) - Number(Boolean(a.profile_ready)))
+      || String(a.company_name || '').localeCompare(String(b.company_name || ''), undefined, { sensitivity: 'base' }));
     const head = '<section class="g-super-list" data-directory><div class="g-super-section-head"><div>'
       + '<p class="g-super-kicker">Exhibit hall</p><h2>Exhibitor directory</h2>'
       + '<p class="g-super-sub" data-dir-count>' + rows.length

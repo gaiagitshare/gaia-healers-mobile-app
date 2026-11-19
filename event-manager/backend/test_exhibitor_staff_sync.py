@@ -47,6 +47,13 @@ check(all(p["name_from_email"] for p in r) and [p["email"] for p in r] == ["ray@
 r = P("David Federman (Sales Consultant) dfederman@pulsepemf.com\nScott Baider (CEO) sbaider@pulsepemf.com")
 check([p["name"] for p in r] == ["David Federman", "Scott Baider"], "roles in brackets are not part of the name", r)
 check(P("") == [] and P("   ") == [], "an empty cell is nobody")
+r = (P("Jeff Maier DONE\njeff@rapidreleasetech.com\nPatrick Porter NO pporter@braintap.com\nJacob Wilson no")
+     + P("NO patricia@myivspaorlando.com"))
+check([(p["name"], p["email"], p["name_from_email"]) for p in r] == [
+          ("Jeff Maier", "jeff@rapidreleasetech.com", False), ("Patrick Porter", "pporter@braintap.com", False),
+          ("Jacob Wilson", None, False), ("Patricia", "patricia@myivspaorlando.com", True)],
+      "the team's DONE / NO marks are not part of a name; a bare mark is no name", r)
+check([p["name"] for p in P("Noel Yes Smith x@y.example")] == ["Noel Yes Smith"], "a mark word inside a name is kept")
 
 print("2. a stand renamed in the sheet")
 import testbed

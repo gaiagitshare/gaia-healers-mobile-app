@@ -215,6 +215,9 @@ _INVISIBLE = re.compile("[‎‏‪-‮⁦-⁩]")
 _LABEL = re.compile(r"\b(?:badges?|staff|e-?mail|phone|tel|cell|mobile|name|contact)\b\s*#?\s*\d*\s*:?", re.I)
 
 
+_STATUS_MARK = re.compile(r"^(done|no|yes|printed|ok|tbd|n/?a|pending)$", re.I)
+
+
 def _name_of(seg):
     t = _INVISIBLE.sub("", seg)
     t = _EMAIL_IN.sub(" ", t)
@@ -224,7 +227,14 @@ def _name_of(seg):
     t = _TITLES.sub(" ", t)
     t = re.sub(r"[<>|;:,\-‐-―]+", " ", t)
     t = " ".join(w for w in t.split() if re.search(r"[A-Za-z]", w) and not re.search(r"\d", w))
-    return t.strip(" .")
+    # The team marks each person's badge in the same cell ("Jeff Maier DONE",
+    # "Jacob Wilson no", a bare "NO"). A mark is not part of the name: kept, it
+    # printed "Maier DONE" on a badge and hid a speaker's own badge from the
+    # name match, so a second badge was made (19 Nov 2026).
+    words = t.split()
+    while words and _STATUS_MARK.match(words[-1].strip(" .")):
+        words.pop()
+    return " ".join(words).strip(" .")
 
 
 def _alpha(s):

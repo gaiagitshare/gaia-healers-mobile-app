@@ -141,3 +141,8 @@ html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-panel > * >
 html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-panel .g-super-list:first-child { margin-top: 0 !important; }
 .evl-note__icon { color: #FFD98A; background: rgba(240, 198, 116, .28); }
 .evl-note__icon i { font-size: 18px; }
+
+/* The Gaia mascot is smaller on event pages (19 Nov 2026): at 72px it sat on
+   the right edge of every card, the stand list and the agenda. */
+body:has([data-screen="events"] .g-event-tabs) .gava-char { width: 44px !important; height: 44px !important; filter: drop-shadow(0 6px 14px rgba(63, 217, 200, .25)); }
+body:has([data-screen="events"] .g-event-tabs) .gava-bubble { width: min(240px, calc(100vw - 24px)); font-size: 13px; }

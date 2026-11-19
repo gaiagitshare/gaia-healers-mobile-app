@@ -493,6 +493,98 @@
       + '</section>';
   }
 
+  // ---- Event mode: the Live tab (19 Nov 2026 redesign) -----------------------
+  // Venue wall-clock strings ("2026-11-20T09:00") compared as UTC numbers on
+  // both sides, so the phone's own zone never enters the sum.
+  function naiveMs(v) {
+    const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : NaN;
+  }
+  function venueNowMs() {
+    const d = eventLive.data;
+    if (!d || !d.server_time) return NaN;
+    return naiveMs(d.server_time) + (Date.now() - (eventLive.fetchedAt || Date.now()));
+  }
+  function spanLabel(ms) {
+    const min = Math.max(0, Math.round(ms / 60000));
+    if (min < 60) return min + ' min';
+    const h = Math.floor(min / 60), m = min % 60;
+    return h + ' h' + (m ? ' ' + m + ' min' : '');
+  }
+  function personFace(sp, byId) {
+    const photo = sp.photo_url || (byId[sp.id] || {}).photo_url;
+    const initial = String(sp.name || '?').replace(/^(dr|prof)\.?\s+/i, '').trim().charAt(0).toUpperCase();
+    return photo ? '<img class="evl-face" src="' + esc(photo) + '" alt="" loading="lazy">' : '<span class="evl-face evl-face--i">' + esc(initial) + '</span>';
+  }
+  function liveTab(live, detail) {
+    if (!live || !live.live_enabled) return '';
+    const byId = {};
+    (detail?.speakers || []).forEach((sp) => { byId[sp.id] = sp; });
+    const now = venueNowMs();
+    const nowCards = (live.now || []).map((s) => {
+      const st = naiveMs(s.start_time), en = naiveMs(s.end_time);
+      const pct = Number.isFinite(st) && Number.isFinite(en) && en > st && Number.isFinite(now) ? Math.min(100, Math.max(0, (now - st) / (en - st) * 100)) : null;
+      const people = (s.speakers || []);
+      return '<article class="evl-now">'
+        + '<div class="evl-now__top"><span class="evl-badge"><span class="g-live-dot" aria-hidden="true"></span> Happening now</span>'
+        + (s.room ? '<span class="evl-room">' + esc(s.room) + '</span>' : '') + '</div>'
+        + '<h3>' + esc(s.title) + '</h3>'
+        + (people.length ? '<div class="evl-people">' + people.slice(0, 3).map((sp) => personFace(sp, byId)).join('')
+          + '<span>' + esc(people.map((sp) => sp.name).join(', ')) + '</span></div>' : '')
+        + (pct != null ? '<div class="evl-bar"><i style="width:' + pct.toFixed(1) + '%"></i></div>' : '')
+        + '<p class="evl-when">' + esc([sessionTime(s.start_time), sessionTime(s.end_time)].filter(Boolean).join(' – '))
+        + (s.minutes_remaining != null ? ' · <b>' + esc(minutesLabel(s.minutes_remaining)) + ' left</b>' : '') + '</p>'
+        + '</article>';
+    }).join('');
+    let state = '';
+    if (!nowCards) {
+      const start = naiveMs(live.starts_at);
+      if (live.status === 'before' && Number.isFinite(start)) {
+        const d = new Date(start);
+        const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d.getUTCDay()];
+        state = '<article class="evl-now evl-now--soon"><span class="evl-badge evl-badge--soon">Doors open</span>'
+          + '<h3>' + esc(dayName) + ' at ' + esc(sessionTime(live.starts_at)) + '</h3>'
+          + (Number.isFinite(now) ? '<p class="evl-when"><b>in ' + esc(spanLabel(start - now)) + '</b>' + (live.venue ? ' · ' + esc(live.venue) : '') + '</p>' : '')
+          + '</article>';
+      } else {
+        state = '<article class="evl-now evl-now--soon"><span class="evl-badge evl-badge--soon">' + (live.status === 'ended' ? 'Thank you' : 'Between sessions') + '</span>'
+          + '<h3>' + esc(live.status === 'ended' ? 'That is a wrap — see you next year.' : 'Take a breath — the exhibit hall is open.') + '</h3></article>';
+      }
+    }
+    const next = (live.next || []).slice(0, 3);
+    const nextBlock = next.length
+      ? '<div class="evl-block"><h4 class="evl-h">Up next</h4><div class="evl-next">' + next.map((s) => {
+        const soon = s.minutes_until != null && s.minutes_until < 90;
+        const face = (s.speakers || [])[0];
+        return '<div class="evl-next__item"><div class="evl-next__time"><b>' + esc(sessionTime(s.start_time)) + '</b>'
+          + (soon ? '<span>in ' + esc(minutesLabel(Math.max(1, s.minutes_until))) + '</span>' : '') + '</div>'
+          + '<div class="evl-next__body"><strong>' + esc(s.title) + '</strong>'
+          + '<em>' + esc([s.room, (s.speakers || []).map((sp) => sp.name).join(', ')].filter(Boolean).join(' · ')) + '</em></div>'
+          + (face ? personFace(face, byId) : '') + '</div>';
+      }).join('') + '</div></div>'
+      : '';
+    const actions = '<div class="evl-actions">'
+      + '<button type="button" class="evl-action" data-event-tab="agenda">' + icon('calendar-dots') + '<span>Full agenda</span></button>'
+      + '<button type="button" class="evl-action" data-event-tab="map">' + icon('map-trifold') + '<span>Hall map</span></button>'
+      + '<button type="button" class="evl-action" data-event-tab="speakers">' + icon('microphone-stage') + '<span>Speakers</span></button></div>';
+    const notes = (live.announcements || []).length
+      ? '<div class="evl-block"><h4 class="evl-h">From the organisers</h4>' + live.announcements.map((a) => '<div class="evl-note">'
+        + '<span class="evl-note__icon" aria-hidden="true">' + icon('megaphone-simple') + '</span><div><strong>' + esc(a.title) + '</strong>'
+        + (a.body ? '<span>' + esc(a.body) + '</span>' : '') + '</div></div>').join('') + '</div>'
+      : '';
+    // Only real numbers: an attendance figure the organiser keeps private is
+    // left out, never shown as 0.
+    const c = live.counters || {};
+    const stats = [[c.checked_in, 'Checked in'], [c.sessions_today, 'Sessions today'], [c.speakers, 'Speakers'], [c.exhibitors, 'Exhibitors']]
+      .filter((t) => t[0] != null && t[0] !== 0).slice(0, 3);
+    const statsBlock = stats.length ? '<div class="evl-stats">' + stats.map((t) => '<div><b>' + esc(t[0]) + '</b><span>' + esc(t[1]) + '</span></div>').join('') + '</div>' : '';
+    const sponsors = (live.sponsors || []).length
+      ? '<div class="evl-block"><h4 class="evl-h">With thanks to our sponsors</h4><div class="g-live-sponsor-row">' + live.sponsors.map(sponsorTile).join('') + '</div></div>'
+      : '';
+    return '<section class="evl">' + (live.live_message ? '<p class="evl-banner">' + esc(live.live_message) + '</p>' : '')
+      + (nowCards || state) + actions + nextBlock + notes + statsBlock + sponsors + '</section>';
+  }
+
   // Refresh while the Events view is on screen and the tab is in the foreground,
   // so a backgrounded app is not making requests for nothing. The loop keeps
   // rescheduling either way: a phone that locks and wakes must start refreshing
@@ -541,16 +633,29 @@
   function agendaSection(detail) {
     const days = Array.isArray(detail?.agenda?.days) ? detail.agenda.days : [];
     if (!days.length) return '';
-    const zone = detail?.event?.timezone ? ' · times shown in ' + esc(zoneLabel(detail.event.timezone, detail.event.location || detail.event.venue)) : '';
+    const zone = detail?.event?.timezone ? esc(zoneLabel(detail.event.timezone, detail.event.location || detail.event.venue)) : '';
     // A ticket holder's own picks come before the full programme: by the second
     // morning that shorter list is the only one anybody opens.
     const mine = window.GaiaMySchedule ? window.GaiaMySchedule.panelHtml(detail?.event?.timezone) : '';
-    const total = days.reduce((n, day) => n + (day.sessions || []).length, 0);
-    return mine + '<section class="g-event-timeline" data-filter><p class="g-super-kicker">Published schedule' + zone + '</p><h2>Agenda</h2>'
+    // One day at a time (19 Nov 2026): a three-day programme was one 7,000px
+    // scroll. Today is chosen on an event day; the first day otherwise.
+    const nowMs = venueNowMs();
+    const dayKey = (day) => String(day.date || day.label || '');
+    const todayKey = Number.isFinite(nowMs) ? new Date(nowMs).toISOString().slice(0, 10) : '';
+    if (!days.some((day) => dayKey(day) === eventUI.agendaDay)) {
+      const today = days.find((day) => String(day.date || '') === todayKey || (day.sessions || []).some((s) => String(s.start_time || '').slice(0, 10) === todayKey));
+      eventUI.agendaDay = dayKey(today || days[0]);
+    }
+    const shown = days.length > 1 ? days.filter((day) => dayKey(day) === eventUI.agendaDay) : days;
+    const total = shown.reduce((n, day) => n + (day.sessions || []).length, 0);
+    const shortDay = (day) => { const t = naiveMs(String(day.date || '') + 'T12:00'); return Number.isFinite(t) ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(t).getUTCDay()] + ' ' + new Date(t).getUTCDate() : (day.label || day.date); };
+    const switcher = days.length > 1 ? '<div class="g-agenda-days" role="tablist">' + days.map((day) => '<button type="button" role="tab" data-agenda-day="' + esc(dayKey(day)) + '" aria-selected="' + (dayKey(day) === eventUI.agendaDay) + '">' + esc(shortDay(day)) + '</button>').join('') + '</div>' : '';
+    return mine + '<section class="g-event-timeline" data-filter><p class="g-super-kicker g-agenda-zone">' + (zone ? 'All times ' + zone : 'Published schedule') + '</p><h2 class="g-agenda-title">Agenda</h2>'
+      + switcher
       + '<p class="g-super-count" data-filter-count data-noun="sessions">' + total + ' sessions</p>'
       + (total > 8 ? filterBox('g-agenda-q', 'Search the agenda', 'Search sessions, speakers or rooms') : '')
       + '<p class="g-empty" data-filter-none hidden>No session matches that search.</p>'
-      + days.map((day) => '<div class="g-event-day" data-filter-group><h3>' + esc(day.label || day.date) + '</h3>'
+      + shown.map((day) => '<div class="g-event-day" data-filter-group><h3>' + esc(day.label || day.date) + '</h3>'
         + (day.sessions || []).map((session) => {
           const when = [sessionTime(session.start_time), sessionTime(session.end_time)].filter(Boolean).join(' – ');
           const meta = [session.room, session.track].filter(Boolean).join(' · ');
@@ -563,7 +668,10 @@
           // for ticket holders — the same rule as the save star.
           const reg = window.GaiaMySchedule ? window.GaiaMySchedule.registerButtonHtml(session) : '';
           const key = esc([session.title, who, meta, session.description].filter(Boolean).join(' ').toLowerCase());
-          return '<div class="g-event-timeline__item" data-filter-row data-filter-key="' + key + '"><time>' + esc(when) + '</time><div><strong>' + esc(session.title) + '</strong>'
+          const st = naiveMs(session.start_time), en = naiveMs(session.end_time);
+          const isNow = Number.isFinite(nowMs) && Number.isFinite(st) && Number.isFinite(en) && nowMs >= st && nowMs < en;
+          const isPast = Number.isFinite(nowMs) && Number.isFinite(en) && nowMs >= en;
+          return '<div class="g-event-timeline__item' + (isNow ? ' is-now' : isPast ? ' is-past' : '') + '" data-filter-row data-filter-key="' + key + '"><time>' + esc(when) + (isNow ? '<span class="g-now-tag">Now</span>' : '') + '</time><div><strong>' + esc(session.title) + '</strong>'
             + (who ? '<span>' + esc(who) + '</span>' : '')
             + (meta ? '<span>' + esc(meta) + '</span>' : '')
             + (session.description ? '<span>' + esc(session.description) + '</span>' : '')
@@ -1926,7 +2034,7 @@
     if (tab === 'speakers') return speakersSection(detail);
     if (tab === 'exhibitors') return directorySection(detail);
     if (tab === 'sponsors') return sponsorsSection(detail);
-    if (tab === 'live') return liveSection(live) || '<section class="g-super-empty-panel"><h2>Nothing live right now</h2><p>The programme and map are in the tabs above.</p></section>';
+    if (tab === 'live') return liveTab(live, detail) || '<section class="g-super-empty-panel"><h2>Nothing live right now</h2><p>The programme and map are in the tabs above.</p></section>';
     if (tab === 'info') return updatesSection(detail, null) + infoSection(detail);
     return '';
   }
@@ -2299,12 +2407,12 @@
     root.innerHTML = '<div class="g-super-page-head"><a class="g-event-back" href="home.html?view=events">' + icon('arrow-left') + ' All events</a>'
       + '<h1>' + esc(item.name) + '</h1>'
       + '<p class="g-event-headmeta">' + esc([humanDates(item), item.venue].filter(Boolean).join(' · ')) + ' ' + statusChip + '</p></div>'
-      + '<div class="g-eventpage-hero' + (eventDay ? ' is-slim' : '') + '">' + eventHero(item) + '</div>'
+      + (eventDay ? '' : '<div class="g-eventpage-hero">' + eventHero(item) + '</div>')
       + (eventDay ? '' : eventStats(item, detail))
       + offlineLine
       + (eventDay ? '' : liveSection(live))
       + tabBar
-      + '<div class="g-event-panel">' + (eventUI.tab === 'overview' ? overview : eventTabPanel(eventUI.tab, detail, live)) + '</div>';
+      + '<div class="g-event-panel g-evpanel--' + esc(eventUI.tab) + '">' + (eventUI.tab === 'overview' ? overview : eventTabPanel(eventUI.tab, detail, live)) + '</div>';
 
     // The strip is re-drawn on every tab change, which resets its sideways
     // scroll: on a phone, choosing Sponsors or Info left the selected tab
@@ -2329,6 +2437,10 @@
       window.scrollTo({ top: Math.max(0, strip.getBoundingClientRect().top + window.scrollY - hh - 6), behavior: 'smooth' });
     };
     if (eventUI._scrollToTabs && tabStrip && liveSettled) { eventUI._scrollToTabs = false; setTimeout(scrollToTabs, 60); }
+
+    root.querySelectorAll('[data-agenda-day]').forEach((button) => {
+      button.addEventListener('click', () => { eventUI.agendaDay = button.getAttribute('data-agenda-day'); render(); });
+    });
 
     root.querySelectorAll('[data-dir-stand]').forEach((button) => {
       button.addEventListener('click', () => {

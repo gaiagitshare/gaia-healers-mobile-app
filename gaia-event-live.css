@@ -1,0 +1,143 @@
+/*
+ * Event mode (19 Nov 2026 redesign). Applies only while an event is live
+ * (`.g-evmode` on the events root, set by gaia-superapp.js): a compact header,
+ * one card language, the Live tab and the agenda day switch.
+ * Everything is scoped so other screens and non-live events are untouched.
+ */
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode {
+  --evl-line: rgba(196, 242, 92, .16);
+  --evl-card: rgba(255, 255, 255, .035);
+  --evl-card2: rgba(255, 255, 255, .06);
+  --evl-lime: #C4F25C;
+  --evl-mint: #8FE3A6;
+  --evl-muted: rgba(237, 247, 230, .62);
+  --evl-text: #EDF7E6;
+}
+
+/* ---- compact header: the event name, one meta line, the live chip ---- */
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-super-page-head { padding-top: 6px; }
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-back { font-size: 13px; }
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-super-page-head h1 {
+  font-size: 22px !important; line-height: 1.22 !important; letter-spacing: -0.01em; margin: 8px 0 4px !important;
+}
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-headmeta { font-size: 13px !important; color: var(--evl-muted); line-height: 1.5; }
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-headmeta .g-event-status { margin-left: 4px; transform: scale(.9); transform-origin: left center; }
+
+/* ---- tabs: pills, tight, the active one solid ---- */
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-tabs { margin-top: 12px; gap: 6px; }
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-tab { min-height: 36px !important; padding: 0 14px !important; font-size: 14px !important; border-radius: 999px !important; }
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-tab.is-active { background: var(--evl-lime) !important; color: #0B1408 !important; border-color: transparent !important; }
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-tab.is-active .g-live-dot { background: #0B1408; box-shadow: none; }
+
+/* ---- the panel: no box around the boxes ---- */
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-panel { margin-top: 14px; }
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-panel > section,
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-timeline {
+  background: none !important; border: 0 !important; box-shadow: none !important; padding-left: 0 !important; padding-right: 0 !important;
+}
+/* The tab already says Speakers / Exhibitors / Sponsors / Agenda. */
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-evpanel--speakers > section:first-child > .g-super-section-head,
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-evpanel--exhibitors > section:first-child > .g-super-section-head,
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-evpanel--sponsors > section:first-child > .g-super-section-head,
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-agenda-title { display: none !important; }
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-agenda-zone { font-size: 11px; letter-spacing: .12em; color: var(--evl-muted) !important; margin: 0 0 10px; }
+
+/* ---- one card language for rows on every tab ---- */
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-timeline__item,
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-dir-row,
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-super-list .g-speaker,
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-live-note {
+  background: var(--evl-card) !important; border: 1px solid var(--evl-line) !important; border-radius: 16px !important; box-shadow: none !important;
+}
+
+/* ---- agenda: day switch, now and past ---- */
+.g-agenda-days {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; margin: 4px 0 12px;
+  background: rgba(255, 255, 255, .05); border: 1px solid rgba(196, 242, 92, .16); border-radius: 14px;
+}
+.g-agenda-days button {
+  min-height: 38px; border: 0; border-radius: 10px; background: transparent; color: rgba(237, 247, 230, .7);
+  font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.g-agenda-days button[aria-selected="true"] { background: #C4F25C; color: #0B1408; }
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-day > h3 { display: none; }
+.g-event-timeline__item.is-past { opacity: .5; }
+.g-event-timeline__item.is-now { border-color: rgba(255, 107, 107, .6) !important; background: rgba(255, 107, 107, .08) !important; }
+.g-now-tag {
+  display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: #FF6B6B; color: #fff;
+  font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; vertical-align: middle;
+}
+
+/* ---- Live tab ---- */
+.evl { display: flex; flex-direction: column; gap: 16px; }
+.evl-banner { margin: 0; padding: 12px 14px; border-radius: 14px; background: #F0C674; color: #23200C; font-weight: 700; }
+.evl-now {
+  position: relative; overflow: hidden; padding: 18px 18px 16px; border-radius: 22px;
+  background: radial-gradient(120% 140% at 100% 0%, rgba(196, 242, 92, .16), transparent 55%), rgba(255, 255, 255, .045);
+  border: 1px solid rgba(196, 242, 92, .35); box-shadow: 0 18px 40px -24px rgba(0, 0, 0, .9);
+}
+.evl-now + .evl-now { margin-top: -6px; }
+.evl-now__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.evl-badge {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
+  color: #FF8A8A;
+}
+.evl-badge--soon { color: #C4F25C; }
+.evl-room { font-size: 12px; font-weight: 700; color: #0B1408; background: #8FE3A6; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.evl-now h3 { margin: 10px 0 0; font-size: 22px; line-height: 1.22; font-weight: 750; color: #fff; letter-spacing: -0.01em; }
+.evl-people { display: flex; align-items: center; margin-top: 12px; }
+.evl-people .evl-face + .evl-face { margin-left: -10px; }
+.evl-people span { margin-left: 10px; font-size: 14px; color: rgba(237, 247, 230, .85); }
+.evl-face {
+  width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid #0E1A12; background: #1B3324;
+}
+.evl-face--i { display: inline-grid; place-items: center; font-size: 14px; font-weight: 800; color: #C4F25C; }
+.evl-bar { height: 6px; border-radius: 6px; background: rgba(196, 242, 92, .14); margin-top: 14px; overflow: hidden; }
+.evl-bar i { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, #8FE3A6, #C4F25C); }
+.evl-when { margin: 8px 0 0; font-size: 13px; color: rgba(237, 247, 230, .65); }
+.evl-when b { color: #C4F25C; }
+.evl-now--soon h3 { font-size: 26px; }
+
+.evl-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.evl-action {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 72px; padding: 10px 6px;
+  border-radius: 16px; border: 1px solid rgba(196, 242, 92, .16); background: rgba(255, 255, 255, .035);
+  color: #EDF7E6; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.evl-action i, .evl-action svg { font-size: 22px; color: #C4F25C; }
+
+.evl-block { display: flex; flex-direction: column; gap: 8px; }
+.evl-h { margin: 0 0 2px; font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: rgba(237, 247, 230, .55); }
+.evl-next { display: flex; flex-direction: column; gap: 8px; }
+.evl-next__item {
+  display: grid; grid-template-columns: 74px 1fr auto; gap: 12px; align-items: center; padding: 12px 14px;
+  border-radius: 16px; background: rgba(255, 255, 255, .035); border: 1px solid rgba(196, 242, 92, .14);
+}
+.evl-next__time b { display: block; font-size: 14px; color: #C4F25C; font-variant-numeric: tabular-nums; }
+.evl-next__time span { display: inline-block; margin-top: 3px; font-size: 11px; font-weight: 700; color: #0B1408; background: #8FE3A6; border-radius: 999px; padding: 1px 7px; }
+.evl-next__body { min-width: 0; }
+.evl-next__body strong { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 15px; line-height: 1.3; color: #fff; }
+.evl-next__body em { display: block; margin-top: 3px; font-style: normal; font-size: 12.5px; color: rgba(237, 247, 230, .6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.evl-note {
+  display: flex; gap: 12px; padding: 12px 14px; border-radius: 16px;
+  background: rgba(240, 198, 116, .08); border: 1px solid rgba(240, 198, 116, .3);
+}
+.evl-note__icon { flex-shrink: 0; width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: rgba(240, 198, 116, .18); color: #F0C674; font-size: 17px; }
+.evl-note strong { display: block; font-size: 15px; color: #fff; }
+.evl-note span { display: block; margin-top: 3px; font-size: 13px; line-height: 1.45; color: rgba(237, 247, 230, .72); }
+
+.evl-stats { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
+.evl-stats div { text-align: center; padding: 12px 6px; border-radius: 16px; background: rgba(255, 255, 255, .035); border: 1px solid rgba(196, 242, 92, .14); }
+.evl-stats b { display: block; font-size: 22px; font-weight: 800; color: #C4F25C; }
+.evl-stats span { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: rgba(237, 247, 230, .55); }
+
+/* tighter head-to-tabs rhythm */
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-super-page-head { margin-bottom: 4px !important; }
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-headmeta { margin-top: 2px !important; }
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-panel { margin-top: 10px !important; }
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-panel > section,
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-panel > * > section:first-child { margin-top: 0 !important; padding-top: 0 !important; }
+html body.gaia-v2 [data-screen="events"] .g-evmode.g-evmode .g-event-panel .g-super-list:first-child { margin-top: 0 !important; }
+.evl-note__icon { color: #FFD98A; background: rgba(240, 198, 116, .28); }
+.evl-note__icon i { font-size: 18px; }

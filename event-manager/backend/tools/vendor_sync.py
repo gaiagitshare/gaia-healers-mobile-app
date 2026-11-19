@@ -229,6 +229,14 @@ def main():
         # worse than none.
         if want["booth_number"] == "" and (r["booth_number"] or "").strip():
             diff["booth_number"] = ""
+        # Only a confirmed stand holds a booth (Babak, 19 Nov 2026). A stand
+        # that moves out of the confirmed section gives its number up, so the
+        # Exhibitors screen never shows two stands on one table.
+        if diff.get("stage", r["stage"]) != "confirmed":
+            if (r["booth_number"] or "").strip():
+                diff["booth_number"] = ""
+            else:
+                diff.pop("booth_number", None)
         # A company that moved section carries its old status text with it
         # ("Not aligned with our event" on a row now confirmed) unless the
         # sheet gives a new one -- the one case a blank cell does clear a value.

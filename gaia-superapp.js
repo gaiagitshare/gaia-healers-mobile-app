@@ -1121,8 +1121,22 @@
       + '<p class="g-evstrip__name">' + esc(pick.name || 'Event') + '</p>'
       + (meta ? '<p class="g-evstrip__meta">' + esc(meta) + '</p>' : '') + '</a>'
       + '<div class="g-evstrip__actions">'
-      + '<a class="g-evstrip__btn g-evstrip__btn--primary" href="' + href + '">' + (running ? 'Open live event' : 'Programme') + '</a>'
+      + '<a class="g-evstrip__btn g-evstrip__btn--primary" href="' + href + (running ? '&tab=live' : '&tab=agenda') + '">' + (running ? 'Open live event' : 'Programme') + '</a>'
       + '<a class="g-evstrip__btn" href="' + href + '&tab=map">Hall map</a></div></section>';
+  }
+  function ensureEventPageCss() {
+    if (document.getElementById('g-evpage-css')) return;
+    const head = document.querySelector('.g-topbar');
+    const css = document.createElement('style');
+    css.id = 'g-evpage-css';
+    css.textContent = ''
+      + 'body [data-screen="events"] .g-event-tabs{position:sticky;top:' + ((head && head.offsetHeight) || 63) + 'px;z-index:30;'
+      + 'background:rgba(9,17,12,.94);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);padding-top:8px;padding-bottom:8px;'
+      + 'box-shadow:0 10px 18px -14px rgba(0,0,0,.8)}'
+      + 'body [data-screen="events"] .g-eventpage-hero.is-slim{margin-top:12px}'
+      + 'body [data-screen="events"] .g-eventpage-hero.is-slim img{aspect-ratio:auto!important;height:112px!important;max-height:112px!important;object-fit:cover;object-position:center 38%}'
+      + '.g-event-tab .g-tab-live{display:inline-block;width:7px;height:7px;margin-left:7px;vertical-align:middle}';
+    document.head.appendChild(css);
   }
   function ensureEventStripCss() {
     if (document.getElementById('g-evstrip-css')) return;
@@ -1573,10 +1587,14 @@
   // The hub lists whatever the Event Manager publishes; ?event=N opens one.
   // Nothing about any particular event is written here.
   const eventUI = { tab: 'overview', past: null, pastLoading: false, live: {} };
+  // 19 Nov 2026 (Babak): Community is not an event tab; organiser updates
+  // live inside Info (one place for "what do I need to know"); "Exhibit with
+  // us" is for next year, so it goes last. In event mode (see eventMode) the
+  // Live tab leads and Overview/Tickets step aside.
   const EVENT_TABS = [
-    ['overview', 'Overview'], ['tickets', 'Tickets'], ['agenda', 'Agenda'], ['speakers', 'Speakers'],
-    ['exhibitors', 'Exhibitors'], ['exhibit', 'Exhibit with us'], ['map', 'Map'], ['people', 'People'],
-    ['sponsors', 'Sponsors'], ['community', 'Community'], ['updates', 'Updates'], ['info', 'Info'],
+    ['live', 'Live'], ['overview', 'Overview'], ['tickets', 'Tickets'], ['agenda', 'Agenda'], ['map', 'Map'],
+    ['exhibitors', 'Exhibitors'], ['speakers', 'Speakers'], ['people', 'People'], ['sponsors', 'Sponsors'],
+    ['info', 'Info'], ['exhibit', 'Exhibit with us'],
   ];
 
   // The server states the time; the device only measures elapsed time since.
@@ -1608,6 +1626,12 @@
     return Boolean(dayStart) && now >= dayStart && (!end || now <= end);
   }
   const EVENT_DAY_HIDDEN = ['overview', 'tickets'];
+  // Event mode: from the first event day, or as soon as the organiser turns
+  // the event's Live switch on (19 Nov 2026 -- going live the day before
+  // must not leave ticket sales and the brochure layout in front of people).
+  function eventMode(item, live) {
+    return isEventDay(item) || Boolean(live && live.live_enabled);
+  }
   function nextEditionLabel(item) {
     const year = Number(String(item?.startAt || '').slice(0, 4));
     return year ? 'Exhibit with us ' + (year + 1) : 'Exhibit with us';
@@ -1902,9 +1926,8 @@
     if (tab === 'speakers') return speakersSection(detail);
     if (tab === 'exhibitors') return directorySection(detail);
     if (tab === 'sponsors') return sponsorsSection(detail);
-    if (tab === 'community') return communitySection();
-    if (tab === 'updates') return updatesSection(detail, live);
-    if (tab === 'info') return infoSection(detail);
+    if (tab === 'live') return liveSection(live) || '<section class="g-super-empty-panel"><h2>Nothing live right now</h2><p>The programme and map are in the tabs above.</p></section>';
+    if (tab === 'info') return updatesSection(detail, null) + infoSection(detail);
     return '';
   }
 
@@ -1918,9 +1941,9 @@
     if (tab === 'map') return Boolean(detail?.map);
     if (tab === 'people') return Boolean(window.GaiaPeople && window.GaiaPeople.available());
     if (tab === 'sponsors') return Boolean(detail?.sponsors?.length);
-    if (tab === 'community') return true;
-    if (tab === 'updates') return Boolean((detail?.announcements?.length) || (eventUpdates.data && eventUpdates.data.length));
-    if (tab === 'info') return Boolean((detail?.info?.length) || (detail?.resources?.length)
+    if (tab === 'live') return Boolean(eventLive.data && eventLive.data.live_enabled);
+    if (tab === 'info') return Boolean((detail?.announcements?.length) || (eventUpdates.data && eventUpdates.data.length)
+      || (detail?.info?.length) || (detail?.resources?.length)
       || siteOf(detail).faq?.length || siteOf(detail).hotel?.length);
     return false;
   }
@@ -2185,7 +2208,12 @@
     scheduleEventRefresh(root, eventId);
     if (eventUI._tabUrlFor !== eventId) {
       eventUI._tabUrlFor = eventId;
-      try { const _t = new URLSearchParams(window.location.search).get('tab'); if (_t) eventUI.tab = _t; } catch (e) {}
+      try {
+        let _t = new URLSearchParams(window.location.search).get('tab');
+        if (_t === 'updates') _t = 'info';
+        if (_t === 'programme' || _t === 'program' || _t === 'schedule') _t = 'agenda';
+        if (_t) { eventUI.tab = _t; eventUI._wantTab = _t; eventUI._scrollToTabs = true; }
+      } catch (e) {}
       // A shared exhibitor link (?stand=ID) opens the map on that stand.
       try {
         const _s = Number(new URLSearchParams(window.location.search).get('stand'));
@@ -2214,10 +2242,20 @@
     }
 
     // Sections with nothing in them are not offered as tabs at all.
-    const eventDay = isEventDay(item);
+    const eventDay = eventMode(item, live);
     const tabs = EVENT_TABS.filter(([key]) => tabHasContent(key, detail))
       .filter(([key]) => !(eventDay && EVENT_DAY_HIDDEN.includes(key)))
       .map(([key, label]) => (eventDay && key === 'exhibit' ? [key, nextEditionLabel(item)] : [key, label]));
+    // The live answer can arrive after the first draw and change which tabs
+    // exist, so a tab a link asked for is held until it can be honoured, and
+    // event mode lands on Live only when no link asked for anything.
+    const liveSettled = eventLive.id === eventId || !eventLive.loading;
+    if (eventUI._wantTab && tabs.some(([key]) => key === eventUI._wantTab)) eventUI.tab = eventUI._wantTab;
+    if (liveSettled && eventDay && !eventUI._modeLanded) {
+      eventUI._modeLanded = true;
+      if (!eventUI._wantTab && tabs.some(([key]) => key === 'live')) eventUI.tab = 'live';
+    }
+    if (liveSettled) eventUI._wantTab = null;
     if (!tabs.some(([key]) => key === eventUI.tab)) eventUI.tab = tabs.length ? tabs[0][0] : 'overview';
 
     const phase = eventPhase(item);
@@ -2243,15 +2281,16 @@
     // Marked seen BEFORE the tab bar is built: the dot is computed from the
     // same stored value, and marking afterwards leaves a stale dot standing
     // until some unrelated re-render.
-    if (eventUI.tab === 'updates') markUpdatesSeen(eventId, detail?.announcements);
+    if (eventUI.tab === 'info') markUpdatesSeen(eventId, detail?.announcements);
     const tabBar = tabs.length > 1
       ? '<nav class="g-event-tabs" role="tablist">' + tabs.map(([key, label]) =>
         '<button type="button" role="tab" class="g-event-tab' + (eventUI.tab === key ? ' is-active' : '')
         + '" data-event-tab="' + key + '" aria-selected="' + (eventUI.tab === key) + '">' + esc(label)
         // The dot says "something you have not read", quietly. Opening the tab
         // clears it; nothing nags.
-        + (key === 'updates' && unseenCount(eventId, detail?.announcements)
+        + (key === 'info' && unseenCount(eventId, detail?.announcements)
           ? '<span class="g-tab-dot" aria-label="new updates"></span>' : '')
+        + (key === 'live' ? '<span class="g-live-dot g-tab-live" aria-hidden="true"></span>' : '')
         + '</button>').join('') + '</nav>'
       : '';
 
@@ -2260,10 +2299,10 @@
     root.innerHTML = '<div class="g-super-page-head"><a class="g-event-back" href="home.html?view=events">' + icon('arrow-left') + ' All events</a>'
       + '<h1>' + esc(item.name) + '</h1>'
       + '<p class="g-event-headmeta">' + esc([humanDates(item), item.venue].filter(Boolean).join(' · ')) + ' ' + statusChip + '</p></div>'
-      + '<div class="g-eventpage-hero">' + eventHero(item) + '</div>'
-      + eventStats(item, detail)
+      + '<div class="g-eventpage-hero' + (eventDay ? ' is-slim' : '') + '">' + eventHero(item) + '</div>'
+      + (eventDay ? '' : eventStats(item, detail))
       + offlineLine
-      + liveSection(live)
+      + (eventDay ? '' : liveSection(live))
       + tabBar
       + '<div class="g-event-panel">' + (eventUI.tab === 'overview' ? overview : eventTabPanel(eventUI.tab, detail, live)) + '</div>';
 
@@ -2277,6 +2316,20 @@
       tabStrip.scrollLeft = Math.max(0, selectedTab.offsetLeft - (tabStrip.clientWidth - selectedTab.offsetWidth) / 2);
     }
 
+    // Event mode styling, and a link that named a tab (?tab=agenda, the Home
+    // banner's Programme / Hall map) scrolls to it -- the tabs sit below the
+    // banner, so without this every such link looked like the same page.
+    root.classList.toggle('g-evmode', eventDay);
+    ensureEventPageCss();
+    const scrollToTabs = () => {
+      const strip = root.querySelector('.g-event-tabs');
+      if (!strip) return;
+      const head = document.querySelector('.g-topbar');
+      const hh = head ? head.offsetHeight : 0;
+      window.scrollTo({ top: Math.max(0, strip.getBoundingClientRect().top + window.scrollY - hh - 6), behavior: 'smooth' });
+    };
+    if (eventUI._scrollToTabs && tabStrip && liveSettled) { eventUI._scrollToTabs = false; setTimeout(scrollToTabs, 60); }
+
     root.querySelectorAll('[data-dir-stand]').forEach((button) => {
       button.addEventListener('click', () => {
         eventUI.tab = 'map';
@@ -2286,8 +2339,12 @@
     });
     root.querySelectorAll('[data-event-tab]').forEach((button) => {
       button.addEventListener('click', () => {
+        const wasStuck = (() => { const st = root.querySelector('.g-event-tabs'); return st && st.getBoundingClientRect().top < 120; })();
         eventUI.tab = button.getAttribute('data-event-tab');
         render();
+        // With the bar pinned, a new tab's panel starts at the bar, not
+        // wherever the old panel happened to be scrolled to.
+        if (wasStuck) requestAnimationFrame(scrollToTabs);
         // A tile sits above the tab strip, so switching from one has to bring
         // the strip into view or the panel changes somewhere off-screen.
         if (!button.classList.contains('g-event-tab')) {

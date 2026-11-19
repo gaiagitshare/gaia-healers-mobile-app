@@ -976,7 +976,14 @@
     const now = Date.now();
     if (Number.isFinite(endMs) && now >= startMs && now <= endMs) return 'Happening now';
     if (now > startMs) return '';
-    const days = Math.ceil((startMs - now) / 86400000);
+    // Calendar days in the event's own zone, not rounded-up 24-hour blocks:
+    // 29 hours before a 9 AM start on Friday is "Tomorrow" on Thursday, not
+    // "In 2 days" (19 Nov 2026).
+    const dayKey = (ms) => {
+      try { return new Intl.DateTimeFormat('en-CA', { timeZone: event.timezone || undefined, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms)); }
+      catch (e) { return new Date(ms).toISOString().slice(0, 10); }
+    };
+    const days = Math.round((Date.parse(dayKey(startMs)) - Date.parse(dayKey(now))) / 86400000);
     if (days <= 0) return 'Today';
     if (days === 1) return 'Tomorrow';
     if (days < 31) return 'In ' + days + ' days';
@@ -1075,6 +1082,69 @@
       + '</section>';
   }
 
+  /*
+   * The event of the moment, pinned to the top of Home for everyone (19 Nov
+   * 2026): from three days before a gathering until it ends, a slim strip says
+   * so -- "Live now" with the session on, or the countdown before doors -- with
+   * one tap to the programme and one to the hall map. Nothing shows otherwise.
+   */
+  function eventNowStrip() {
+    loadEventsList();
+    const now = Date.now();
+    const DAY = 86400000;
+    const pick = upcomingFeatureEvents().find((e) => {
+      const st = Date.parse(e.startAt || e.startDate || '');
+      const en = Date.parse(e.endAt || e.endDate || '');
+      return e.id != null && Number.isFinite(st) && now >= st - 3 * DAY && (!Number.isFinite(en) || now <= en);
+    });
+    if (!pick) return '';
+    ensureEventStripCss();
+    const st = Date.parse(pick.startAt || pick.startDate || '');
+    const running = now >= st;
+    let line = '';
+    let live = null;
+    if (running) {
+      loadLiveFor(pick.id);
+      live = eventUI.live[pick.id];
+      const cur = live && live.live_enabled ? (live.now || [])[0] : null;
+      if (cur) line = 'Now: ' + cur.title + (cur.room ? ' · ' + cur.room : '');
+      else if (live && live.live_enabled && (live.next || [])[0]) line = 'Next: ' + live.next[0].title;
+    }
+    const city = (String(pick.location || pick.venue || '').split(',').map((x) => x.trim()).filter(Boolean).slice(-2, -1)[0]) || '';
+    const kicker = running
+      ? '<span class="g-live-dot" aria-hidden="true"></span> Live now'
+      : esc(eventCountdown(pick) || 'Coming up');
+    const meta = running ? line : [eventDate(pick), city].filter(Boolean).join(' · ');
+    const href = 'home.html?view=events&event=' + encodeURIComponent(pick.id);
+    return '<section class="g-evstrip' + (running ? ' is-live' : '') + '" aria-label="' + esc(pick.name || 'Event') + '">'
+      + '<a class="g-evstrip__main" href="' + href + '"><p class="g-evstrip__k">' + kicker + '</p>'
+      + '<p class="g-evstrip__name">' + esc(pick.name || 'Event') + '</p>'
+      + (meta ? '<p class="g-evstrip__meta">' + esc(meta) + '</p>' : '') + '</a>'
+      + '<div class="g-evstrip__actions">'
+      + '<a class="g-evstrip__btn g-evstrip__btn--primary" href="' + href + '">' + (running ? 'Open live event' : 'Programme') + '</a>'
+      + '<a class="g-evstrip__btn" href="' + href + '&tab=map">Hall map</a></div></section>';
+  }
+  function ensureEventStripCss() {
+    if (document.getElementById('g-evstrip-css')) return;
+    const css = document.createElement('style');
+    css.id = 'g-evstrip-css';
+    css.textContent = ''
+      + '.g-evstrip{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 16px;padding:14px 16px;border-radius:18px;'
+      + 'background:linear-gradient(120deg,rgba(196,242,92,.16),rgba(123,216,143,.08));border:1px solid rgba(196,242,92,.45);box-shadow:0 8px 28px rgba(0,0,0,.25)}'
+      + '.g-evstrip.is-live{background:linear-gradient(120deg,rgba(255,107,107,.18),rgba(196,242,92,.10));border-color:rgba(255,107,107,.55)}'
+      + '.g-evstrip__main{flex:1 1 220px;min-width:0;text-decoration:none;color:inherit}'
+      + '.g-evstrip__k{margin:0;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#C4F25C;display:flex;align-items:center;gap:8px}'
+      + '.g-evstrip.is-live .g-evstrip__k{color:#FF8A8A}'
+      + '.g-evstrip__name{margin:4px 0 0;font-size:18px;font-weight:700;line-height:1.25;color:#fff}'
+      + '.g-evstrip__meta{margin:3px 0 0;font-size:14px;color:rgba(255,255,255,.72);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+      + '.g-evstrip__actions{display:flex;gap:8px;flex:0 0 auto}'
+      + '.g-evstrip__btn{display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:12px;font-size:14px;font-weight:700;text-decoration:none;'
+      + 'color:#EDF7E6;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.06)}'
+      + '.g-evstrip__btn--primary{background:#C4F25C;color:#0B1408;border-color:transparent}'
+      + '@media (max-width:520px){.g-evstrip__actions{width:100%}.g-evstrip__btn{flex:1;justify-content:center}}';
+    document.head.appendChild(css);
+  }
+
   function renderHome() {
     const root = $('home-superapp');
     if (!root) return;
@@ -1094,6 +1164,7 @@
       // Admin-published announcements (rendered by gaia-member.js from
       // /api/app/bootstrap) sit above everything, for members and guests alike.
       + '<div id="home-announcements"></div>'
+      + eventNowStrip()
       // A member never reaches this point (renderHomeMember above); this is the
       // guest on-ramp: what Gaia is, the tools a stranger can use now, one way
       // in, and the next gathering. The booking card host stays for Today.
@@ -1218,6 +1289,7 @@
     // (state, path row, Your Gaia, Book a session) -- re-ordered, not removed.
     root.innerHTML = '<div class="g-super-home g-super-home--v2 g-home2 g-home3">'
       + '<div id="home-announcements"></div>'
+      + eventNowStrip()
       + '<header class="g-home2__greet g-home3__greet"><h1>' + greeting + '</h1><p>Your space to learn, connect and feel better.</p></header>'
       + home3Hero()
       + home3Actions()

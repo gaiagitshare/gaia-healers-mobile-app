@@ -488,7 +488,7 @@
       : '';
 
     return '<section class="g-live-panel"><div class="g-live-head"><span class="g-live-dot" aria-hidden="true"></span>'
-      + '<p class="g-super-kicker">Live now · ' + esc((live.timezone || '').replace(/_/g, ' ')) + '</p></div>'
+      + '<p class="g-super-kicker">Live now' + (live.timezone ? ' · ' + esc(zoneLabel(live.timezone, live.venue)) : '') + '</p></div>'
       + banner + nowBlock + nextBlock + '<div class="g-live-stats">' + tiles + '</div>' + announcements + sponsors
       + '</section>';
   }
@@ -520,10 +520,28 @@
     loadEventLive(activeEventId());
   });
 
+  // "Orlando time (EST)" rather than "America/New York": name the clock after
+  // the venue's own city (the part before the state in "Venue, City, ST"),
+  // falling back to the zone's city, with the short zone name when known.
+  function zoneLabel(tz, venue) {
+    if (!tz) return '';
+    const parts = String(venue || '').split(',').map((x) => x.trim()).filter(Boolean);
+    let city = '';
+    if (parts.length >= 2 && /^[A-Z]{2}$/.test(parts[parts.length - 1])) city = parts[parts.length - 2];
+    else if (parts.length >= 3) city = parts[parts.length - 2];
+    if (!city) city = String(tz).split('/').pop().replace(/_/g, ' ');
+    let abbr = '';
+    try {
+      abbr = (new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' }).formatToParts(new Date())
+        .find((x) => x.type === 'timeZoneName') || {}).value || '';
+    } catch (e) { abbr = ''; }
+    return city + ' time' + (abbr && !/^GMT/.test(abbr) ? ' (' + abbr + ')' : '');
+  }
+
   function agendaSection(detail) {
     const days = Array.isArray(detail?.agenda?.days) ? detail.agenda.days : [];
     if (!days.length) return '';
-    const zone = detail?.event?.timezone ? ' · times shown in ' + esc(detail.event.timezone.replace(/_/g, ' ')) : '';
+    const zone = detail?.event?.timezone ? ' · times shown in ' + esc(zoneLabel(detail.event.timezone, detail.event.location || detail.event.venue)) : '';
     // A ticket holder's own picks come before the full programme: by the second
     // morning that shorter list is the only one anybody opens.
     const mine = window.GaiaMySchedule ? window.GaiaMySchedule.panelHtml(detail?.event?.timezone) : '';
@@ -2144,7 +2162,7 @@
           + '<button type="button" class="g-ev-about__more" data-ev-more hidden>Read more</button></div>' : '')
       + '<dl><div><dt>Dates</dt><dd>' + esc(humanDates(item) || 'To be announced') + '</dd></div>'
       + '<div><dt>Venue</dt><dd>' + esc(item.venue || 'To be announced') + '</dd></div>'
-      + (item.timezone ? '<div><dt>Local time</dt><dd>' + esc(String(item.timezone).replace(/_/g, ' ')) + '</dd></div>' : '')
+      + (item.timezone ? '<div><dt>Local time</dt><dd>' + esc(zoneLabel(item.timezone, item.venue || item.location)) + '</dd></div>' : '')
       + '</dl>' + eventShortcuts(detail, phase) + eventQuickLinks(item, detail)
       // The website's own ticket options, when the Tickets tab has them, are
       // the way to buy; the single registration link stays for events without.

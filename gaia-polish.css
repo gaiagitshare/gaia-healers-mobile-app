@@ -15,3 +15,11 @@
 .g-dir__fchips::-webkit-scrollbar,
 .g-store-jump::-webkit-scrollbar,
 .g-event-tabs::-webkit-scrollbar { display: none; }
+
+/* Bookings: the intro and "Book a session" were ~60px apart -- the page
+   head's margin, the section's top spacing and the section head's 24px all
+   stacked. One modest gap is enough. */
+[data-screen="bookings"] .g-super-page-head { margin-bottom: 0 !important; }
+[data-screen="bookings"] .g-super-page-head + .g-super-list { margin-top: 0 !important; padding-top: 0 !important; }
+[data-screen="bookings"] .g-super-page-head + .g-super-list > .g-super-section-head:first-child { margin-top: 2px !important; }
+[data-screen="bookings"] .g-super-list + .g-guest-inline { margin-top: 16px !important; }

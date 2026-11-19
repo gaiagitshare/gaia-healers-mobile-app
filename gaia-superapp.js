@@ -1948,9 +1948,16 @@
     const all = Array.isArray(eventsList.data) ? eventsList.data : [];
     all.forEach((item) => noteServerTime(item.serverTime));
 
-    const running = all.filter((item) => eventPhase(item) === 'running');
+    // An event whose organiser has switched Live on counts as live here too
+    // (19 Nov 2026): the day before doors it showed "Buy ticket" and a
+    // countdown on the list while its own page was already live.
+    const soon = all.filter((item) => eventPhase(item) === 'upcoming'
+      && (instant(item.startAt) || 0) - serverNow() < 3 * 86400000);
+    soon.forEach((item) => loadLiveFor(item.id));
+    const switchedOn = (item) => Boolean(eventUI.live[item.id] && eventUI.live[item.id].live_enabled);
+    const running = all.filter((item) => eventPhase(item) === 'running' || (eventPhase(item) === 'upcoming' && switchedOn(item)));
     running.forEach((item) => loadLiveFor(item.id));
-    const upcoming = all.filter((item) => eventPhase(item) === 'upcoming');
+    const upcoming = all.filter((item) => eventPhase(item) === 'upcoming' && !switchedOn(item));
     const knownIds = new Set(all.map((item) => String(item.id)));
     const past = (eventUI.past || []).filter((item) => !knownIds.has(String(item.id)) || eventPhase(item) === 'past');
 
@@ -1965,7 +1972,8 @@
         + (nowTitles.length ? '<p class="g-event-card__meta">' + esc(nowTitles.join(' · ')) + '</p>'
           : '<p class="g-event-card__meta">' + esc(item.venue || '') + '</p>')
         + '<div class="g-event-card__actions">'
-        + '<a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=events&event=' + esc(item.id) + '">Open live ' + icon('arrow-right') + '</a>'
+        + '<a class="g-btn g-btn--primary g-btn--sm" href="home.html?view=events&event=' + esc(item.id) + '&tab=live">Open live ' + icon('arrow-right') + '</a>'
+        + '<a class="g-btn g-btn--secondary g-btn--sm" href="home.html?view=events&event=' + esc(item.id) + '&tab=map">Hall map</a>'
         + '</div></div></article>';
     }).join('');
 
@@ -1982,8 +1990,10 @@
       + '<p>Every Gaia Healers gathering, its programme and who you will meet there.</p></div>'
       // Your own tickets first. Someone opening this screen at a venue is
       // looking for their QR code, not for the programme they already read.
-      + '<div data-myevents-host></div>'
       + (liveCards ? '<section class="g-super-list g-super-list--live"><div class="g-super-section-head"><div><p class="g-super-kicker">On now</p><h2>Live</h2></div></div><div class="g-event-grid">' + liveCards + '</div></section>' : '')
+      // Your own tickets next: the live gathering is what most people opening
+      // this screen during an event came for.
+      + '<div data-myevents-host></div>'
       + section('Coming up', 'Upcoming events', upcoming.map((item) => eventCard(item)).join(''))
       + section('Archive', 'Past events', past.map((item) => eventCard(item, { countdown: false })).join(''))
       + empty;

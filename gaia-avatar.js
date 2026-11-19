@@ -680,6 +680,9 @@
   /** Once per device: how she works, in one bubble. */
   function meet() {
     try { if (localStorage.getItem('gaia-avatar-met')) return; } catch (_) { return; }
+    // Not on an event page (19 Nov 2026): people arriving from the venue QR
+    // code came for the programme and the map; she introduces herself later.
+    try { if (new URLSearchParams(window.location.search).get('view') === 'events') return; } catch (_) { /* fall through */ }
     setTimeout(() => {
       if (!idleEligibleSoft()) return;
       showBubble({ text: 'Hi, I\'m Gaia. Tap me for ideas or to type, hold me to talk, drag me anywhere.', chips: [] });

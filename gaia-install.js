@@ -34,6 +34,20 @@
 
   let deferredPrompt = null;
 
+  // 19 Nov 2026: the guide covered ~40% of the screen on every page load from
+  // the second one on (each view is a page load, and each load counted as a
+  // "visit"). A visit is now a browser session, the card shows at most once a
+  // session, and never on an event page -- at the door, the Live tab and the
+  // map are what people opened the app for.
+  const SESSION_SEEN = 'gaia:install-session';
+  const SESSION_SHOWN = 'gaia:install-shown';
+  function sessionGet(key) { try { return sessionStorage.getItem(key); } catch (_) { return null; } }
+  function sessionSet(key) { try { sessionStorage.setItem(key, '1'); } catch (_) { /* private mode */ } }
+  function quietHere() {
+    try { return new URLSearchParams(window.location.search).get('view') === 'events'; } catch (_) { return false; }
+  }
+  function mayShow() { return !sessionGet(SESSION_SHOWN) && !quietHere(); }
+
   function dismissed() {
     try { return localStorage.getItem(DISMISSED) === '1'; } catch (_) { return false; }
   }
@@ -42,6 +56,7 @@
   }
 
   function card(inner) {
+    sessionSet(SESSION_SHOWN);
     const el = document.createElement('div');
     el.className = 'g-install';
     el.setAttribute('role', 'dialog');
@@ -99,7 +114,7 @@
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault();
     deferredPrompt = event;
-    if (!isStandalone() && !dismissed()) setTimeout(showPrompt, 2500);
+    if (!isStandalone() && !dismissed() && mayShow()) setTimeout(showPrompt, 2500);
   });
 
   window.addEventListener('appinstalled', () => {
@@ -115,8 +130,8 @@
     if (isIOS && isSafari) {
       let seen = 0;
       try { seen = Number(localStorage.getItem(SEEN_AT) || 0); } catch (_) { /* ignore */ }
-      remember(SEEN_AT, String(seen + 1));
-      if (seen >= 1) setTimeout(showIosGuide, 3000);
+      if (!sessionGet(SESSION_SEEN)) { sessionSet(SESSION_SEEN); seen += 1; remember(SEEN_AT, String(seen)); }
+      if (seen >= 2 && mayShow()) setTimeout(() => { if (mayShow()) showIosGuide(); }, 3000);
     }
   });
 

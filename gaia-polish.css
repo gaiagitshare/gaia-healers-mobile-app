@@ -1,0 +1,17 @@
+/*
+ * App-wide mobile polish (19 Nov 2026).
+ * Rows that scroll sideways fade at the right edge, so a half-visible chip
+ * reads as "more this way" rather than a layout bug; the extra end padding
+ * lets the last item clear the fade once the row is scrolled to the end.
+ */
+.g-dir__fchips,
+.g-store-jump,
+.g-event-tabs {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+  padding-right: 32px !important;
+  scrollbar-width: none;
+}
+.g-dir__fchips::-webkit-scrollbar,
+.g-store-jump::-webkit-scrollbar,
+.g-event-tabs::-webkit-scrollbar { display: none; }

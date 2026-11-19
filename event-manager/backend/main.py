@@ -12494,7 +12494,12 @@ def _serve_card(token: str, request: FastAPIRequest, db, fmt: str):
             card.card_views = (card.card_views or 0) + 1
             card.card_last_viewed_at = datetime.utcnow()
             db.commit()
-    return HTMLResponse(badge_card.render_card_html(view, tok),
+    # Nima, 19 Nov 2026: a signed-out visitor who saves a contact from a badge
+    # is offered Lead Scan, which collects every badge scanned at a stand.
+    leads = None
+    if event is not None and getattr(event, "scanned_leads_checkout_url", None):
+        leads = {"url": event.scanned_leads_checkout_url, "price": getattr(event, "scanned_leads_price", None)}
+    return HTMLResponse(badge_card.render_card_html(view, tok, leads=leads),
                         headers={"Cache-Control": "private, no-store", "X-Robots-Tag": "noindex"})
 
 

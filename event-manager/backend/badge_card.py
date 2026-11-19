@@ -503,7 +503,7 @@ def _initials(view):
     return "".join(p[0] for p in parts[:2]).upper() or "G"
 
 
-def render_card_html(view: dict, token: str, app_base: str = None) -> str:
+def render_card_html(view: dict, token: str, app_base: str = None, leads: dict = None) -> str:
     app_base = (app_base or APP_BASE).rstrip("/")
     claim_url = "%s/home.html?view=events&card=%s&claim=1" % (app_base, quote(token))
     # Badge -> 6-digit code -> password -> profile (9 Nov 2026). The page it
@@ -634,7 +634,7 @@ def render_card_html(view: dict, token: str, app_base: str = None) -> str:
                                      for e in view["events"]))
         body = ("<div class=\"card\"><span class=\"event\">%s</span>"
                 "<div class=\"avatar\">%s</div><h1>%s</h1>%s%s%s%s%s%s%s"
-                "<div class=\"actions\">%s<a class=\"btn %s\" href=\"%s.vcf\" download>%s Save contact</a>"
+                "<div class=\"actions\">%s<a class=\"btn %s\" href=\"%s.vcf\" download data-save>%s Save contact</a>"
                 "<a class=\"btn btn--secondary\" href=\"%s\">Connect in the Gaia Healers app</a>"
                 "<a class=\"btn btn--ghost\" href=\"%s\" data-owner-edit hidden>Edit my card</a></div>%s%s%s"
                 "<div class=\"claim\" data-claim>Is this your badge? <a href=\"%s\" data-claim-link>Sign in to your Gaia Healers profile</a></div></div>"
@@ -657,7 +657,42 @@ def render_card_html(view: dict, token: str, app_base: str = None) -> str:
                 "if(d.owner){if(box&&link){box.firstChild.textContent='This is your badge. ';link.textContent='Open my Gaia Healers profile';box.lastChild&&box.lastChild!==link&&box.lastChild.nodeType===3&&(box.lastChild.textContent='');}if(edit){edit.hidden=false;}}"
                 "else if(d.authenticated&&box){box.remove();}}).catch(function(){});}catch(e){}})();</script>"
                 % (json.dumps(API_BASE), json.dumps(token)))
-    return head + body + foot + owner_js + "</body></html>"
+    return head + body + foot + owner_js + _leads_prompt(leads, token) + "</body></html>"
+
+
+def _leads_prompt(leads, token):
+    """A pop-up on Save contact for signed-out visitors: Lead Scan collects
+    every badge scanned at a stand, with the purchase link. Shown once per
+    visit; "Save contact anyway" still downloads the card. Signed-in visitors
+    (the owner check says authenticated) never see it."""
+    if not leads or not leads.get("url"):
+        return ""
+    price = leads.get("price")
+    cta = "Get Lead Scan access" + (" \u2014 $%s" % (int(price) if float(price).is_integer() else price) if price else "")
+    css = ("<style>.lp{position:fixed;inset:0;z-index:50;display:none;align-items:flex-end;justify-content:center;padding:16px;background:rgba(5,8,20,.72);backdrop-filter:blur(6px)}"
+           ".lp.is-open{display:flex}.lp__card{width:min(420px,100%);background:#141A33;border:1px solid rgba(167,139,250,.35);border-radius:22px;padding:22px 20px 18px;box-shadow:0 20px 60px rgba(0,0,0,.5);text-align:center}"
+           ".lp__k{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#C4F25C;margin:0 0 8px}"
+           ".lp__card h2{font-size:21px;line-height:1.25;margin:0 0 8px;color:#fff}.lp__card p{color:#B9BFD9;font-size:14.5px;line-height:1.45;margin:0 0 16px}"
+           ".lp__card .btn{width:100%;margin-top:10px}.lp__x{background:none;border:0;color:#8C93B3;font:inherit;font-size:14px;margin-top:12px;cursor:pointer}"
+           "@media(min-width:600px){.lp{align-items:center}}</style>")
+    html = ("<div class=\"lp\" id=\"lp\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"lp-t\"><div class=\"lp__card\">"
+            "<p class=\"lp__k\">For exhibitors</p>"
+            "<h2 id=\"lp-t\">Join Lead Scan to collect unlimited contacts</h2>"
+            "<p>Scan every badge at your stand and get each visitor\u2019s name, email and phone in one list.</p>"
+            "<a class=\"btn btn--primary\" href=\"%s\" target=\"_blank\" rel=\"noopener\">%s</a>"
+            "<a class=\"btn btn--ghost\" href=\"%s.vcf\" download data-lp-save>Save this contact only</a>"
+            "<button class=\"lp__x\" type=\"button\" data-lp-close>Not now</button>"
+            "</div></div>") % (_h(leads["url"]), _h(cta), _h(token))
+    js = ("<script>(function(){var lp=document.getElementById('lp'),b=document.querySelector('[data-save]');if(!lp||!b)return;"
+          "var signedIn=false,shown=false;"
+          "try{fetch(%s+'/api/card/owner?token='+encodeURIComponent(%s),{credentials:'include',headers:{Accept:'application/json'}})"
+          ".then(function(r){return r.json()}).then(function(d){if(d&&d.authenticated)signedIn=true;}).catch(function(){});}catch(e){}"
+          "function close(){lp.classList.remove('is-open');}"
+          "b.addEventListener('click',function(e){if(signedIn||shown)return;e.preventDefault();shown=true;lp.classList.add('is-open');});"
+          "lp.querySelector('[data-lp-close]').onclick=close;lp.querySelector('[data-lp-save]').addEventListener('click',function(){setTimeout(close,300);});"
+          "lp.addEventListener('click',function(e){if(e.target===lp)close();});"
+          "document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});})();</script>") % (json.dumps(API_BASE), json.dumps(token))
+    return css + html + js
 
 
 def render_not_found_html(app_base: str = None) -> str:

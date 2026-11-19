@@ -6120,6 +6120,9 @@ def get_public_exhibitors(
             # event website shows.
             "id": r.id, "company_name": getattr(r, "site_name", None) or r.company_name,
             "booth_number": r.booth_number,
+            # The stand set up its own business profile through its setup link
+            # (19 Nov 2026): the app lists those stands first.
+            "profile_ready": bool(getattr(r, "activated_at", None)),
             "description": r.description, "logo_url": r.logo_url, "website": r.website,
             "category": r.category, "tagline": getattr(r, "tagline", None),
             "address": getattr(r, "address", None),

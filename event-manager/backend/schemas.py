@@ -486,6 +486,7 @@ class ExhibitorPublic(BaseModel):
     products: List[ExhibitorProduct] = []
     social_links: List[str] = []
     is_featured: bool = False
+    profile_ready: bool = False
 
     class Config:
         from_attributes = True

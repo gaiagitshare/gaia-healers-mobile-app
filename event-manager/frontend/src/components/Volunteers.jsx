@@ -11,6 +11,7 @@ import {
 } from '../utils/api';
 import { byDay, dayLabel, shiftTime } from '../utils/volunteerTime';
 import VolunteerBoard from './VolunteerBoard';
+import VolunteerToday from './VolunteerToday';
 
 /**
  * Volunteers — the event's volunteer team and schedule, for the people who run
@@ -37,7 +38,7 @@ export default function Volunteers() {
     const { id } = useParams();
     const narrow = useMediaQuery('(max-width:700px)');
     const [data, setData] = useState(null);
-    const [tab, setTab] = useState('overview');
+    const [tab, setTab] = useState('today');
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
     const [warn, setWarn] = useState('');
@@ -171,12 +172,15 @@ export default function Volunteers() {
             </Paper>
 
             <Tabs value={tab} onChange={(e, v) => setTab(v)} variant="scrollable" sx={{ mb: 2 }} className="no-print">
+                <Tab value="today" label="Today" />
                 <Tab value="overview" label={`To approve (${st.pending_volunteers + data.requests.length})`} />
                 <Tab value="schedule" label="Schedule" />
                 <Tab value="volunteers" label={`Volunteers (${vols.length})`} />
                 <Tab value="news" label={`Announcements (${(data.announcements || []).filter((a) => a.active).length})`} />
                 <Tab value="settings" label="Team & registration links" />
             </Tabs>
+
+            {tab === 'today' && <VolunteerToday shifts={data.shifts} volunteers={vols} />}
 
             {tab === 'overview' && (
                 <Box>

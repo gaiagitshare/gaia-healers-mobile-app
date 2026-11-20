@@ -60,6 +60,9 @@ STATUS_PER_RUN = 200      # 10 Nov 2026: a 341-email run is re-checked within a 
 # reach a customer from this job: not a GREEN order, not a resend -- whatever the
 # mode in the database says. Only the internal alert contact can be emailed.
 HARD_SHADOW = os.environ.get('TICKET_AUTODELIVER_SHADOW_ONLY') == '1'
+# Babak 20 Nov 2026: too many alert emails. 'off' stops the [Gaia Tickets]
+# alert email; the same items still show in Email Center -> Ticket Emails.
+ALERT_EMAILS_OFF = os.environ.get('TICKET_ALERT_EMAILS', '').strip().lower() == 'off'
 PUBLIC = "https://api.gaiahealers.app"
 EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 BLOCKED = {"revoked", "cancelled", "canceled", "refunded"}
@@ -496,7 +499,7 @@ def run_cycle(world, state, em, clock=None, log=print):
     # 5. One alert email for everything new this cycle. Internal only.
     if alerts:
         summary['alerts'] = len(alerts)
-        cid = world.alert_contact()
+        cid = '' if ALERT_EMAILS_OFF else world.alert_contact()
         if cid:
             body = ''.join('<p>%s</p>' % html.escape(a) for a in alerts) + \
                    '<p>Mode: <b>%s</b>. Dashboard: Event Manager &rarr; ELEVATE 2026 &rarr; Ticket Emails.</p>' % mode

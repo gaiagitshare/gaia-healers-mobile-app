@@ -704,6 +704,12 @@ function CheckIn({ timezone: timezoneProp }) {
         setPassAmount(''); setPassMethod('cash');
     };
     const closeDoorAction = () => { setDoorAction(null); setDoorError(''); };
+    // Straight from a search result (20 Nov 2026): the booking paid for more
+    // seats than it has badges, so name the next one here, without scanning.
+    const nameSeatFromSearch = (booking) => openDoorAction('addseat', {
+        attendee_id: booking.buyer_attendee_id,
+        door: { party: { paid_for: booking.bought, size: booking.issued } },
+    });
 
     // After any correction the screen must agree with the database again, so
     // every action ends by re-asking the backend for the decision rather than
@@ -892,7 +898,7 @@ function CheckIn({ timezone: timezoneProp }) {
                         )}
                         {/* READY / VERIFY / MULTIPLE / BLOCKED, the desk notes and every
                             ticket that belongs with this one (18 Nov 2026). */}
-                        <DeskSummary desk={attendee.desk} compact />
+                        <DeskSummary desk={attendee.desk} compact onNameSeat={nameSeatFromSearch} />
                         {attendee.paid_by && (
                             // The name on the card is not always the name they
                             // say. Couples buy two tickets on one card, and the
@@ -1133,7 +1139,7 @@ function CheckIn({ timezone: timezoneProp }) {
                                     ))}
                                 </Box>
                             )}
-                            {card.party.unnamed > 0 ? (
+                            {card.party.unnamed > 0 && !card.desk?.booking?.double_charge ? (
                                 <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
                                     <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 700 }}>
                                         {card.party.unnamed} of the {card.party.paid_for} seats they paid for has no badge yet.

@@ -101,11 +101,23 @@ def index(db, event_id):
     paid_ids = {r[0] for r in db.query(models.PaymentEvent.attendee_id).filter(
         models.PaymentEvent.event_id == event_id, models.PaymentEvent.status == "paid",
         models.PaymentEvent.attendee_id.isnot(None)).all()}
+    # Bookings whose extra payments an organiser decided were a double charge
+    # (refund due in GHL), not extra seats: the desk must not name seats for them.
+    double_charge = set()
+    try:
+        for (bid,) in db.query(models.ReconIssue.buyer_attendee_id).filter(
+                models.ReconIssue.event_id == event_id,
+                models.ReconIssue.kind == "possible_duplicate_payment",
+                models.ReconIssue.resolution.like("%Double charge, not a seat%")).all():
+            if bid:
+                double_charge.add(int(bid))
+    except Exception:
+        pass
     types = {t.id: t for t in db.query(models.TicketType).filter(models.TicketType.event_id == event_id).all()}
     event = db.query(models.Event).filter(models.Event.id == event_id).first()
     return {"by_id": by_id, "by_email": by_email, "by_name": by_name, "seats_of": seats_of,
             "delivered": delivered, "failed": failed, "held_keys": held_keys, "holds": holds,
-            "paid_ids": paid_ids, "types": types, "event": event}
+            "paid_ids": paid_ids, "types": types, "event": event, "double_charge": double_charge}
 
 
 def _days(ix, a):
@@ -173,6 +185,25 @@ def entitlement(a, ix):
     return "Valid paid ticket" if paid else "Requires administrator review"
 
 
+_EMAIL_KINDS = ("paid", "guest", "transferred", "complimentary")
+
+
+def email_state(a, ix):
+    """Where this ticket's email stands, for the desk: sent / failed / held
+    (asked not to be emailed) / not_sent / None (crew badges are not emailed)."""
+    if _kind(a, ix) not in _EMAIL_KINDS:
+        return None
+    if a.id in ix["delivered"]:
+        return "sent"
+    if a.id in ix["failed"]:
+        return "failed"
+    cd = a.custom_data or {}
+    buyer_id = int(cd.get("bought_by_attendee") or 0) if a.registration_source in SEAT_SOURCES else a.id
+    if a.id in ix["holds"] or ("B%d" % buyer_id) in ix["held_keys"]:
+        return "held"
+    return "not_sent"
+
+
 def _ticket_row(a, ix, label, own=None):
     cd = a.custom_data or {}
     tt = ix["types"].get(a.ticket_type_id)
@@ -185,7 +216,7 @@ def _ticket_row(a, ix, label, own=None):
             "qr_ok": bool(a.qr_code and _QR_RE.match(a.qr_code) and a.public_token),
             "purchaser": purchaser if purchaser and purchaser != _name(a) else None,
             "kind": _kind(a, ix), "relation": label, "entitlement": entitlement(a, ix),
-            "order_ref": _order_ref(a), "this": bool(own)}
+            "order_ref": _order_ref(a), "this": bool(own), "email": email_state(a, ix)}
 
 
 def view(db, a, ix=None, party=None):
@@ -249,6 +280,9 @@ def view(db, a, ix=None, party=None):
             statuses.append("VERIFY")
             notes.append("Ticket valid. Asked not to be emailed, so they have no QR code with them. Verify identity and issue badge at desk.")
 
+    if _active(a) and email_state(a, ix) == "not_sent":
+        notes.append("Ticket valid, but its email was never sent. Nothing to fix: check them in and print the badge here.")
+
     ent = entitlement(a, ix)
     if ent == "Requires administrator review" and _active(a):
         statuses.append("VERIFY")
@@ -270,6 +304,34 @@ def view(db, a, ix=None, party=None):
     for o in sorted(same.values(), key=lambda x: x.id):
         tickets.append(_ticket_row(o, ix, "same person, separate ticket"))
 
+    # The booking at a glance (20 Nov 2026): how many tickets were bought, how
+    # many badges exist, how many were emailed -- so the desk sees a gap and
+    # closes it there (Name seat / Print badge) instead of sending people away.
+    if party:
+        _members = [ix["by_id"].get(m["attendee_id"]) for m in (party.get("members") or [])]
+        _members = [m for m in _members if m is not None]
+        bought = int(party.get("paid_for") or len(_members) or 1)
+        buyer_id = int(party.get("buyer_attendee_id") or a.id)
+    else:
+        _members, bought, buyer_id = [a], 1, a.id
+    # The same person's separate tickets count too: "how many did they buy".
+    _seen_ids = {m.id for m in _members}
+    for o in valid_same:
+        if o.id not in _seen_ids:
+            _members.append(o); _seen_ids.add(o.id); bought += 1
+    _valid = [m for m in _members if _active(m)]
+    double_charge = buyer_id in ix.get("double_charge", set()) and bought > len(_valid)
+    if double_charge:
+        bought = len(_valid)
+        notes[:] = [n for n in notes if "not yet named" not in n]
+        notes.append("The extra payments on this booking were a double charge (refund due), not extra seats. Do not name a seat.")
+    _states = [email_state(m, ix) for m in _valid]
+    booking = {"buyer_attendee_id": buyer_id, "bought": bought, "issued": len(_valid),
+               "missing": max(0, bought - len(_valid)) if party else 0,
+               "emailed": sum(1 for x in _states if x == "sent"),
+               "not_emailed": sum(1 for x in _states if x in ("failed", "held", "not_sent")),
+               "emailable": sum(1 for x in _states if x is not None), "double_charge": double_charge}
+
     order = ["BLOCKED", "VERIFY", "MULTIPLE"]
     statuses = [s for s in order if s in statuses] or ["READY"]
     seen, uniq = set(), []
@@ -277,4 +339,5 @@ def view(db, a, ix=None, party=None):
         if n not in seen:
             seen.add(n); uniq.append(n)
     return {"status": statuses[0], "statuses": statuses, "entitlement": ent,
-            "checked_in": bool(a.is_checked_in), "valid_days": _days(ix, a), "notes": uniq, "tickets": tickets}
+            "checked_in": bool(a.is_checked_in), "valid_days": _days(ix, a), "notes": uniq, "tickets": tickets,
+            "booking": booking}

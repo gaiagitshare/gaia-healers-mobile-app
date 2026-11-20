@@ -1382,15 +1382,12 @@ class WalkInCreate(BaseModel):
     first_name: str
     last_name: str = ""
     email: str
-    # Required on CREATE, and only there. Every attendee's card carries a name,
-    # an email and a phone; a walk-in registered without one produces a card
-    # that can never be published -- found out later, at the worst moment.
-    #
-    # The duplicate CHECK deliberately does not require it: staff type a name
-    # and an address, and the system answers "we already know this person"
-    # before they have finished filling anything else in. Demanding a phone to
-    # ask that question is how a queue forms. See WalkInCheck below.
-    phone: str
+    # Phone is OPTIONAL (20 Nov 2026, Bita/Babak): nobody is turned away at
+    # the desk for not giving a number. Email stays required -- it is how we
+    # tell them apart from an existing member and how their card link reaches
+    # them. (Until 20 Nov the phone was required so every card could be
+    # published; a card without one simply stays unpublished until it is added.)
+    phone: Optional[str] = ""
     ticket_type_id: Optional[int] = None
     note: Optional[str] = None
     # WHY they need a badge. Being a walk-in says nothing about payment, so

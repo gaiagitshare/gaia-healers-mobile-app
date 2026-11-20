@@ -85,9 +85,26 @@ def main():
         if k[1]:
             by_last.setdefault(k[1], []).append((k[0], a))
 
+    def _same_person(p, a):
+        """An email hit is the same person unless the first names clearly differ
+        (20 Nov 2026: Bhavna and Saahil Srivastava share one address; Saahil was
+        folded into Bhavna's badge). Word order and status marks are tolerated:
+        "Rios Anthony" is "Anthony Rios", "Jeff Maier DONE" is Jeff Maier."""
+        mine = [w for w in re.sub(r"[^a-z ]", " ", (p.get("name") or "%s %s" % (p["first_name"], p["last_name"])).lower()).split() if w]
+        theirs = [w for w in re.sub(r"[^a-z ]", " ", ("%s %s" % (a["first_name"] or "", a["last_name"] or "")).lower()).split() if w]
+        if not mine or not theirs:
+            return True
+        near = lambda x, ys: any(y.startswith(x) or x.startswith(y) for y in ys)
+        return near(mine[0], theirs[:2]) or near(theirs[0], mine)
+
     def known(p):
         if p["email"] and p["email"] in have_email:
-            return have_email[p["email"]], "email"
+            a = have_email[p["email"]]
+            if _same_person(p, a):
+                return a, "email"
+            # Someone else's address (a colleague's or partner's): badge them
+            # separately, without the shared address, matched by name from now on.
+            p["email"] = ""
         f, l = _key(p["first_name"], p["last_name"])
         if not l or p.get("name_from_email"):
             return None, ""
@@ -121,12 +138,18 @@ def main():
             if hit is not None:
                 already.append((stand, p, hit, how)); continue
             if not p["email"]:
-                no_email.append((stand, p)); continue
+                # No address on the sheet (20 Nov 2026): still badged, so every
+                # stand's staff is on the check-in list. Needs a full name, which
+                # is also how the next run recognises them (known() by name).
+                f, l = _key(p["first_name"], p["last_name"])
+                if not (f and l):
+                    no_email.append((stand, p)); continue
             if p["name_from_email"]:
                 need_name.append((stand, p)); continue
-            if p["email"] in planned:
+            dedupe = p["email"] or "name:%s|%s" % _key(p["first_name"], p["last_name"])
+            if dedupe in planned:
                 continue
-            planned.add(p["email"])
+            planned.add(dedupe)
             creates.append((stand, p))
 
     L = ["# Exhibitor staff sync — %s (%s)" % (started.strftime("%Y-%m-%d %H:%M UTC"), "APPLIED" if APPLY else "dry run"), ""]
@@ -138,12 +161,12 @@ def main():
     if creates:
         L.append("## %s" % ("Given a badge" if APPLY else "Will get a badge"))
         for s, p in creates:
-            L.append("- **%s** (%s) — %s, booth %s" % (p["name"], p["email"], s["company_name"], s["booth_number"] or "—"))
+            L.append("- **%s** (%s) — %s, booth %s" % (p["name"], p["email"] or "no email", s["company_name"], s["booth_number"] or "—"))
         L.append("")
     if no_email:
-        L.append("## No badge yet: the sheet has no email for them")
+        L.append("## No badge yet: no email and only one name on the sheet")
         for s, p in no_email:
-            L.append("- %s — %s · add their email in the sheet and the next run makes the badge" % (p["name"], s["company_name"]))
+            L.append("- %s — %s · add their surname or email in the sheet and the next run makes the badge" % (p["name"], s["company_name"]))
         L.append("")
     if need_name:
         L.append("## No badge yet: only an email, no name")

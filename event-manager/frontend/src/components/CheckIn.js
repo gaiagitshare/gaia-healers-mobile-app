@@ -117,7 +117,7 @@ function CheckIn({ timezone: timezoneProp }) {
           attendance_type: 'paid', door_payment_status: 'collected' },
         { key: 'complimentary', needs: 'register_free_badge',
           label: 'Complimentary / guest',
-          hint: 'No payment expected. Say who authorised it.',
+          hint: 'No payment expected. VIP guests, speakers, friends of the event.',
           attendance_type: 'complimentary', door_payment_status: 'waived' },
         { key: 'crew', needs: 'register_free_badge',
           label: 'Staff / speaker / exhibitor',
@@ -2111,8 +2111,8 @@ function CheckIn({ timezone: timezoneProp }) {
                                 <MenuItem value="">Decide later</MenuItem>
                                 {ticketTypes.map((t) => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
                             </TextField>
-                            <TextField label={visitor?.reason === 'complimentary' ? 'Who authorised this? (required)' : 'Note (optional)'}
-                                fullWidth size="small" required={visitor?.reason === 'complimentary'}
+                            <TextField label={visitor?.reason === 'complimentary' ? 'Who authorised it? (optional)' : 'Note (optional)'}
+                                fullWidth size="small"
                                 value={visitor?.note || ''} onChange={(e) => setVisitor({ ...visitor, note: e.target.value })} />
                             <Alert severity="info" icon={false}>
                                 This creates a Gaia record only. No contact, order or payment is written to GHL.
@@ -2131,7 +2131,7 @@ function CheckIn({ timezone: timezoneProp }) {
                         <Button variant="contained" onClick={() => submitVisitor()}
                             disabled={visitorBusy || !visitor?.reason || !visitor?.ticket_type_id || !visitor?.first_name?.trim() || !visitor?.email?.trim()
                                 || (visitor?.reason === 'pay_at_door' && !(Number(visitor?.door_payment_amount) > 0))
-                                || (visitor?.reason === 'complimentary' && !visitor?.note?.trim())}>
+                            }>
                             {visitorBusy ? 'Checking…' : 'Register'}
                         </Button>
                     )}

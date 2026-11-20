@@ -124,8 +124,10 @@ try:
           and new[0]["first_name"] == "Zz" and new[0]["last_name"] == "Newperson",
           "a new person: exhibitor badge, GA pass, the stand as company", [dict(x) for x in new] or app.stdout[-600:] + app.stderr[-600:])
     check(len(person("zz-second-%s@example.invalid" % TAG)) == 1, "a name with its address on the next line gets a badge")
-    check(not db.execute("SELECT 1 FROM attendees WHERE event_id=1 AND last_name='Nomail'").fetchone()
-          and "Zz Nomail" in app.stdout, "no email: reported, no badge", app.stdout[-600:])
+    # 20 Nov 2026: a full name with no email still gets a badge (every stand's
+    # staff must be on the check-in list); the next run finds them by name.
+    check(len(db.execute("SELECT 1 FROM attendees WHERE event_id=1 AND last_name='Nomail' AND attendance_type='exhibitor'").fetchall()) == 1,
+          "no email but a full name: badged anyway", app.stdout[-600:])
     check(not person("zz-orphan-%s@example.invalid" % TAG) and "zz-orphan-%s@example.invalid" % TAG in app.stdout,
           "an address with no name: reported, no badge")
     check(len(person(known["email"].lower())) == 1 and person(known["email"].lower())[0]["attendance_type"] == "paid",

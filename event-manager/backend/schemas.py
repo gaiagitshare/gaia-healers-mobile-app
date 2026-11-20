@@ -1381,7 +1381,7 @@ class WalkInCreate(BaseModel):
     them apart from an existing member and how their claim link reaches them."""
     first_name: str
     last_name: str = ""
-    email: str
+    email: Optional[str] = ""   # required except for an organiser's comp/crew badge (see walk_in_create)
     # Phone is OPTIONAL (20 Nov 2026, Bita/Babak): nobody is turned away at
     # the desk for not giving a number. Email stays required -- it is how we
     # tell them apart from an existing member and how their card link reaches

@@ -126,7 +126,9 @@ def main():
             how = "name" if hit else ""
         if hit is not None:
             known.append((p, hit, how))
-        elif p["email"]:
+        elif p["email"] or all(key(p["first_name"], p["last_name"])):
+            # No address but a full name (20 Nov 2026): still badged, so every
+            # VIP guest is on the check-in list; the next run finds them by name.
             creates.append(p)
         else:
             no_email.append(p)
@@ -149,9 +151,9 @@ def main():
             L.append("- %s — matched by %s%s" % (p["name"], how, ("" if who.lower() == p["name"].lower() else ", on the list as **%s**" % who)))
         L.append("")
     if no_email:
-        L.append("## No badge yet: the sheet has no e-mail for them")
+        L.append("## No badge yet: no e-mail and only one name on the sheet")
         for p in no_email:
-            L.append("- %s (%s) — add an address in the sheet and the next run makes their badge" % (p["name"], p["role"] or p["kind"]))
+            L.append("- %s (%s) — add a surname or an address in the sheet and the next run makes their badge" % (p["name"], p["role"] or p["kind"]))
         L.append("")
 
     if APPLY and creates:

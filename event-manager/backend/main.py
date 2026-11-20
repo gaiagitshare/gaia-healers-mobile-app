@@ -3790,6 +3790,7 @@ def _door_card(db, attendee, event, user=None):
     """
     cd = attendee.custom_data or {}
     _organiser = bool(user and authz.can(db, user, event.id, "attendee.write"))
+    _gives = bool(user and _may_give_away(db, user, event.id))
     _party = _party_members(db, attendee)
     try:
         _desk = desk_view.view(db, attendee, party=_party)
@@ -3800,7 +3801,7 @@ def _door_card(db, attendee, event, user=None):
             # READY / VERIFY / MULTIPLE / BLOCKED, the desk notes and every ticket
             # that belongs with this one (18 Nov 2026). No money in it.
             "desk": _desk,
-            "may": {"comp": _organiser, "downgrade": _organiser,
+            "may": {"comp": _gives, "downgrade": _gives,
                     "revoke": _organiser, "change_email": _organiser,
                     "sell_upgrade": True, "fix_name": True, "override": True},
             "email": attendee.email,
@@ -6232,6 +6233,22 @@ def _mask_email(v):
     return (a[0] + "\u2022" * max(len(a) - 2, 1) + a[-1] if len(a) > 2 else a[0] + "\u2022") + "@" + b
 
 
+# EVENT DAYS (20 Nov 2026, Babak): the desk is trusted to give entries away --
+# complimentary / VIP guests, crew and exhibitor badges, free upgrades -- with
+# nothing asking for money. Switched by DESK_MAY_COMP=on (systemd drop-in
+# desk-may-comp.conf); remove the drop-in to put the organiser-only line back.
+DESK_MAY_COMP = os.environ.get("DESK_MAY_COMP", "").strip().lower() == "on"
+
+
+def _may_give_away(db, user, event_id):
+    """Organisers always; the check-in desk too while DESK_MAY_COMP is on."""
+    if user is None:
+        return False
+    if authz.can(db, user, event_id, "attendee.write"):
+        return True
+    return DESK_MAY_COMP and authz.can(db, user, event_id, "checkin.perform")
+
+
 def _walk_in_matches(db, event_id, email, phone, first, last):
     """Who might this already be? Searched across EVERY event and every
     permanent card, because the point is to avoid minting a second card for
@@ -6307,11 +6324,11 @@ def my_capabilities(event_id: int, db: Session = Depends(get_db),
             "sell_upgrade": "checkin.perform" in caps,
             "register_paying_walk_in": "checkin.perform" in caps,
             # ...and everything that is somebody deciding to give an entry away.
-            "comp": organiser,
-            "downgrade": organiser,
+            "comp": organiser or (DESK_MAY_COMP and "checkin.perform" in caps),
+            "downgrade": organiser or (DESK_MAY_COMP and "checkin.perform" in caps),
             "revoke": organiser,
             "change_email": organiser,
-            "register_free_badge": organiser,
+            "register_free_badge": organiser or (DESK_MAY_COMP and "checkin.perform" in caps),
             # Door settings (rehearsal, re-entry) are the event's, not the desk's.
             "door_settings": "event.write" in caps,
         },
@@ -6364,6 +6381,7 @@ def walk_in_create(event_id: int, payload: schemas.WalkInCreate,
     # drawn for upgrades, for the same reason.
     if not authz.can(db, current_user, event_id, "attendee.write"):
         authz.require_cap(db, current_user, event_id, "checkin.perform")
+    if not _may_give_away(db, current_user, event_id):
         _kind = (payload.attendance_type or "paid").strip().lower()
         _pay = (payload.door_payment_status or "none").strip().lower()
         if _kind != "paid":
@@ -6377,7 +6395,13 @@ def walk_in_create(event_id: int, payload: schemas.WalkInCreate,
             raise HTTPException(status_code=400, detail="Say how much was taken")
     _assert_event_writable(db, event, "register a walk-in for it")
     email = (payload.email or "").strip().lower()
-    if not email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+    # An ORGANISER may badge a complimentary guest, crew or stand staff with no
+    # address (20 Nov 2026: the planning sheet has none for some VIP guests and
+    # exhibitor staff, and every one of them must be on the check-in list).
+    # A paying walk-in, and anything registered at the desk, still needs one.
+    _no_email_ok = (not email and authz.can(db, current_user, event_id, "attendee.write")
+                    and (payload.attendance_type or "paid").strip().lower() != "paid")
+    if not _no_email_ok and (not email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email)):
         raise HTTPException(status_code=400, detail="A valid email is required so they can claim their card")
     if not (payload.first_name or "").strip():
         raise HTTPException(status_code=400, detail="A first name is required")
@@ -6385,7 +6409,7 @@ def walk_in_create(event_id: int, payload: schemas.WalkInCreate,
     # Already on the list for THIS event: never create a second row.
     existing = db.query(models.Attendee).filter(
         models.Attendee.event_id == event_id,
-        func.lower(models.Attendee.email) == email).first()
+        func.lower(models.Attendee.email) == email).first() if email else None
     if existing:
         attach_member_identity(db, existing)
         db.commit(); db.refresh(existing)
@@ -6451,7 +6475,7 @@ def walk_in_create(event_id: int, payload: schemas.WalkInCreate,
     # for more than the exhibit hall: a VIP, conference or workshop pass given
     # on someone's word is a comp, and a comp is the organiser's call -- the
     # same line drawn for upgrades at the desk.
-    if not authz.can(db, current_user, event_id, "attendee.write") and dps != "collected" \
+    if not _may_give_away(db, current_user, event_id) and dps != "collected" \
             and (getattr(_wi_tt, "is_vip", False) or getattr(_wi_tt, "grants_conference", False)
                  or getattr(_wi_tt, "grants_workshops", False)):
         raise HTTPException(status_code=403,
@@ -6460,7 +6484,7 @@ def walk_in_create(event_id: int, payload: schemas.WalkInCreate,
                                    "and ask an organiser to correct it.")
 
     attendee = models.Attendee(
-        event_id=event_id, email=email,
+        event_id=event_id, email=email or None,
         first_name=(payload.first_name or "").strip(),
         last_name=(payload.last_name or "").strip(),
         phone=(payload.phone or "").strip() or None,
@@ -11214,7 +11238,7 @@ def change_pass(attendee_id: int, payload: schemas.ChangePass,
     attendee = db.query(models.Attendee).filter(models.Attendee.id == attendee_id).first()
     if not attendee:
         raise HTTPException(status_code=404, detail="Attendee not found")
-    _organiser = authz.can(db, current_user, attendee.event_id, "attendee.write")
+    _organiser = _may_give_away(db, current_user, attendee.event_id)
     if not _organiser:
         authz.require_cap(db, current_user, attendee.event_id, "checkin.perform")
     if _back_office(db, current_user, attendee.event_id):

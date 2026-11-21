@@ -335,7 +335,13 @@ systemctl list-unit-files 'gaia-*' --no-pager > "$PAYLOAD/inventory/units.txt" 2
 # consistent snapshot and the parsed state copy are in the payload instead.
 STAGE="archive"
 ARCHIVE="$STAGING/${NAME}.tar.gz"
-tar -czf "$ARCHIVE" \
+# GNU tar exits 1 when a file changes while it is read ("file changed as we
+# read it"): someone checking in at the desk while the hourly run packs
+# root/event/backend. That copy may hold a slightly older file, which is fine:
+# the databases are snapshotted consistently above and do not come from here.
+# Exit 2 or higher is a real failure and still stops the run (verified below).
+TAR_RC=0
+tar -czf "$ARCHIVE" --warning=no-file-changed \
   --exclude='node_modules' --exclude='__pycache__' --exclude='.git' \
   --exclude='build' --exclude='_backups' \
   --exclude='*.bak' --exclude='*.bak-*' --exclude='*.bak.*' --exclude='*.pre*' \
@@ -355,7 +361,9 @@ tar -czf "$ARCHIVE" \
     $(cd / && ls -d etc/systemd/system/gaia-*.service etc/systemd/system/gaia-*.timer \
         etc/systemd/system/gaia-*.service.d 2>/dev/null) \
     usr/local/bin/gaia-event-backup.sh usr/local/bin/gaia-full-backup.sh \
-  -C "$STAGING" gaia-backup
+  -C "$STAGING" gaia-backup || TAR_RC=$?
+if [ "$TAR_RC" -gt 1 ]; then fail "tar could not pack the archive (exit ${TAR_RC})"; fi
+[ "$TAR_RC" -eq 1 ] && echo "note: some files changed while being packed; databases come from the snapshot, so this is harmless"
 ARCHIVE_BYTES="$(stat -c%s "$ARCHIVE")"
 
 # ── 6. checksum ──────────────────────────────────────────────────────────────

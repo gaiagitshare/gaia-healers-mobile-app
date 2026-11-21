@@ -99,7 +99,7 @@ test('an admin grant from the Control Center unlocks the player too', async () =
   assert.ok(cookie.startsWith('gaia_admin='), 'admin cookie issued');
   const before = await surfaces('admin-target-1');
   assert.equal(before.playerLocked, true);
-  const r = await post('/api/admin/membership/grant', { contactId: 'admin-target-1', type: 'course_access', key: 'prod-1', value: { name: 'Bio-Well Orientation' }, note: 'comp for testing' }, { cookie });
+  const r = await post('/api/admin/membership/grant', { contactId: 'admin-target-1', type: 'course_access', key: 'prod-1', value: { name: 'Bio-Well Orientation' }, note: 'comp for testing' }, { cookie, origin: `http://127.0.0.1:${PORT}` });
   assert.equal(r.status, 200, 'admin grant: ' + JSON.stringify(r.json).slice(0, 200));
   const after = await surfaces('admin-target-1');
   assert.deepEqual(after, { myAccess: 'active', playerLocked: false, playerSrc: MP4, meCount: 1 });

@@ -235,7 +235,8 @@ test('approved partner recommendations: only the session member\'s own, as path 
   assert.equal((await call('POST', '/api/member/path/event', 'member-b', { event: 'recommendation_opened', key: pr[0].key, surface: 'you', title: 'Chakra balancing session', summary: 'SENTINEL_SUMMARY' })).status, 200);
   const last = fs.readFileSync(process.env.GAIA_PATH_EVENTS_FILE, 'utf8').trim().split('\n').pop();
   assert.match(last, /"item_id":"PR"/); assert.match(last, /"source":"partner_approved"/);
-  assert.doesNotMatch(last, /SENTINEL|Chakra|Calming|shop|:31:|service:7/, 'no partner content, ids or links in analytics');
+  // The partner rec id is checked as part of the key (PR:31:...); a bare ":31:" also matched the line's own timestamp at minute 31.
+  assert.doesNotMatch(last, /SENTINEL|Chakra|Calming|shop|PR:31|"31"|service:7/, 'no partner content, ids or links in analytics');
   const line = await routes.assistPathLine({}, { contactId: 'member-b' }, { appointments: [] });
   assert.doesNotMatch(line, /SENTINEL|Chakra|Calming|gentle|Sam Rivera|gaiapractitioners/, 'Gaia gets a generic line only');
   PARTNER['member-b'] = { items: [] };

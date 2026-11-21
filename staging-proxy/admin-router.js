@@ -23,6 +23,7 @@ import { linkDayCounts, memberReadingsEnabled } from './member-link.js';
 import { loadMergeState } from './membership/contact-merges.js';
 import * as ghlAdapter from './membership/adapters/ghl-membership.js';
 import * as membershipConfig from './membership/config.js';
+import { clientIp } from './client-ip.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -66,10 +67,7 @@ const LOGIN_WINDOW_MS = 15 * 60 * 1000; // 15m
 const LOGIN_MAX_ATTEMPTS = 8;           // failures per window before lockout
 const loginAttempts = new Map();        // ip -> { count, firstAt }
 
-function clientIp(req) {
-  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  return String(req.headers['cf-connecting-ip'] || '').trim() || fwd || req.socket?.remoteAddress || 'unknown';
-}
+// clientIp: X-Real-IP only from a loopback peer (nginx); see client-ip.js.
 
 function loginBlockedFor(ip) {
   const rec = loginAttempts.get(ip);

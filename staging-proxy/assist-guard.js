@@ -14,7 +14,8 @@
  *     distributed traffic can run past a known cost. When a ceiling is hit the
  *     assistant says it is busy; the rest of the app is untouched.
  *
- * The caller is X-Real-IP, which nginx sets from the connection itself.
+ * The caller is X-Real-IP, which nginx sets from the connection itself —
+ * honoured only when the TCP peer is loopback (client-ip.js).
  * X-Forwarded-For is NOT used: nginx appends to whatever the client sent, so
  * its first entry is anything the caller likes — a new "address" per request.
  * IPv6 callers are grouped by /64, because one connection routinely holds a
@@ -24,6 +25,8 @@
  * deliberate trade: a restart forgives a day's counts, but nothing here can
  * fail a request because a file could not be written.
  */
+
+import { clientIp } from './client-ip.js';
 
 const DEFAULTS = {
   // kind: [perMinute, perDay] for one anonymous caller; memberFactor scales
@@ -83,7 +86,7 @@ export function guardSubject(req, identity = null) {
 
 /** The caller, as nginx saw it. IPv6 grouped by /64. */
 export function callerKey(req) {
-  const raw = String(req.headers['x-real-ip'] || req.socket?.remoteAddress || 'unknown').trim().replace(/^::ffff:/, '');
+  const raw = clientIp(req).replace(/^::ffff:/, '');
   if (raw.includes(':')) {
     const parts = raw.split('::')[0].split(':');
     const full = raw.includes('::')

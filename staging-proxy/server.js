@@ -5876,6 +5876,15 @@ function providerConfig(provider) {
       endpoint: 'https://api.openai.com/v1/chat/completions',
       headers: {},
     },
+    // 26 Nov 2026 (owner request): free, keyless OpenAI-compatible endpoint (apisfreellm.com, model free-ai).
+    // Any key string works; APISFREELLM_KEY must be set for it to be used. Its limits are per server IP and
+    // shared with every site on this VPS, so it sits in ASSIST_PROVIDER_ORDER with the others behind it.
+    apisfreellm: {
+      key: process.env.APISFREELLM_KEY,
+      model: process.env.APISFREELLM_MODEL || 'free-ai',
+      endpoint: 'https://api.apisfreellm.com/v1/chat/completions',
+      headers: {},
+    },
   };
   return configs[provider];
 }
